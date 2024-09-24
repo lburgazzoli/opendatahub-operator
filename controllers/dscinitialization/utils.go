@@ -174,7 +174,7 @@ func (r *DSCInitializationReconciler) createDefaultRoleBinding(ctx context.Conte
 	if err != nil {
 		if k8serr.IsNotFound(err) {
 			// Set Controller reference
-			err = ctrl.SetControllerReference(dscInit, desiredRoleBinding, r.Scheme)
+			err = ctrl.SetControllerReference(dscInit, desiredRoleBinding, r.Scheme())
 			if err != nil {
 				r.Log.Error(err, "Unable to add OwnerReference to the rolebinding")
 				return err
@@ -290,7 +290,7 @@ func (r *DSCInitializationReconciler) reconcileDefaultNetworkPolicy(ctx context.
 		if err != nil {
 			if k8serr.IsNotFound(err) {
 				// Set Controller reference
-				err = ctrl.SetControllerReference(dscInit, desiredNetworkPolicy, r.Scheme)
+				err = ctrl.SetControllerReference(dscInit, desiredNetworkPolicy, r.Scheme())
 				if err != nil {
 					r.Log.Error(err, "Unable to add OwnerReference to the Network policy")
 					return err
@@ -394,7 +394,7 @@ func (r *DSCInitializationReconciler) createOdhCommonConfigMap(ctx context.Conte
 	if err != nil {
 		if k8serr.IsNotFound(err) {
 			// Set Controller reference
-			err = ctrl.SetControllerReference(dscInit, foundConfigMap, r.Scheme)
+			err = ctrl.SetControllerReference(dscInit, foundConfigMap, r.Scheme())
 			if err != nil {
 				r.Log.Error(err, "Unable to add OwnerReference to the odh-common-config ConfigMap")
 				return err

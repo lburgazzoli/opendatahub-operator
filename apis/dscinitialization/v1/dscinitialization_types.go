@@ -117,13 +117,15 @@ type DSCInitializationStatus struct {
 	Release cluster.Release `json:"release,omitempty"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:resource:scope=Cluster,shortName=dsci
-//+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:name="Age",type=date,JSONPath=.metadata.creationTimestamp
-//+kubebuilder:printcolumn:name="Phase",type=string,JSONPath=.status.phase,description="Current Phase"
-//+kubebuilder:printcolumn:name="Created At",type=string,JSONPath=.metadata.creationTimestamp
-//+operator-sdk:csv:customresourcedefinitions:displayName="DSC Initialization"
+// +genclient
+// +genclient:nonNamespaced
+// +kubebuilder:object:root=true
+// +kubebuilder:resource:scope=Cluster,shortName=dsci
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=.metadata.creationTimestamp
+// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=.status.phase,description="Current Phase"
+// +kubebuilder:printcolumn:name="Created At",type=string,JSONPath=.metadata.creationTimestamp
+// +operator-sdk:csv:customresourcedefinitions:displayName="DSC Initialization"
 
 // DSCInitialization is the Schema for the dscinitializations API.
 type DSCInitialization struct {
@@ -134,7 +136,7 @@ type DSCInitialization struct {
 	Status DSCInitializationStatus `json:"status,omitempty"`
 }
 
-//+kubebuilder:object:root=true
+// +kubebuilder:object:root=true
 
 // DSCInitializationList contains a list of DSCInitialization.
 type DSCInitializationList struct {

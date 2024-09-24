@@ -83,7 +83,7 @@ type Components struct {
 	// ModelRegistry component configuration.
 	ModelRegistry modelregistry.ModelRegistry `json:"modelregistry,omitempty"`
 
-	//Training Operator component configuration.
+	// Training Operator component configuration.
 	TrainingOperator trainingoperator.TrainingOperator `json:"trainingoperator,omitempty"`
 }
 
@@ -120,10 +120,12 @@ type DataScienceClusterStatus struct {
 	Release cluster.Release `json:"release,omitempty"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:resource:scope=Cluster,shortName=dsc
-//+kubebuilder:storageversion
+// +genclient
+// +genclient:nonNamespaced
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster,shortName=dsc
+// +kubebuilder:storageversion
 
 // DataScienceCluster is the Schema for the datascienceclusters API.
 type DataScienceCluster struct {
@@ -134,7 +136,7 @@ type DataScienceCluster struct {
 	Status DataScienceClusterStatus `json:"status,omitempty"`
 }
 
-//+kubebuilder:object:root=true
+// +kubebuilder:object:root=true
 
 // DataScienceClusterList contains a list of DataScienceCluster.
 type DataScienceClusterList struct {

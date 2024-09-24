@@ -12,6 +12,8 @@ import (
 // is to enable efficient garbage collection by Kubernetes. This is essential for
 // ensuring that resources are automatically cleaned up and reclaimed when they are
 // no longer required.
+// +genclient
+// +genclient:nonNamespaced
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:subresource:status
