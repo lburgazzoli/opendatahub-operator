@@ -2,8 +2,7 @@ package actions
 
 import (
 	"context"
-
-	"github.com/go-logr/logr"
+	"fmt"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 )
@@ -17,9 +16,6 @@ const (
 )
 
 type Action interface {
+	fmt.Stringer
 	Execute(ctx context.Context, rr *types.ReconciliationRequest) error
-}
-
-type BaseAction struct {
-	Log logr.Logger
 }

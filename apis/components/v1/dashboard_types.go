@@ -23,6 +23,7 @@ import (
 
 const (
 	DashboardInstanceName = "default-dashboard"
+	DashboardKind         = "Dashboard"
 )
 
 // DashboardSpec defines the desired state of Dashboard
@@ -35,6 +36,9 @@ type DashboardSpec struct {
 // DashboardStatus defines the observed state of Dashboard
 type DashboardStatus struct {
 	components.Status `json:",inline"`
+
+	Namespace string `json:"namespace,omitempty"`
+	URL       string `json:"url,omitempty"`
 }
 
 // +kubebuilder:object:root=true

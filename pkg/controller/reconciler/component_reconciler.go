@@ -1,4 +1,4 @@
-package types
+package reconciler
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -23,7 +24,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 )
 
-type ComponentReconciler[T types.ResourceObject] struct {
+type ComponentReconciler struct {
 	Client     *odhClient.Client
 	Scheme     *runtime.Scheme
 	Actions    []actions.Action
@@ -32,47 +33,73 @@ type ComponentReconciler[T types.ResourceObject] struct {
 	Manager    manager.Manager
 	Controller controller.Controller
 	Recorder   record.EventRecorder
-	Platform   cluster.Platform
+	Release    cluster.Release
+
+	owned           map[schema.GroupVersionKind]struct{}
+	instanceFactory func() (client.Object, error)
 }
 
-func NewComponentReconciler[T types.ResourceObject](ctx context.Context, mgr manager.Manager, name string) (*ComponentReconciler[T], error) {
+func NewComponentReconciler[T types.ResourceObject](ctx context.Context, mgr manager.Manager, name string) (*ComponentReconciler, error) {
 	oc, err := odhClient.NewFromManager(ctx, mgr)
 	if err != nil {
 		return nil, err
 	}
 
-	cc := ComponentReconciler[T]{
+	cc := ComponentReconciler{
 		Client:   oc,
 		Scheme:   mgr.GetScheme(),
 		Log:      ctrl.Log.WithName("controllers").WithName(name),
 		Manager:  mgr,
 		Recorder: mgr.GetEventRecorderFor(name),
-		Platform: cluster.GetRelease().Name,
+		Release:  cluster.GetRelease(),
+		owned:    map[schema.GroupVersionKind]struct{}{},
+		instanceFactory: func() (client.Object, error) {
+			t := reflect.TypeOf(*new(T)).Elem()
+			res, ok := reflect.New(t).Interface().(T)
+			if !ok {
+				return res, fmt.Errorf("unable to construct instance of %v", t)
+			}
+
+			return res, nil
+		},
 	}
 
 	return &cc, nil
 }
 
-func (r *ComponentReconciler[T]) GetLogger() logr.Logger {
+func (r *ComponentReconciler) GetRelease() cluster.Release {
+	return r.Release
+}
+
+func (r *ComponentReconciler) GetLogger() logr.Logger {
 	return r.Log
 }
 
-func (r *ComponentReconciler[T]) AddAction(action actions.Action) {
+func (r *ComponentReconciler) AddOwnedType(gvk schema.GroupVersionKind) {
+	r.owned[gvk] = struct{}{}
+}
+
+func (r *ComponentReconciler) Owns(obj client.Object) bool {
+	_, ok := r.owned[obj.GetObjectKind().GroupVersionKind()]
+	return ok
+}
+
+func (r *ComponentReconciler) AddAction(action actions.Action) {
 	r.Actions = append(r.Actions, action)
 }
 
-func (r *ComponentReconciler[T]) AddFinalizer(action actions.Action) {
+func (r *ComponentReconciler) AddFinalizer(action actions.Action) {
 	r.Finalizer = append(r.Finalizer, action)
 }
 
-func (r *ComponentReconciler[T]) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *ComponentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
 
-	t := reflect.TypeOf(*new(T)).Elem()
-	res, ok := reflect.New(t).Interface().(T)
-	if !ok {
-		return ctrl.Result{}, fmt.Errorf("unable to construct instance of %v", t)
+	res, err := r.instanceFactory()
+	if err != nil {
+		return ctrl.Result{}, err
 	}
+
 	if err := r.Client.Get(ctx, client.ObjectKey{Name: req.Name}, res); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -100,16 +127,24 @@ func (r *ComponentReconciler[T]) Reconcile(ctx context.Context, req ctrl.Request
 		Instance:  res,
 		DSC:       &dscl.Items[0],
 		DSCI:      &dscil.Items[0],
-		Platform:  r.Platform,
-		Manifests: make(map[cluster.Platform]string),
+		Release:   r.Release,
+		Manifests: make([]types.ManifestInfo, 0),
+		IsOwned:   r.Owns,
 	}
 
 	// Handle deletion
 	if !res.GetDeletionTimestamp().IsZero() {
 		// Execute finalizers
 		for _, action := range r.Finalizer {
-			if err := action.Execute(ctx, &rr); err != nil {
-				l.Error(err, "Failed to execute finalizer", "action", fmt.Sprintf("%T", action))
+			l.Info("Executing finalizer", "action", action)
+
+			actx := log.IntoContext(
+				ctx,
+				l.WithName(actions.ActionGroup).WithName(action.String()),
+			)
+
+			if err := action.Execute(actx, &rr); err != nil {
+				l.Error(err, "Failed to execute finalizer", "action", action)
 				return ctrl.Result{}, err
 			}
 		}
@@ -119,14 +154,21 @@ func (r *ComponentReconciler[T]) Reconcile(ctx context.Context, req ctrl.Request
 
 	// Execute actions
 	for _, action := range r.Actions {
-		if err := action.Execute(ctx, &rr); err != nil {
-			l.Error(err, "Failed to execute action", "action", fmt.Sprintf("%T", action))
+		l.Info("Executing action", "action", action)
+
+		actx := log.IntoContext(
+			ctx,
+			l.WithName(actions.ActionGroup).WithName(action.String()),
+		)
+
+		if err := action.Execute(actx, &rr); err != nil {
+			l.Error(err, "Failed to execute action", "action", action)
 			return ctrl.Result{}, err
 		}
 	}
 
 	// update status
-	err := r.Client.ApplyStatus(
+	err = r.Client.ApplyStatus(
 		ctx,
 		rr.Instance,
 		client.FieldOwner(rr.Instance.GetName()),
