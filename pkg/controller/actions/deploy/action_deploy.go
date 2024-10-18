@@ -5,16 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
+	odhClient "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/client"
+	odhTypes "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/annotations"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
-	odhClient "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/client"
-	odhTypes "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/annotations"
 )
 
 type Mode int
@@ -31,8 +32,10 @@ const (
 // Action deploys the resources that are included in the ReconciliationRequest using
 // the same create or patch machinery implemented as part of deploy.DeployManifestsFromPath.
 type Action struct {
-	fieldOwner string
-	deployMode Mode
+	fieldOwner  string
+	deployMode  Mode
+	labels      map[string]string
+	annotations map[string]string
 }
 
 type ActionOpts func(*Action)
@@ -48,9 +51,59 @@ func WithMode(value Mode) ActionOpts {
 	}
 }
 
+func WithLabel(name string, value string) ActionOpts {
+	return func(action *Action) {
+		if action.labels == nil {
+			action.labels = map[string]string{}
+		}
+
+		action.labels[name] = value
+	}
+}
+
+func WithLabels(values map[string]string) ActionOpts {
+	return func(action *Action) {
+		if action.labels == nil {
+			action.labels = map[string]string{}
+		}
+
+		for k, v := range values {
+			action.labels[k] = v
+		}
+	}
+}
+
+func WithAnnotation(name string, value string) ActionOpts {
+	return func(action *Action) {
+		if action.annotations == nil {
+			action.annotations = map[string]string{}
+		}
+
+		action.annotations[name] = value
+	}
+}
+
+func WithAnnotations(values map[string]string) ActionOpts {
+	return func(action *Action) {
+		if action.annotations == nil {
+			action.annotations = map[string]string{}
+		}
+
+		for k, v := range values {
+			action.annotations[k] = v
+		}
+	}
+}
+
 func (r *Action) Execute(ctx context.Context, rr *odhTypes.ReconciliationRequest) error {
 	for i := range rr.Resources {
 		obj := rr.Resources[i]
+
+		resources.SetLabels(&obj, r.labels)
+		resources.SetAnnotation(&obj, r.annotations)
+
+		l := obj.GetLabels()
+		l[labels.ComponentGeneration] = fmt.Sprintf("%d", rr.Instance.GetGeneration())
 
 		switch obj.GroupVersionKind() {
 		case gvk.CustomResourceDefinition:

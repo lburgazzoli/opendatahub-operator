@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	routev1 "github.com/openshift/api/route/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -37,9 +38,9 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/deploy"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/render"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/updatestatus"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/dependent"
 	odhrec "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
 	odhdeploy "github.com/opendatahub-io/opendatahub-operator/v2/pkg/deploy"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/manifests/kustomize"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 )
 
@@ -137,7 +138,8 @@ func NewDashboardReconciler(ctx context.Context, mgr ctrl.Manager) error {
 	var componentLabelPredicate predicate.Predicate
 	var componentEventHandler handler.EventHandler
 
-	switch cluster.GetRelease().Name {
+	release := cluster.GetRelease()
+	switch release.Name {
 	case cluster.SelfManagedRhods, cluster.ManagedRhods:
 		componentLabelPredicate = dashboardWatchPredicate(ComponentNameUpstream)
 		componentEventHandler = watchDashboardResources(ComponentNameUpstream)
@@ -154,36 +156,38 @@ func NewDashboardReconciler(ctx context.Context, mgr ctrl.Manager) error {
 
 	_, err := odhrec.ComponentReconcilerFor[*componentsv1.Dashboard](mgr, &componentsv1.Dashboard{}, forOpts).
 		// operands
-		Watches(&appsv1.Deployment{}, componentEventHandler, builder.WithPredicates(componentLabelPredicate)).
-		Watches(&appsv1.ReplicaSet{}, componentEventHandler, builder.WithPredicates(componentLabelPredicate)).
-		Watches(&corev1.Namespace{}, componentEventHandler, builder.WithPredicates(componentLabelPredicate)).
 		Watches(&corev1.ConfigMap{}, componentEventHandler, builder.WithPredicates(componentLabelPredicate)).
-		Watches(&corev1.PersistentVolumeClaim{}, componentEventHandler, builder.WithPredicates(componentLabelPredicate)).
+		Watches(&corev1.Secret{}, componentEventHandler, builder.WithPredicates(componentLabelPredicate)).
 		Watches(&rbacv1.ClusterRoleBinding{}, componentEventHandler, builder.WithPredicates(componentLabelPredicate)).
 		Watches(&rbacv1.ClusterRole{}, componentEventHandler, builder.WithPredicates(componentLabelPredicate)).
 		Watches(&rbacv1.Role{}, componentEventHandler, builder.WithPredicates(componentLabelPredicate)).
 		Watches(&rbacv1.RoleBinding{}, componentEventHandler, builder.WithPredicates(componentLabelPredicate)).
 		Watches(&corev1.ServiceAccount{}, componentEventHandler, builder.WithPredicates(componentLabelPredicate)).
+		// Include status changes as we need to determine the component
+		// readiness by observing the status of the deployments
+		Watches(&appsv1.Deployment{}, componentEventHandler, builder.WithPredicates(componentLabelPredicate)).
+		// Ignore status changes
+		Watches(&routev1.Route{}, componentEventHandler, builder.WithPredicates(predicate.And(
+			componentLabelPredicate,
+			dependent.New()))).
 		// misc
 		WithComponentName(ComponentName).
 		// actions
 		WithActionFn(initialize).
 		WithActionFn(devFlags).
-		WithAction(render.New(
-			render.WithManifestsOptions(
-				kustomize.WithEngineRenderOpts(
-					kustomize.WithLabel(labels.ComponentName, ComponentName),
-				),
-			),
-		)).
+		WithAction(render.New()).
 		WithActionFn(customizeResources).
 		WithAction(deploy.New(
+			deploy.WithLabel(labels.ComponentName, ComponentName),
+			deploy.WithLabel(labels.PlatformType, string(release.Name)),
+			deploy.WithLabel(labels.PlatformType, release.Version.String()),
 			deploy.WithMode(deploy.ModeSSA),
 			deploy.WithFieldOwner(ComponentName),
 		)).
 		WithAction(updatestatus.New(
 			updatestatus.WithSelectorLabel(labels.ComponentName, ComponentName),
 		)).
+		WithActionFn(updateStatus).
 		Build(ctx)
 
 	if err != nil {

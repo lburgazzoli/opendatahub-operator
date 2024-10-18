@@ -1,11 +1,14 @@
 package labels
 
 const (
-	ODHAppPrefix      = "app.opendatahub.io"
-	ComponentName     = "components.opendatahub.io/name"
-	InjectTrustCA     = "config.openshift.io/inject-trusted-cabundle"
-	SecurityEnforce   = "pod-security.kubernetes.io/enforce"
-	ClusterMonitoring = "openshift.io/cluster-monitoring"
+	ODHAppPrefix        = "app.opendatahub.io"
+	ComponentName       = "components.opendatahub.io/name"
+	ComponentGeneration = "components.opendatahub.io/generation"
+	PlatformVersion     = "platform.opendatahub.io/version"
+	PlatformType        = "platform.opendatahub.io/type"
+	InjectTrustCA       = "config.openshift.io/inject-trusted-cabundle"
+	SecurityEnforce     = "pod-security.kubernetes.io/enforce"
+	ClusterMonitoring   = "openshift.io/cluster-monitoring"
 )
 
 // K8SCommon keeps common kubernetes labels [1]

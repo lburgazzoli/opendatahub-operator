@@ -5,14 +5,18 @@ import (
 	"errors"
 	"fmt"
 
+	routev1 "github.com/openshift/api/route/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	componentsv1 "github.com/opendatahub-io/opendatahub-operator/v2/apis/components/v1"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	odhtypes "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 	odhdeploy "github.com/opendatahub-io/opendatahub-operator/v2/pkg/deploy"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
 )
 
 func initialize(ctx context.Context, rr *odhtypes.ReconciliationRequest) error {
@@ -33,17 +37,6 @@ func initialize(ctx context.Context, rr *odhtypes.ReconciliationRequest) error {
 	if err := odhdeploy.ApplyParams(rr.Manifests[0].ManifestsPath(), nil, extraParamsMap); err != nil {
 		return fmt.Errorf("failed to update params.env  from %s : %w", rr.Manifests[0].ManifestsPath(), err)
 	}
-
-	// TODO: this should probably be moved to an higher level, added here
-	//       mainly for convenience since the route url is determined at
-	//       this stage
-	d, ok := rr.Instance.(*componentsv1.Dashboard)
-	if !ok {
-		return fmt.Errorf("instance is not of type *odhTypes.Dashboard")
-	}
-
-	d.Status.Namespace = rr.DSCI.Spec.ApplicationsNamespace
-	d.Status.URL = extraParamsMap["dashboard-url"]
 
 	return nil
 }
@@ -102,6 +95,43 @@ func customizeResources(ctx context.Context, rr *odhtypes.ReconciliationRequest)
 			return fmt.Errorf("failed to update PodSecurityRolebinding for odh-dashboard: %w", err)
 		}
 	}
+
+	return nil
+}
+
+func updateStatus(ctx context.Context, rr *odhtypes.ReconciliationRequest) error {
+	d, ok := rr.Instance.(*componentsv1.Dashboard)
+	if !ok {
+		return fmt.Errorf("instance is not of type *odhTypes.Dashboard")
+	}
+
+	componentName := ComponentNameUpstream
+	if rr.Platform == cluster.SelfManagedRhods || rr.Platform == cluster.ManagedRhods {
+		componentName = ComponentNameDownstream
+	}
+
+	// url
+	rl := routev1.RouteList{}
+	err := rr.Client.List(
+		ctx,
+		&rl,
+		client.InNamespace(rr.DSCI.Spec.ApplicationsNamespace),
+		client.MatchingLabels(map[string]string{
+			labels.ODH.Component(componentName): "true",
+		}),
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to list routes: %w", err)
+	}
+
+	d.Status.URL = ""
+	if len(rl.Items) == 1 {
+		d.Status.URL = resources.IngressHost(rl.Items[0])
+	}
+
+	// misc
+	d.Status.Namespace = rr.DSCI.Spec.ApplicationsNamespace
 
 	return nil
 }

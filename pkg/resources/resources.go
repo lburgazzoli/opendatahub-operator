@@ -3,8 +3,10 @@ package resources
 import (
 	"fmt"
 
+	routev1 "github.com/openshift/api/route/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func ToUnstructured(obj any) (*unstructured.Unstructured, error) {
@@ -18,4 +20,42 @@ func ToUnstructured(obj any) (*unstructured.Unstructured, error) {
 	}
 
 	return &u, nil
+}
+
+func IngressHost(r routev1.Route) string {
+	if len(r.Status.Ingress) != 1 {
+		return ""
+	}
+
+	for i := range r.Status.Ingress[0].Conditions {
+		if r.Status.Ingress[0].Conditions[i].Type == routev1.RouteAdmitted {
+			return r.Status.Ingress[0].Host
+		}
+	}
+
+	return ""
+}
+
+func SetLabels(obj client.Object, values map[string]string) {
+	target := obj.GetLabels()
+	if target == nil {
+		target = make(map[string]string)
+		obj.SetLabels(target)
+	}
+
+	for k, v := range values {
+		target[k] = v
+	}
+}
+
+func SetAnnotation(obj client.Object, values map[string]string) {
+	target := obj.GetAnnotations()
+	if target == nil {
+		target = make(map[string]string)
+		obj.SetAnnotations(target)
+	}
+
+	for k, v := range values {
+		target[k] = v
+	}
 }
