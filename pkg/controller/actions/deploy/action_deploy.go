@@ -205,7 +205,7 @@ func (a *Action) deploy(
 		}
 
 	default:
-		owned := rr.Manager.Owns(obj.GroupVersionKind())
+		owned := rr.Manager().Owns(obj.GroupVersionKind())
 		if owned {
 			if err := ctrl.SetControllerReference(rr.Instance, &obj, rr.Client.Scheme()); err != nil {
 				return false, err

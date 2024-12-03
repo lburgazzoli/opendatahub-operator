@@ -75,15 +75,15 @@ func TestUpdateStatusActionNotReady(t *testing.T) {
 	action := updatestatus.NewAction(
 		updatestatus.WithSelectorLabel(labels.ComponentPartOf, ns))
 
-	rr := types.ReconciliationRequest{
-		Client:   cl,
-		Instance: &componentsv1.Dashboard{},
-		DSCI:     &dsciv1.DSCInitialization{Spec: dsciv1.DSCInitializationSpec{ApplicationsNamespace: ns}},
-		DSC:      &dscv1.DataScienceCluster{},
-		Release:  cluster.Release{Name: cluster.OpenDataHub},
-	}
+	rr := types.NewReconciliationRequest(
+		types.WithClient(cl),
+		types.WithRelease(cluster.Release{Name: cluster.OpenDataHub}),
+		types.WithDSCI(&dsciv1.DSCInitialization{Spec: dsciv1.DSCInitializationSpec{ApplicationsNamespace: ns}}),
+		types.WithDSC(&dscv1.DataScienceCluster{}),
+		types.WithInstance(&componentsv1.Dashboard{}),
+	)
 
-	err = action(ctx, &rr)
+	err = action(ctx, rr)
 	g.Expect(err).ShouldNot(HaveOccurred())
 
 	g.Expect(err).ShouldNot(HaveOccurred())
@@ -146,15 +146,15 @@ func TestUpdateStatusActionReady(t *testing.T) {
 	action := updatestatus.NewAction(
 		updatestatus.WithSelectorLabel(labels.ComponentPartOf, ns))
 
-	rr := types.ReconciliationRequest{
-		Client:   cl,
-		Instance: &componentsv1.Dashboard{},
-		DSCI:     &dsciv1.DSCInitialization{Spec: dsciv1.DSCInitializationSpec{ApplicationsNamespace: ns}},
-		DSC:      &dscv1.DataScienceCluster{},
-		Release:  cluster.Release{Name: cluster.OpenDataHub},
-	}
+	rr := types.NewReconciliationRequest(
+		types.WithClient(cl),
+		types.WithRelease(cluster.Release{Name: cluster.OpenDataHub}),
+		types.WithDSCI(&dsciv1.DSCInitialization{Spec: dsciv1.DSCInitializationSpec{ApplicationsNamespace: ns}}),
+		types.WithDSC(&dscv1.DataScienceCluster{}),
+		types.WithInstance(&componentsv1.Dashboard{}),
+	)
 
-	err = action(ctx, &rr)
+	err = action(ctx, rr)
 	g.Expect(err).ShouldNot(HaveOccurred())
 
 	g.Expect(err).ShouldNot(HaveOccurred())

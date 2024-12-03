@@ -90,8 +90,8 @@ type ComponentReconcilerBuilder struct {
 	watches       []watchInput
 	predicates    []predicate.Predicate
 	componentName string
-	actions       []actions.Fn
-	finalizers    []actions.Fn
+	actions       []*actions.Action
+	finalizers    []*actions.Action
 	errors        error
 }
 
@@ -119,13 +119,13 @@ func (b *ComponentReconcilerBuilder) WithComponentName(componentName string) *Co
 	return b
 }
 
-func (b *ComponentReconcilerBuilder) WithAction(value actions.Fn) *ComponentReconcilerBuilder {
-	b.actions = append(b.actions, value)
+func (b *ComponentReconcilerBuilder) WithAction(value actions.Fn, opts ...actions.ActionOpt) *ComponentReconcilerBuilder {
+	b.actions = append(b.actions, actions.NewAction(value, opts...))
 	return b
 }
 
-func (b *ComponentReconcilerBuilder) WithFinalizer(value actions.Fn) *ComponentReconcilerBuilder {
-	b.finalizers = append(b.finalizers, value)
+func (b *ComponentReconcilerBuilder) WithFinalizer(value actions.Fn, opts ...actions.ActionOpt) *ComponentReconcilerBuilder {
+	b.finalizers = append(b.finalizers, actions.NewAction(value, opts...))
 	return b
 }
 
@@ -271,11 +271,14 @@ func (b *ComponentReconcilerBuilder) Build(_ context.Context) (*ComponentReconci
 
 	// internal action
 	r.AddAction(
-		newDynamicWatchAction(
-			func(obj client.Object, eventHandler handler.EventHandler, predicates ...predicate.Predicate) error {
-				return cc.Watch(source.Kind(b.mgr.GetCache(), obj), eventHandler, predicates...)
-			},
-			b.watches,
+		actions.NewAction(
+			newDynamicWatchAction(
+				func(obj client.Object, eventHandler handler.EventHandler, predicates ...predicate.Predicate) error {
+					return cc.Watch(source.Kind(b.mgr.GetCache(), obj), eventHandler, predicates...)
+				},
+				b.watches,
+			),
+			actions.WithName("dynamicWatch"),
 		),
 	)
 

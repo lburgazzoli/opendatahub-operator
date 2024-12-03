@@ -16,7 +16,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	apimachinery "k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -68,24 +67,27 @@ func TestDeployAction(t *testing.T) {
 
 	g.Expect(err).ShouldNot(HaveOccurred())
 
-	rr := types.ReconciliationRequest{
-		Client: cl,
-		DSCI:   &dsciv1.DSCInitialization{Spec: dsciv1.DSCInitializationSpec{ApplicationsNamespace: ns}},
-		DSC:    &dscv1.DataScienceCluster{},
-		Instance: &componentsv1.Dashboard{
-			ObjectMeta: metav1.ObjectMeta{
-				Generation: 1,
-			},
-		},
-		Release: cluster.Release{
+	rr := types.NewReconciliationRequest(
+		types.WithClient(cl),
+		types.WithRelease(cluster.Release{
 			Name: cluster.OpenDataHub,
 			Version: version.OperatorVersion{Version: semver.Version{
 				Major: 1, Minor: 2, Patch: 3,
 			}}},
-		Resources: []unstructured.Unstructured{*obj1},
-	}
+		),
+		types.WithDSCI(&dsciv1.DSCInitialization{Spec: dsciv1.DSCInitializationSpec{
+			ApplicationsNamespace: ns},
+		}),
+		types.WithDSC(&dscv1.DataScienceCluster{}),
+		types.WithInstance(&componentsv1.Dashboard{
+			ObjectMeta: metav1.ObjectMeta{
+				Generation: 1,
+			},
+		}),
+		types.WithResources(*obj1),
+	)
 
-	err = action(ctx, &rr)
+	err = action(ctx, rr)
 	g.Expect(err).ShouldNot(HaveOccurred())
 
 	err = cl.Get(ctx, client.ObjectKeyFromObject(obj1), obj1)
@@ -155,24 +157,27 @@ func TestDeployNotOwnedSkip(t *testing.T) {
 	cl, err := fakeclient.New(oldObj)
 	g.Expect(err).ShouldNot(HaveOccurred())
 
-	rr := types.ReconciliationRequest{
-		Client: cl,
-		DSCI:   &dsciv1.DSCInitialization{Spec: dsciv1.DSCInitializationSpec{ApplicationsNamespace: ns}},
-		DSC:    &dscv1.DataScienceCluster{},
-		Instance: &componentsv1.Dashboard{
-			ObjectMeta: metav1.ObjectMeta{
-				Generation: 1,
-			},
-		},
-		Release: cluster.Release{
+	rr := types.NewReconciliationRequest(
+		types.WithClient(cl),
+		types.WithRelease(cluster.Release{
 			Name: cluster.OpenDataHub,
 			Version: version.OperatorVersion{Version: semver.Version{
 				Major: 1, Minor: 2, Patch: 3,
 			}}},
-		Resources: []unstructured.Unstructured{*newObj},
-	}
+		),
+		types.WithDSCI(&dsciv1.DSCInitialization{Spec: dsciv1.DSCInitializationSpec{
+			ApplicationsNamespace: ns},
+		}),
+		types.WithDSC(&dscv1.DataScienceCluster{}),
+		types.WithInstance(&componentsv1.Dashboard{
+			ObjectMeta: metav1.ObjectMeta{
+				Generation: 1,
+			},
+		}),
+		types.WithResources(*newObj),
+	)
 
-	err = action(ctx, &rr)
+	err = action(ctx, rr)
 	g.Expect(err).ShouldNot(HaveOccurred())
 
 	err = cl.Get(ctx, client.ObjectKeyFromObject(newObj), newObj)
@@ -222,24 +227,27 @@ func TestDeployNotOwnedCreate(t *testing.T) {
 	cl, err := fakeclient.New()
 	g.Expect(err).ShouldNot(HaveOccurred())
 
-	rr := types.ReconciliationRequest{
-		Client: cl,
-		DSCI:   &dsciv1.DSCInitialization{Spec: dsciv1.DSCInitializationSpec{ApplicationsNamespace: ns}},
-		DSC:    &dscv1.DataScienceCluster{},
-		Instance: &componentsv1.Dashboard{
-			ObjectMeta: metav1.ObjectMeta{
-				Generation: 1,
-			},
-		},
-		Release: cluster.Release{
+	rr := types.NewReconciliationRequest(
+		types.WithClient(cl),
+		types.WithRelease(cluster.Release{
 			Name: cluster.OpenDataHub,
 			Version: version.OperatorVersion{Version: semver.Version{
 				Major: 1, Minor: 2, Patch: 3,
 			}}},
-		Resources: []unstructured.Unstructured{*newObj},
-	}
+		),
+		types.WithDSCI(&dsciv1.DSCInitialization{Spec: dsciv1.DSCInitializationSpec{
+			ApplicationsNamespace: ns},
+		}),
+		types.WithDSC(&dscv1.DataScienceCluster{}),
+		types.WithInstance(&componentsv1.Dashboard{
+			ObjectMeta: metav1.ObjectMeta{
+				Generation: 1,
+			},
+		}),
+		types.WithResources(*newObj),
+	)
 
-	err = action(ctx, &rr)
+	err = action(ctx, rr)
 	g.Expect(err).ShouldNot(HaveOccurred())
 
 	err = cl.Get(ctx, client.ObjectKeyFromObject(newObj), newObj)

@@ -126,26 +126,25 @@ func testResourceNotReDeployed(t *testing.T, cli *client.Client, obj ctrlCli.Obj
 		g.Expect(err).ShouldNot(HaveOccurred())
 	}
 
-	rr := types.ReconciliationRequest{
-		Client: cli,
-		DSCI: &dsciv1.DSCInitialization{Spec: dsciv1.DSCInitializationSpec{
-			ApplicationsNamespace: in.GetNamespace()},
-		},
-		DSC: &dscv1.DataScienceCluster{},
-		Instance: &componentsv1.Dashboard{
-			ObjectMeta: metav1.ObjectMeta{
-				Generation: 1,
-			},
-		},
-		Release: cluster.Release{
+	rr := types.NewReconciliationRequest(
+		types.WithClient(cli),
+		types.WithRelease(cluster.Release{
 			Name: cluster.OpenDataHub,
 			Version: version.OperatorVersion{Version: semver.Version{
 				Major: 1, Minor: 2, Patch: 3,
 			}}},
-		Resources: []unstructured.Unstructured{
-			*in.DeepCopy(),
-		},
-	}
+		),
+		types.WithDSCI(&dsciv1.DSCInitialization{Spec: dsciv1.DSCInitializationSpec{
+			ApplicationsNamespace: in.GetNamespace()},
+		}),
+		types.WithDSC(&dscv1.DataScienceCluster{}),
+		types.WithInstance(&componentsv1.Dashboard{
+			ObjectMeta: metav1.ObjectMeta{
+				Generation: 1,
+			},
+		}),
+		types.WithResources(*in.DeepCopy()),
+	)
 
 	action := deploy.NewAction(
 		deploy.WithCache(),
@@ -156,7 +155,7 @@ func testResourceNotReDeployed(t *testing.T, cli *client.Client, obj ctrlCli.Obj
 	deploy.DeployedResourcesTotal.Reset()
 
 	// Resource should be created if missing
-	err = action(ctx, &rr)
+	err = action(ctx, rr)
 	g.Expect(err).ShouldNot(HaveOccurred())
 
 	g.Expect(testutil.ToFloat64(deploy.DeployedResourcesTotal)).Should(Equal(float64(1)))
@@ -168,7 +167,7 @@ func testResourceNotReDeployed(t *testing.T, cli *client.Client, obj ctrlCli.Obj
 	g.Expect(err).ShouldNot(HaveOccurred())
 
 	// Resource should not be re-deployed
-	err = action(ctx, &rr)
+	err = action(ctx, rr)
 	g.Expect(err).ShouldNot(HaveOccurred())
 
 	g.Expect(testutil.ToFloat64(deploy.DeployedResourcesTotal)).Should(Equal(float64(1)))

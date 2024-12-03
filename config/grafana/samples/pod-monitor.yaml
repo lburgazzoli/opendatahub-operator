@@ -1,0 +1,15 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: opendatahub-operator
+  namespace: opendatahub-operator-system
+  labels:
+    name: opendatahub-operator
+spec:
+  selector:
+    matchLabels:
+      name: opendatahub-operator
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics

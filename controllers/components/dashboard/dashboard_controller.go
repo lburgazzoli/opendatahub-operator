@@ -30,6 +30,7 @@ import (
 
 	componentsv1 "github.com/opendatahub-io/opendatahub-operator/v2/apis/components/v1"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/deploy"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/gc"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/render/kustomize"
@@ -88,7 +89,10 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 		WithAction(initialize).
 		WithAction(devFlags).
 		WithAction(configureDependencies).
-		WithAction(security.NewUpdatePodSecurityRoleBindingAction(serviceAccounts)).
+		WithAction(
+			security.NewUpdatePodSecurityRoleBindingAction(serviceAccounts),
+			actions.WithName(security.UpdatePodSecurityRoleBindingActionName),
+		).
 		WithAction(kustomize.NewAction(
 			kustomize.WithCache(),
 			// Those are the default labels added by the legacy deploy method
@@ -107,7 +111,7 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 			deploy.WithCache(),
 		)).
 		WithAction(updatestatus.NewAction()).
-		WithAction(updateStatus).
+		WithAction(updateComponentStatus).
 		// must be the final action
 		WithAction(gc.NewAction(
 			gc.WithUnremovables(gvk.OdhDashboardConfig),

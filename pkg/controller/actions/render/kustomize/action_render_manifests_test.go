@@ -126,16 +126,16 @@ func TestRenderResourcesAction(t *testing.T) {
 		),
 	)
 
-	rr := types.ReconciliationRequest{
-		Client:    cl,
-		Instance:  &componentsv1.Dashboard{},
-		DSCI:      &dsciv1.DSCInitialization{Spec: dsciv1.DSCInitializationSpec{ApplicationsNamespace: ns}},
-		DSC:       &dscv1.DataScienceCluster{},
-		Release:   cluster.Release{Name: cluster.OpenDataHub},
-		Manifests: []types.ManifestInfo{{Path: id}},
-	}
+	rr := types.NewReconciliationRequest(
+		types.WithClient(cl),
+		types.WithRelease(cluster.Release{Name: cluster.OpenDataHub}),
+		types.WithDSCI(&dsciv1.DSCInitialization{Spec: dsciv1.DSCInitializationSpec{ApplicationsNamespace: ns}}),
+		types.WithDSC(&dscv1.DataScienceCluster{}),
+		types.WithInstance(&componentsv1.Dashboard{}),
+		types.WithManifests(types.ManifestInfo{Path: id}),
+	)
 
-	err = action(ctx, &rr)
+	err = action(ctx, rr)
 
 	g.Expect(err).ShouldNot(HaveOccurred())
 	g.Expect(rr.Resources).Should(And(
@@ -213,16 +213,16 @@ func TestRenderResourcesWithCacheAction(t *testing.T) {
 			d.Generation = 1
 		}
 
-		rr := types.ReconciliationRequest{
-			Client:    cl,
-			Instance:  &d,
-			DSCI:      &dsciv1.DSCInitialization{Spec: dsciv1.DSCInitializationSpec{ApplicationsNamespace: ns}},
-			DSC:       &dscv1.DataScienceCluster{},
-			Release:   cluster.Release{Name: cluster.OpenDataHub},
-			Manifests: []types.ManifestInfo{{Path: id}},
-		}
+		rr := types.NewReconciliationRequest(
+			types.WithClient(cl),
+			types.WithRelease(cluster.Release{Name: cluster.OpenDataHub}),
+			types.WithDSCI(&dsciv1.DSCInitialization{Spec: dsciv1.DSCInitializationSpec{ApplicationsNamespace: ns}}),
+			types.WithDSC(&dscv1.DataScienceCluster{}),
+			types.WithInstance(&d),
+			types.WithManifests(types.ManifestInfo{Path: id}),
+		)
 
-		err = action(ctx, &rr)
+		err = action(ctx, rr)
 
 		g.Expect(err).ShouldNot(HaveOccurred())
 		g.Expect(rr.Resources).Should(And(

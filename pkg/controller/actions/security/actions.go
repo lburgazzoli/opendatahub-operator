@@ -9,6 +9,8 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 )
 
+const UpdatePodSecurityRoleBindingActionName = "updatePodSecurityRoleBinding"
+
 func NewUpdatePodSecurityRoleBindingAction(roles map[cluster.Platform][]string) actions.Fn {
 	return func(ctx context.Context, rr *types.ReconciliationRequest) error {
 		v := roles[rr.Release.Name]

@@ -98,7 +98,7 @@ func configureDependencies(_ context.Context, rr *odhtypes.ReconciliationRequest
 	return nil
 }
 
-func updateStatus(ctx context.Context, rr *odhtypes.ReconciliationRequest) error {
+func updateComponentStatus(ctx context.Context, rr *odhtypes.ReconciliationRequest) error {
 	d, ok := rr.Instance.(*componentsv1.Dashboard)
 	if !ok {
 		return errors.New("instance is not of type *odhTypes.Dashboard")

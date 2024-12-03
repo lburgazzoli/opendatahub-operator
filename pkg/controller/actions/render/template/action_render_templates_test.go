@@ -37,14 +37,10 @@ func TestRenderTemplate(t *testing.T) {
 
 	action := template.NewAction()
 
-	rr := types.ReconciliationRequest{
-		Client: cl,
-		Instance: &componentsv1.Dashboard{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: ns,
-			},
-		},
-		DSCI: &dsciv1.DSCInitialization{
+	rr := types.NewReconciliationRequest(
+		types.WithClient(cl),
+		types.WithRelease(cluster.Release{Name: cluster.OpenDataHub}),
+		types.WithDSCI(&dsciv1.DSCInitialization{
 			Spec: dsciv1.DSCInitializationSpec{
 				ApplicationsNamespace: ns,
 				ServiceMesh: &infrav1.ServiceMeshSpec{
@@ -54,13 +50,13 @@ func TestRenderTemplate(t *testing.T) {
 					},
 				},
 			},
-		},
-		DSC:       &dscv1.DataScienceCluster{},
-		Release:   cluster.Release{Name: cluster.OpenDataHub},
-		Templates: []types.TemplateInfo{{FS: testFS, Path: "resources/smm.tmpl.yaml"}},
-	}
+		}),
+		types.WithDSC(&dscv1.DataScienceCluster{}),
+		types.WithInstance(&componentsv1.Dashboard{ObjectMeta: metav1.ObjectMeta{Name: ns}}),
+		types.WithTemplates(types.TemplateInfo{FS: testFS, Path: "resources/smm.tmpl.yaml"}),
+	)
 
-	err = action(ctx, &rr)
+	err = action(ctx, rr)
 
 	g.Expect(err).ShouldNot(HaveOccurred())
 	g.Expect(rr.Resources).Should(And(
@@ -94,14 +90,10 @@ func TestRenderTemplateWithData(t *testing.T) {
 		}),
 	)
 
-	rr := types.ReconciliationRequest{
-		Client: cl,
-		Instance: &componentsv1.Dashboard{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: ns,
-			},
-		},
-		DSCI: &dsciv1.DSCInitialization{
+	rr := types.NewReconciliationRequest(
+		types.WithClient(cl),
+		types.WithRelease(cluster.Release{Name: cluster.OpenDataHub}),
+		types.WithDSCI(&dsciv1.DSCInitialization{
 			Spec: dsciv1.DSCInitializationSpec{
 				ApplicationsNamespace: ns,
 				ServiceMesh: &infrav1.ServiceMeshSpec{
@@ -111,13 +103,13 @@ func TestRenderTemplateWithData(t *testing.T) {
 					},
 				},
 			},
-		},
-		DSC:       &dscv1.DataScienceCluster{},
-		Release:   cluster.Release{Name: cluster.OpenDataHub},
-		Templates: []types.TemplateInfo{{FS: testFS, Path: "resources/smm-data.tmpl.yaml"}},
-	}
+		}),
+		types.WithDSC(&dscv1.DataScienceCluster{}),
+		types.WithInstance(&componentsv1.Dashboard{ObjectMeta: metav1.ObjectMeta{Name: ns}}),
+		types.WithTemplates(types.TemplateInfo{FS: testFS, Path: "resources/smm-data.tmpl.yaml"}),
+	)
 
-	err = action(ctx, &rr)
+	err = action(ctx, rr)
 
 	g.Expect(err).ShouldNot(HaveOccurred())
 	g.Expect(rr.Resources).Should(And(
@@ -171,16 +163,16 @@ func TestRenderTemplateWithCache(t *testing.T) {
 			d.Generation = 1
 		}
 
-		rr := types.ReconciliationRequest{
-			Client:    cl,
-			Instance:  &d,
-			DSCI:      &dsci,
-			DSC:       &dscv1.DataScienceCluster{},
-			Release:   cluster.Release{Name: cluster.OpenDataHub},
-			Templates: []types.TemplateInfo{{FS: testFS, Path: "resources/smm.tmpl.yaml"}},
-		}
+		rr := types.NewReconciliationRequest(
+			types.WithClient(cl),
+			types.WithRelease(cluster.Release{Name: cluster.OpenDataHub}),
+			types.WithDSCI(&dsci),
+			types.WithDSC(&dscv1.DataScienceCluster{}),
+			types.WithInstance(&d),
+			types.WithTemplates(types.TemplateInfo{FS: testFS, Path: "resources/smm.tmpl.yaml"}),
+		)
 
-		err = action(ctx, &rr)
+		err = action(ctx, rr)
 
 		g.Expect(err).ShouldNot(HaveOccurred())
 		g.Expect(rr.Resources).Should(And(

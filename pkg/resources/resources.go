@@ -230,19 +230,6 @@ func EncodeToString(in []byte) string {
 	return "v" + base64.RawURLEncoding.EncodeToString(in)
 }
 
-func KindForObject(scheme *runtime.Scheme, obj runtime.Object) (string, error) {
-	if obj.GetObjectKind().GroupVersionKind().Kind != "" {
-		return obj.GetObjectKind().GroupVersionKind().Kind, nil
-	}
-
-	gvk, err := apiutil.GVKForObject(obj, scheme)
-	if err != nil {
-		return "", fmt.Errorf("failed to get GVK: %w", err)
-	}
-
-	return gvk.Kind, nil
-}
-
 func EnsureGroupVersionKind(s *runtime.Scheme, obj client.Object) error {
 	if obj.GetObjectKind().GroupVersionKind().Kind != "" {
 		return nil
@@ -260,4 +247,17 @@ func EnsureGroupVersionKind(s *runtime.Scheme, obj client.Object) error {
 	obj.GetObjectKind().SetGroupVersionKind(kinds[0])
 
 	return nil
+}
+
+func KindForObject(scheme *runtime.Scheme, obj runtime.Object) (string, error) {
+	if obj.GetObjectKind().GroupVersionKind().Kind != "" {
+		return obj.GetObjectKind().GroupVersionKind().Kind, nil
+	}
+
+	gvk, err := apiutil.GVKForObject(obj, scheme)
+	if err != nil {
+		return "", fmt.Errorf("failed to get GVK: %w", err)
+	}
+
+	return gvk.Kind, nil
 }

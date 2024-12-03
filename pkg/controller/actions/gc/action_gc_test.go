@@ -182,14 +182,20 @@ func TestGcAction(t *testing.T) {
 			g.Expect(gci.Start(ctx)).
 				NotTo(HaveOccurred())
 
-			rr := types.ReconciliationRequest{
-				Client: cli,
-				DSCI: &dsciv1.DSCInitialization{
+			rr := types.NewReconciliationRequest(
+				types.WithClient(cli),
+				types.WithRelease(cluster.Release{
+					Name: cluster.OpenDataHub,
+					Version: version.OperatorVersion{
+						Version: tt.version,
+					}},
+				),
+				types.WithDSCI(&dsciv1.DSCInitialization{
 					ObjectMeta: metav1.ObjectMeta{
 						Generation: 1,
 					},
-				},
-				Instance: &componentsv1.Dashboard{
+				}),
+				types.WithInstance(&componentsv1.Dashboard{
 					TypeMeta: metav1.TypeMeta{
 						APIVersion: componentsv1.GroupVersion.String(),
 						Kind:       componentsv1.DashboardKind,
@@ -198,15 +204,9 @@ func TestGcAction(t *testing.T) {
 						Generation: 1,
 						UID:        apytypes.UID(id),
 					},
-				},
-				Release: cluster.Release{
-					Name: cluster.OpenDataHub,
-					Version: version.OperatorVersion{
-						Version: tt.version,
-					},
-				},
-				Generated: tt.generated,
-			}
+				}),
+				types.WithGenerated(tt.generated),
+			)
 
 			l := make(map[string]string)
 			for k, v := range tt.labels {
@@ -221,7 +221,7 @@ func TestGcAction(t *testing.T) {
 					Namespace: nsn,
 					Annotations: map[string]string{
 						annotations.InstanceGeneration: "1",
-						annotations.InstanceUID:        tt.uidFn(&rr),
+						annotations.InstanceUID:        tt.uidFn(rr),
 						annotations.PlatformVersion:    "0.1.0",
 						annotations.PlatformType:       string(cluster.OpenDataHub),
 					},
@@ -238,7 +238,7 @@ func TestGcAction(t *testing.T) {
 
 			a := gc.NewAction(opts...)
 
-			err = a(ctx, &rr)
+			err = a(ctx, rr)
 			g.Expect(err).NotTo(HaveOccurred())
 
 			if tt.matcher != nil {

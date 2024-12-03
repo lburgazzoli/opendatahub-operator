@@ -62,13 +62,15 @@ func TestDeleteResourcesAction(t *testing.T) {
 		deleteresource.WithDeleteResourcesTypes(&appsv1.Deployment{}),
 		deleteresource.WithDeleteResourcesLabel(labels.K8SCommon.PartOf, "foo"))
 
-	err = action(ctx, &types.ReconciliationRequest{
-		Client:   cl,
-		Instance: nil,
-		DSCI:     &dsciv1.DSCInitialization{Spec: dsciv1.DSCInitializationSpec{ApplicationsNamespace: ns}},
-		DSC:      &dscv1.DataScienceCluster{},
-		Release:  cluster.Release{Name: cluster.OpenDataHub},
-	})
+	err = action(
+		ctx,
+		types.NewReconciliationRequest(
+			types.WithClient(cl),
+			types.WithRelease(cluster.Release{Name: cluster.OpenDataHub}),
+			types.WithDSCI(&dsciv1.DSCInitialization{Spec: dsciv1.DSCInitializationSpec{ApplicationsNamespace: ns}}),
+			types.WithDSC(&dscv1.DataScienceCluster{}),
+		),
+	)
 
 	g.Expect(err).ShouldNot(HaveOccurred())
 

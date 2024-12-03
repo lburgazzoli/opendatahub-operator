@@ -89,7 +89,7 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 			deploy.WithCache(),
 		)).
 		WithAction(updatestatus.NewAction()).
-		WithAction(updateStatus).
+		WithAction(updateComponentStatus).
 		// must be the final action
 		WithAction(gc.NewAction(
 			gc.WithUnremovables(gvk.ServiceMeshMember),

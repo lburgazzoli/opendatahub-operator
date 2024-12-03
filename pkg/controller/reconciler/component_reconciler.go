@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,13 +31,13 @@ import (
 type ComponentReconciler struct {
 	Client     *odhClient.Client
 	Scheme     *runtime.Scheme
-	Actions    []actions.Fn
-	Finalizer  []actions.Fn
 	Log        logr.Logger
 	Controller controller.Controller
 	Recorder   record.EventRecorder
 	Release    cluster.Release
 
+	actions         []*actions.Action
+	finalizer       []*actions.Action
 	name            string
 	m               *odhManager.Manager
 	instanceFactory func() (components.ComponentObject, error)
@@ -90,12 +91,12 @@ func (r *ComponentReconciler) Owns(obj client.Object) bool {
 	return r.m.Owns(obj.GetObjectKind().GroupVersionKind())
 }
 
-func (r *ComponentReconciler) AddAction(action actions.Fn) {
-	r.Actions = append(r.Actions, action)
+func (r *ComponentReconciler) AddAction(action *actions.Action) {
+	r.actions = append(r.actions, action)
 }
 
-func (r *ComponentReconciler) AddFinalizer(action actions.Fn) {
-	r.Finalizer = append(r.Finalizer, action)
+func (r *ComponentReconciler) AddFinalizer(action *actions.Action) {
+	r.finalizer = append(r.finalizer, action)
 }
 
 func (r *ComponentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -129,20 +130,20 @@ func (r *ComponentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, errors.New("unable to find DSCInitialization")
 	}
 
-	rr := types.ReconciliationRequest{
-		Client:    r.Client,
-		Manager:   r.m,
-		Instance:  res,
-		DSC:       &dscl.Items[0],
-		DSCI:      &dscil.Items[0],
-		Release:   r.Release,
-		Manifests: make([]types.ManifestInfo, 0),
-	}
+	rr := types.NewReconciliationRequest(
+		types.WithClient(r.Client),
+		types.WithControllerName(strings.ToLower(res.GetObjectKind().GroupVersionKind().Kind)),
+		types.WithManager(r.m),
+		types.WithRelease(r.Release),
+		types.WithDSCI(&dscil.Items[0]),
+		types.WithDSC(&dscl.Items[0]),
+		types.WithInstance(res),
+	)
 
 	// Handle deletion
 	if !res.GetDeletionTimestamp().IsZero() {
 		// Execute finalizers
-		for _, action := range r.Finalizer {
+		for _, action := range r.finalizer {
 			l.V(3).Info("Executing finalizer", "action", action)
 
 			actx := log.IntoContext(
@@ -150,7 +151,7 @@ func (r *ComponentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				l.WithName(actions.ActionGroup).WithName(action.String()),
 			)
 
-			if err := action(actx, &rr); err != nil {
+			if err := action.Run(actx, rr); err != nil {
 				se := odherrors.StopError{}
 				if !errors.As(err, &se) {
 					l.Error(err, "Failed to execute finalizer", "action", action)
@@ -166,7 +167,7 @@ func (r *ComponentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Execute actions
-	for _, action := range r.Actions {
+	for _, action := range r.actions {
 		l.Info("Executing action", "action", action)
 
 		actx := log.IntoContext(
@@ -174,7 +175,7 @@ func (r *ComponentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			l.WithName(actions.ActionGroup).WithName(action.String()),
 		)
 
-		if err := action(actx, &rr); err != nil {
+		if err := action.Run(actx, rr); err != nil {
 			se := odherrors.StopError{}
 			if !errors.As(err, &se) {
 				l.Error(err, "Failed to execute action", "action", action)

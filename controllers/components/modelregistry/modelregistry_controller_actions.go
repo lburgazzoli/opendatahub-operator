@@ -151,7 +151,7 @@ func customizeResources(_ context.Context, rr *odhtypes.ReconciliationRequest) e
 	return nil
 }
 
-func updateStatus(_ context.Context, rr *odhtypes.ReconciliationRequest) error {
+func updateComponentStatus(_ context.Context, rr *odhtypes.ReconciliationRequest) error {
 	mr, ok := rr.Instance.(*componentsv1.ModelRegistry)
 	if !ok {
 		return errors.New("instance is not of type *odhTypes.ModelRegistry")
