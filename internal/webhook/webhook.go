@@ -46,7 +46,7 @@ import (
 // TODO: Get rid of platform in name, rename to ValidatingWebhook.
 type OpenDataHubValidatingWebhook struct {
 	Client  client.Client
-	Decoder *admission.Decoder
+	Decoder admission.Decoder
 	Name    string
 }
 

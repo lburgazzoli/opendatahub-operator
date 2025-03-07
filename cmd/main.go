@@ -21,6 +21,8 @@ import (
 	"errors"
 	"flag"
 	"os"
+	"sync"
+	"time"
 
 	ocappsv1 "github.com/openshift/api/apps/v1" //nolint:importas //reason: conflicts with appsv1 "k8s.io/api/apps/v1"
 	buildv1 "github.com/openshift/api/build/v1"
@@ -36,6 +38,7 @@ import (
 	ofapiv1alpha1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	ofapiv2 "github.com/operator-framework/api/pkg/operators/v2"
 	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/prometheus/client_golang/prometheus"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	authorizationv1 "k8s.io/api/authorization/v1"
@@ -46,16 +49,20 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	corecache "k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	ctrlwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -102,6 +109,17 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 )
 
+var StoredResourcesTotal = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "stored_resources_total",
+		Help: "TODO",
+	},
+	[]string{
+		"apiVersion",
+		"kind",
+	},
+)
+
 func init() { //nolint:gochecknoinits
 	utilruntime.Must(componentApi.AddToScheme(scheme))
 	utilruntime.Must(serviceApi.AddToScheme(scheme))
@@ -129,6 +147,8 @@ func init() { //nolint:gochecknoinits
 	utilruntime.Must(consolev1.AddToScheme(scheme))
 	utilruntime.Must(securityv1.Install(scheme))
 	utilruntime.Must(templatev1.Install(scheme))
+
+	metrics.Registry.MustRegister(StoredResourcesTotal)
 }
 
 func initComponents(_ context.Context, p common.Platform) error {
@@ -206,6 +226,9 @@ func main() { //nolint:funlen,maintidx,gocyclo
 		os.Exit(1)
 	}
 
+	handlers := make(map[schema.GroupVersionKind]struct{})
+	handlerM := sync.Mutex{}
+
 	cacheOptions := cache.Options{
 		Scheme: scheme,
 		ByObject: map[client.Object]cache.ByObject{
@@ -260,13 +283,40 @@ func main() { //nolint:funlen,maintidx,gocyclo
 			&rbacv1.ClusterRoleBinding{}:             {},
 			&securityv1.SecurityContextConstraints{}: {},
 		},
-		DefaultTransform: func(in any) (any, error) {
-			// Nilcheck managed fields to avoid hitting https://github.com/kubernetes/kubernetes/issues/124337
-			if obj, err := meta.Accessor(in); err == nil && obj.GetManagedFields() != nil {
-				obj.SetManagedFields(nil)
+		DefaultTransform: cache.TransformStripManagedFields(),
+		NewInformer: func(
+			watcher corecache.ListerWatcher, obj runtime.Object, duration time.Duration, indexers corecache.Indexers) corecache.SharedIndexInformer {
+			objGVK, err := apiutil.GVKForObject(obj, scheme)
+			if err != nil {
+				panic(err)
 			}
 
-			return in, nil
+			kind := objGVK.Kind
+			apiVersion := objGVK.GroupVersion().String()
+
+			i := corecache.NewSharedIndexInformer(watcher, obj, duration, indexers)
+
+			handlerM.Lock()
+			defer handlerM.Unlock()
+
+			if _, ok := handlers[objGVK]; !ok {
+				_, err = i.AddEventHandler(corecache.ResourceEventHandlerFuncs{
+					AddFunc: func(obj interface{}) {
+						StoredResourcesTotal.WithLabelValues(apiVersion, kind).Inc()
+					},
+					DeleteFunc: func(obj interface{}) {
+						StoredResourcesTotal.WithLabelValues(apiVersion, kind).Dec()
+					},
+				})
+
+				handlers[objGVK] = struct{}{}
+			}
+
+			if err != nil {
+				panic(err)
+			}
+
+			return i
 		},
 	}
 
