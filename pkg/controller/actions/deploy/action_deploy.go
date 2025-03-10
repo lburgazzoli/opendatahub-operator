@@ -106,6 +106,31 @@ func WithCache(opts ...CacheOpt) ActionOpts {
 	}
 }
 
+func (a *Action) lookup(
+	ctx context.Context,
+	rr *odhTypes.ReconciliationRequest,
+	ref unstructured.Unstructured,
+) (*unstructured.Unstructured, error) {
+	var obj client.Object
+
+	if rr.Controller.IsPartial(ref.GroupVersionKind()) {
+		obj = resources.GvkToPartial(ref.GroupVersionKind())
+	} else {
+		obj = resources.GvkToUnstructured(ref.GroupVersionKind())
+	}
+
+	if err := rr.Client.Get(ctx, client.ObjectKeyFromObject(&ref), obj); err != nil {
+		return nil, err
+	}
+
+	out := unstructured.Unstructured{}
+	if err := rr.Scheme().Convert(obj, &out, ctx); err != nil {
+		return nil, err
+	}
+
+	return &out, nil
+}
+
 func (a *Action) run(ctx context.Context, rr *odhTypes.ReconciliationRequest) error {
 	// cleanup old entries if needed
 	if a.cache != nil {
@@ -122,9 +147,8 @@ func (a *Action) run(ctx context.Context, rr *odhTypes.ReconciliationRequest) er
 
 	for i := range rr.Resources {
 		res := rr.Resources[i]
-		current := resources.GvkToUnstructured(res.GroupVersionKind())
 
-		lookupErr := rr.Client.Get(ctx, client.ObjectKeyFromObject(&res), current)
+		current, lookupErr := a.lookup(ctx, rr, res)
 		switch {
 		case k8serr.IsNotFound(lookupErr):
 			// set it to nil fto pass it down to other methods and signal
@@ -135,7 +159,10 @@ func (a *Action) run(ctx context.Context, rr *odhTypes.ReconciliationRequest) er
 		default:
 			// Remove the previous owner reference if set, This is required during the
 			// transition from the old to the new operator.
-			if err := resources.RemoveOwnerReferences(ctx, rr.Client, current, ownedTypeIsNot(&igvk)); err != nil {
+			//
+			// IMPORTANT: use the uncached client, to avoid the method to trigger an
+			//            undesired LIST+WATCH
+			if err := resources.RemoveOwnerReferences(ctx, rr.Client.Uncached(), current, ownedTypeIsNot(&igvk)); err != nil {
 				return err
 			}
 
@@ -284,7 +311,7 @@ func (a *Action) deploy(
 		}
 
 	default:
-		owned := rr.Manager.Owns(obj.GroupVersionKind())
+		owned := rr.Controller.Owns(obj.GroupVersionKind())
 		if owned {
 			if err := ctrl.SetControllerReference(rr.Instance, &obj, rr.Client.Scheme()); err != nil {
 				return false, err

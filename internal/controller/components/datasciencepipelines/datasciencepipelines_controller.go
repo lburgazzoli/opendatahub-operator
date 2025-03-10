@@ -52,10 +52,14 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&corev1.Service{}).
 		Owns(&monitoringv1.ServiceMonitor{}).
-		Owns(&appsv1.Deployment{}, reconciler.WithPredicates(resources.NewDeploymentPredicate())).
+		Owns(
+			&appsv1.Deployment{},
+			reconciler.Partial(false),
+			reconciler.WithPredicates(resources.NewDeploymentPredicate())).
 		Owns(&securityv1.SecurityContextConstraints{}).
 		Watches(
 			&extv1.CustomResourceDefinition{},
+			reconciler.Partial(false),
 			reconciler.WithEventHandler(
 				handlers.ToNamed(componentApi.DataSciencePipelinesInstanceName)),
 			reconciler.WithPredicates(

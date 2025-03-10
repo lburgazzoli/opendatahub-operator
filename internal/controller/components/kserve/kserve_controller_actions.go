@@ -381,7 +381,7 @@ func setStatusFields(ctx context.Context, rr *odhtypes.ReconciliationRequest) er
 		return fmt.Errorf("resource instance %v is not a componentApi.Kserve)", rr.Instance)
 	}
 
-	ddm, err := getDefaultDeploymentMode(ctx, rr.Client, &rr.DSCI.Spec)
+	ddm, err := getDefaultDeploymentMode(ctx, rr.Client.Uncached(), &rr.DSCI.Spec)
 	if err != nil {
 		return err
 	}

@@ -43,6 +43,7 @@ type watchInput struct {
 	owned        bool
 	dynamic      bool
 	dynamicPred  []DynamicPredicate
+	partial      bool
 }
 
 type WatchOpts func(*watchInput)
@@ -69,6 +70,12 @@ func Dynamic(predicates ...DynamicPredicate) WatchOpts {
 	return func(a *watchInput) {
 		a.dynamic = true
 		a.dynamicPred = slices.Clone(predicates)
+	}
+}
+
+func Partial(value bool) WatchOpts {
+	return func(a *watchInput) {
+		a.partial = value
 	}
 }
 
@@ -137,6 +144,7 @@ func (b *ReconcilerBuilder[T]) Watches(object client.Object, opts ...WatchOpts) 
 	in := watchInput{}
 	in.object = object
 	in.owned = false
+	in.partial = true
 
 	for _, opt := range opts {
 		opt(&in)
@@ -170,6 +178,7 @@ func (b *ReconcilerBuilder[T]) Owns(object client.Object, opts ...WatchOpts) *Re
 	in := watchInput{}
 	in.object = object
 	in.owned = true
+	in.partial = true
 
 	for _, opt := range opts {
 		opt(&in)
@@ -222,6 +231,7 @@ func (b *ReconcilerBuilder[T]) Build(_ context.Context) (*Reconciler, error) {
 	}
 
 	c := ctrl.NewControllerManagedBy(b.mgr)
+	c = c.Named(name)
 
 	// automatically add default predicates to the watched API if no
 	// predicates are provided
@@ -237,15 +247,16 @@ func (b *ReconcilerBuilder[T]) Build(_ context.Context) (*Reconciler, error) {
 	c = c.For(b.input.object, forOpts...)
 
 	for i := range b.watches {
-		if b.watches[i].owned {
-			kinds, _, err := b.mgr.GetScheme().ObjectKinds(b.watches[i].object)
-			if err != nil {
-				return nil, err
-			}
+		gvk, err := resources.GetGroupVersionKindForObject(b.mgr.GetScheme(), b.watches[i].object)
+		if err != nil {
+			return nil, err
+		}
 
-			for i := range kinds {
-				r.AddOwnedType(kinds[i])
-			}
+		if b.watches[i].owned {
+			r.SetOwnedType(gvk, true)
+		}
+		if b.watches[i].partial {
+			r.SetPartialType(gvk, true)
 		}
 
 		// if the watch is dynamic, then the watcher will be registered
@@ -254,8 +265,18 @@ func (b *ReconcilerBuilder[T]) Build(_ context.Context) (*Reconciler, error) {
 			continue
 		}
 
+		wo := b.watches[i].object
+		if b.watches[i].partial {
+			po, err := resources.ObjToPartial(b.mgr.GetScheme(), b.watches[i].object)
+			if err != nil {
+				return nil, fmt.Errorf("unable to compute partial type: %w", err)
+			}
+
+			wo = po
+		}
+
 		c = c.Watches(
-			b.watches[i].object,
+			wo,
 			b.watches[i].eventHandler,
 			builder.WithPredicates(b.watches[i].predicates...),
 		)

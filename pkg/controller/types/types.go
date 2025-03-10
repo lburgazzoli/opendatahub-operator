@@ -9,15 +9,22 @@ import (
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	dsciv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v1"
 	odhClient "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/client"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/conditions"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/manager"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
 )
+
+type Controller interface {
+	SetOwnedType(gvk schema.GroupVersionKind, owned bool)
+	Owns(gvk schema.GroupVersionKind) bool
+	SetPartialType(gvk schema.GroupVersionKind, partial bool)
+	IsPartial(gvk schema.GroupVersionKind) bool
+}
 
 type ResourceObject interface {
 	client.Object
@@ -59,7 +66,7 @@ type TemplateInfo struct {
 type ReconciliationRequest struct {
 	*odhClient.Client
 
-	Manager    *manager.Manager
+	Controller Controller
 	Conditions *conditions.Manager
 	Instance   common.PlatformObject
 	DSCI       *dsciv1.DSCInitialization

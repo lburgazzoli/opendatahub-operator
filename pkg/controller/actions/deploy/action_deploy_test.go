@@ -32,7 +32,6 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/deploy"
 	odhCli "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/client"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/manager"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/annotations"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
@@ -85,7 +84,8 @@ func TestDeployAction(t *testing.T) {
 			Version: version.OperatorVersion{Version: semver.Version{
 				Major: 1, Minor: 2, Patch: 3,
 			}}},
-		Resources: []unstructured.Unstructured{*obj1},
+		Resources:  []unstructured.Unstructured{*obj1},
+		Controller: types.NewBaseController(),
 	}
 
 	err = action(ctx, &rr)
@@ -171,7 +171,8 @@ func TestDeployNotOwnedSkip(t *testing.T) {
 			Version: version.OperatorVersion{Version: semver.Version{
 				Major: 1, Minor: 2, Patch: 3,
 			}}},
-		Resources: []unstructured.Unstructured{*newObj},
+		Resources:  []unstructured.Unstructured{*newObj},
+		Controller: types.NewBaseController(),
 	}
 
 	err = action(ctx, &rr)
@@ -237,7 +238,8 @@ func TestDeployNotOwnedCreate(t *testing.T) {
 			Version: version.OperatorVersion{Version: semver.Version{
 				Major: 1, Minor: 2, Patch: 3,
 			}}},
-		Resources: []unstructured.Unstructured{*newObj},
+		Resources:  []unstructured.Unstructured{*newObj},
+		Controller: types.NewBaseController(),
 	}
 
 	err = action(ctx, &rr)
@@ -364,6 +366,7 @@ func deployClusterRoles(t *testing.T, ctx context.Context, cli *odhCli.Client, r
 			Version: version.OperatorVersion{Version: semver.Version{
 				Major: 1, Minor: 2, Patch: 3,
 			}}},
+		Controller: types.NewBaseController(),
 	}
 
 	for i := range roles {
@@ -431,6 +434,7 @@ func TestDeployCRD(t *testing.T) {
 			Version: version.OperatorVersion{Version: semver.Version{
 				Major: 1, Minor: 2, Patch: 3,
 			}}},
+		Controller: types.NewBaseController(),
 	}
 
 	err = rr.AddResources(&apiextensionsv1.CustomResourceDefinition{
@@ -604,10 +608,10 @@ func TestDeployOwnerRef(t *testing.T) {
 			Version: version.OperatorVersion{Version: semver.Version{
 				Major: 1, Minor: 2, Patch: 3,
 			}}},
-		Manager: manager.New(nil),
+		Controller: types.NewBaseController(),
 	}
 
-	rr.Manager.AddGVK(gvk.ConfigMap, true)
+	rr.Controller.SetOwnedType(gvk.ConfigMap, true)
 
 	err = rr.AddResources(configMapRef.DeepCopy(), crdRef.DeepCopy())
 	g.Expect(err).NotTo(HaveOccurred())

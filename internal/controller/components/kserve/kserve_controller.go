@@ -70,7 +70,10 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 		Owns(&monitoringv1.ServiceMonitor{}).
 		Owns(&admissionregistrationv1.MutatingWebhookConfiguration{}).
 		Owns(&admissionregistrationv1.ValidatingWebhookConfiguration{}).
-		Owns(&appsv1.Deployment{}, reconciler.WithPredicates(resources.NewDeploymentPredicate())).
+		Owns(
+			&appsv1.Deployment{},
+			reconciler.Partial(false),
+			reconciler.WithPredicates(resources.NewDeploymentPredicate())).
 
 		// operands - dynamically owned
 		OwnsGVK(gvk.Gateway, reconciler.Dynamic(ifGVKInstalled(gvk.Gateway))).
@@ -90,6 +93,7 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 		//   set to the current owner
 		Watches(
 			&extv1.CustomResourceDefinition{},
+			reconciler.Partial(false),
 			reconciler.WithEventHandler(
 				handlers.ToNamed(componentApi.KserveInstanceName)),
 			reconciler.WithPredicates(predicate.And(
@@ -113,6 +117,7 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 		// resource
 		Watches(
 			&dsciv1.DSCInitialization{},
+			reconciler.Partial(false),
 			reconciler.WithEventHandler(handlers.ToNamed(componentApi.KserveInstanceName)),
 			reconciler.WithPredicates(predicate.Or(generation.New(), resources.DSCIReadiness)),
 		).

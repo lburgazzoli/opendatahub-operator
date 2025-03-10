@@ -52,7 +52,7 @@ func WithScheme(value *runtime.Scheme) TestContextOpt {
 
 func WitContext(value context.Context) TestContextOpt {
 	return func(tc *testContextOpts) {
-		tc.ctx = value
+		tc.ctx := value
 	}
 }
 

@@ -73,9 +73,13 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 		Owns(&promv1.PrometheusRule{}).
 		Owns(&admissionregistrationv1.MutatingWebhookConfiguration{}).
 		Owns(&admissionregistrationv1.ValidatingWebhookConfiguration{}).
-		Owns(&appsv1.Deployment{}, reconciler.WithPredicates(resources.NewDeploymentPredicate())).
+		Owns(
+			&appsv1.Deployment{},
+			reconciler.Partial(false),
+			reconciler.WithPredicates(resources.NewDeploymentPredicate())).
 		Watches(
 			&extv1.CustomResourceDefinition{},
+			reconciler.Partial(false),
 			reconciler.WithEventHandler(
 				handlers.ToNamed(componentApi.KueueInstanceName)),
 			reconciler.WithPredicates(

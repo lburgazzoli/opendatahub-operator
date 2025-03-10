@@ -161,6 +161,7 @@ func testResourceNotReDeployed(t *testing.T, cli *client.Client, obj ctrlCli.Obj
 		Resources: []unstructured.Unstructured{
 			*in.DeepCopy(),
 		},
+		Controller: types.NewBaseController(),
 	}
 
 	action := deploy.NewAction(
@@ -234,6 +235,7 @@ func testCacheTTL(t *testing.T, cli *client.Client, obj ctrlCli.Object) {
 		Resources: []unstructured.Unstructured{
 			*in.DeepCopy(),
 		},
+		Controller: types.NewBaseController(),
 	}
 
 	ttl := 1 * time.Second

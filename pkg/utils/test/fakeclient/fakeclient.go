@@ -50,13 +50,16 @@ func New(objs ...ctrlClient.Object) (*client.Client, error) {
 		ro[i] = u
 	}
 
+	cf := clientFake.NewClientBuilder().
+		WithScheme(s).
+		WithRESTMapper(fakeMapper).
+		WithObjects(objs...).
+		Build()
+
 	c := client.New(
-		clientFake.NewClientBuilder().
-			WithScheme(s).
-			WithRESTMapper(fakeMapper).
-			WithObjects(objs...).
-			Build(),
-		k8sFake.NewSimpleClientset(ro...),
+		cf,
+		cf,
+		k8sFake.NewClientset(ro...),
 		dynamicFake.NewSimpleDynamicClient(s, ro...),
 	)
 

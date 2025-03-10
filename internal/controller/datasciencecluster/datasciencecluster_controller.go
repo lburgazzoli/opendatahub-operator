@@ -40,21 +40,22 @@ func NewDataScienceClusterReconciler(ctx context.Context, mgr ctrl.Manager) erro
 	componentsPredicate := dependent.New(dependent.WithWatchStatus(true))
 
 	_, err := reconciler.ReconcilerFor(mgr, &dscv1.DataScienceCluster{}).
-		Owns(&componentApi.Dashboard{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.Workbenches{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.Ray{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.ModelRegistry{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.TrustyAI{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.Kueue{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.CodeFlare{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.TrainingOperator{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.DataSciencePipelines{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.Kserve{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.ModelMeshServing{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.ModelController{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.FeastOperator{}, reconciler.WithPredicates(componentsPredicate)).
+		Owns(&componentApi.Dashboard{}, reconciler.WithPredicates(componentsPredicate), reconciler.Partial(false)).
+		Owns(&componentApi.Workbenches{}, reconciler.WithPredicates(componentsPredicate), reconciler.Partial(false)).
+		Owns(&componentApi.Ray{}, reconciler.WithPredicates(componentsPredicate), reconciler.Partial(false)).
+		Owns(&componentApi.ModelRegistry{}, reconciler.WithPredicates(componentsPredicate), reconciler.Partial(false)).
+		Owns(&componentApi.TrustyAI{}, reconciler.WithPredicates(componentsPredicate), reconciler.Partial(false)).
+		Owns(&componentApi.Kueue{}, reconciler.WithPredicates(componentsPredicate), reconciler.Partial(false)).
+		Owns(&componentApi.CodeFlare{}, reconciler.WithPredicates(componentsPredicate), reconciler.Partial(false)).
+		Owns(&componentApi.TrainingOperator{}, reconciler.WithPredicates(componentsPredicate), reconciler.Partial(false)).
+		Owns(&componentApi.DataSciencePipelines{}, reconciler.WithPredicates(componentsPredicate), reconciler.Partial(false)).
+		Owns(&componentApi.Kserve{}, reconciler.WithPredicates(componentsPredicate), reconciler.Partial(false)).
+		Owns(&componentApi.ModelMeshServing{}, reconciler.WithPredicates(componentsPredicate), reconciler.Partial(false)).
+		Owns(&componentApi.ModelController{}, reconciler.WithPredicates(componentsPredicate), reconciler.Partial(false)).
+		Owns(&componentApi.FeastOperator{}, reconciler.WithPredicates(componentsPredicate), reconciler.Partial(false)).
 		Watches(
 			&dsciv1.DSCInitialization{},
+			reconciler.Partial(false),
 			reconciler.WithEventMapper(func(ctx context.Context, _ client.Object) []reconcile.Request {
 				return watchDataScienceClusters(ctx, mgr.GetClient())
 			})).
@@ -68,7 +69,7 @@ func NewDataScienceClusterReconciler(ctx context.Context, mgr ctrl.Manager) erro
 		WithAction(gc.NewAction(
 			gc.WithTypePredicate(
 				func(rr *types.ReconciliationRequest, objGVK schema.GroupVersionKind) (bool, error) {
-					return rr.Manager.Owns(objGVK), nil
+					return rr.Controller.Owns(objGVK), nil
 				},
 			),
 		)).

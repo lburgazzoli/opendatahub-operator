@@ -10,7 +10,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,7 +25,6 @@ import (
 	odherrors "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/errors"
 	odhClient "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/client"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/conditions"
-	odhManager "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/manager"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
 )
@@ -41,10 +39,18 @@ func WithConditionsManagerFactory(happy string, dependants ...string) Reconciler
 	}
 }
 
+func WithClient(cli *odhClient.Client) ReconcilerOpt {
+	return func(reconciler *Reconciler) {
+		reconciler.Client = cli
+	}
+}
+
 const platformFinalizer = "platform.opendatahub.io/finalizer"
 
 // Reconciler provides generic reconciliation functionality for ODH objects.
 type Reconciler struct {
+	*types.BaseController
+
 	Client     *odhClient.Client
 	Scheme     *runtime.Scheme
 	Actions    []actions.Fn
@@ -55,26 +61,19 @@ type Reconciler struct {
 	Release    common.Release
 
 	name                     string
-	m                        *odhManager.Manager
 	instanceFactory          func() (common.PlatformObject, error)
 	conditionsManagerFactory func(common.ConditionsAccessor) *conditions.Manager
 }
 
 // NewReconciler creates a new reconciler for the given type.
 func NewReconciler[T common.PlatformObject](mgr manager.Manager, name string, object T, opts ...ReconcilerOpt) (*Reconciler, error) {
-	oc, err := odhClient.NewFromManager(mgr)
-	if err != nil {
-		return nil, err
-	}
-
 	cc := Reconciler{
-		Client:   oc,
-		Scheme:   mgr.GetScheme(),
-		Log:      ctrl.Log.WithName("controllers").WithName(name),
-		Recorder: mgr.GetEventRecorderFor(name),
-		Release:  cluster.GetRelease(),
-		name:     name,
-		m:        odhManager.New(mgr),
+		BaseController: types.NewBaseController(),
+		Scheme:         mgr.GetScheme(),
+		Log:            ctrl.Log.WithName("controllers").WithName(name),
+		Recorder:       mgr.GetEventRecorderFor(name),
+		Release:        cluster.GetRelease(),
+		name:           name,
 		instanceFactory: func() (common.PlatformObject, error) {
 			t := reflect.TypeOf(object).Elem()
 			res, ok := reflect.New(t).Interface().(T)
@@ -93,6 +92,15 @@ func NewReconciler[T common.PlatformObject](mgr manager.Manager, name string, ob
 		opt(&cc)
 	}
 
+	if cc.Client == nil {
+		oc, err := odhClient.NewFromManager(mgr)
+		if err != nil {
+			return nil, err
+		}
+
+		cc.Client = oc
+	}
+
 	return &cc, nil
 }
 
@@ -102,14 +110,6 @@ func (r *Reconciler) GetRelease() common.Release {
 
 func (r *Reconciler) GetLogger() logr.Logger {
 	return r.Log
-}
-
-func (r *Reconciler) AddOwnedType(gvk schema.GroupVersionKind) {
-	r.m.AddGVK(gvk, true)
-}
-
-func (r *Reconciler) Owns(obj client.Object) bool {
-	return r.m.Owns(obj.GetObjectKind().GroupVersionKind())
 }
 
 func (r *Reconciler) AddAction(action actions.Fn) {
@@ -204,7 +204,7 @@ func (r *Reconciler) delete(ctx context.Context, res common.PlatformObject) erro
 
 	rr := types.ReconciliationRequest{
 		Client:     r.Client,
-		Manager:    r.m,
+		Controller: r,
 		Instance:   res,
 		Conditions: r.conditionsManagerFactory(res),
 		Release:    r.Release,
@@ -246,7 +246,7 @@ func (r *Reconciler) apply(ctx context.Context, res common.PlatformObject) error
 
 	rr := types.ReconciliationRequest{
 		Client:     r.Client,
-		Manager:    r.m,
+		Controller: r,
 		Instance:   res,
 		Conditions: r.conditionsManagerFactory(res),
 		Release:    r.Release,

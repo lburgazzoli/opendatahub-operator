@@ -20,7 +20,12 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/certconfigmapgenerator"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/datasciencecluster"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/secretgenerator"
+	odhClient "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/client"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -46,7 +51,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -72,23 +77,6 @@ import (
 	dsciv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v1"
 	featurev1 "github.com/opendatahub-io/opendatahub-operator/v2/api/features/v1"
 	serviceApi "github.com/opendatahub-io/opendatahub-operator/v2/api/services/v1alpha1"
-	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/certconfigmapgenerator"
-	dscctrl "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/datasciencecluster"
-	dscictrl "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/dscinitialization"
-	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/secretgenerator"
-	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/auth"
-	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/monitoring"
-	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/setupcontroller"
-	"github.com/opendatahub-io/opendatahub-operator/v2/internal/webhook"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
-	cr "github.com/opendatahub-io/opendatahub-operator/v2/pkg/componentsregistry"
-	odhClient "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/client"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/logger"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/upgrade"
-
 	_ "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/codeflare"
 	_ "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/dashboard"
 	_ "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/datasciencepipelines"
@@ -102,6 +90,13 @@ import (
 	_ "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/trainingoperator"
 	_ "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/trustyai"
 	_ "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/workbenches"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/webhook"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
+	cr "github.com/opendatahub-io/opendatahub-operator/v2/pkg/componentsregistry"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/logger"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
 )
 
 var (
@@ -109,6 +104,7 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 )
 
+//nolint:promlinter
 var StoredResourcesTotal = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "stored_resources_total",
@@ -117,8 +113,14 @@ var StoredResourcesTotal = prometheus.NewGaugeVec(
 	[]string{
 		"apiVersion",
 		"kind",
+		"partial",
 	},
 )
+
+type StoredResource struct {
+	schema.GroupVersionKind
+	partial bool
+}
 
 func init() { //nolint:gochecknoinits
 	utilruntime.Must(componentApi.AddToScheme(scheme))
@@ -147,6 +149,7 @@ func init() { //nolint:gochecknoinits
 	utilruntime.Must(consolev1.AddToScheme(scheme))
 	utilruntime.Must(securityv1.Install(scheme))
 	utilruntime.Must(templatev1.Install(scheme))
+	utilruntime.Must(metav1.AddMetaToScheme(scheme))
 
 	metrics.Registry.MustRegister(StoredResourcesTotal)
 }
@@ -157,7 +160,7 @@ func initComponents(_ context.Context, p common.Platform) error {
 	})
 }
 
-func main() { //nolint:funlen,maintidx,gocyclo
+func main() { //nolint:funlen,maintidx
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
@@ -212,7 +215,7 @@ func main() { //nolint:funlen,maintidx,gocyclo
 	}
 
 	// get old release version before we create default DSCI CR
-	oldReleaseVersion, _ := upgrade.GetDeployedRelease(ctx, setupClient)
+	// oldReleaseVersion, _ := upgrade.GetDeployedRelease(ctx, setupClient)
 
 	secretCache, err := createSecretCacheConfig(ctx, setupClient, platform)
 	if err != nil {
@@ -226,7 +229,7 @@ func main() { //nolint:funlen,maintidx,gocyclo
 		os.Exit(1)
 	}
 
-	handlers := make(map[schema.GroupVersionKind]struct{})
+	handlers := make(map[StoredResource]struct{})
 	handlerM := sync.Mutex{}
 
 	cacheOptions := cache.Options{
@@ -291,6 +294,10 @@ func main() { //nolint:funlen,maintidx,gocyclo
 				panic(err)
 			}
 
+			sr := StoredResource{
+				GroupVersionKind: objGVK,
+			}
+
 			kind := objGVK.Kind
 			apiVersion := objGVK.GroupVersion().String()
 
@@ -299,17 +306,21 @@ func main() { //nolint:funlen,maintidx,gocyclo
 			handlerM.Lock()
 			defer handlerM.Unlock()
 
-			if _, ok := handlers[objGVK]; !ok {
+			if _, ok := obj.(*metav1.PartialObjectMetadata); ok {
+				sr.partial = true
+			}
+
+			if _, ok := handlers[sr]; !ok {
 				_, err = i.AddEventHandler(corecache.ResourceEventHandlerFuncs{
 					AddFunc: func(obj interface{}) {
-						StoredResourcesTotal.WithLabelValues(apiVersion, kind).Inc()
+						StoredResourcesTotal.WithLabelValues(apiVersion, kind, strconv.FormatBool(sr.partial)).Inc()
 					},
 					DeleteFunc: func(obj interface{}) {
-						StoredResourcesTotal.WithLabelValues(apiVersion, kind).Dec()
+						StoredResourcesTotal.WithLabelValues(apiVersion, kind, strconv.FormatBool(sr.partial)).Dec()
 					},
 				})
 
-				handlers[objGVK] = struct{}{}
+				handlers[sr] = struct{}{}
 			}
 
 			if err != nil {
@@ -365,41 +376,56 @@ func main() { //nolint:funlen,maintidx,gocyclo
 
 	webhook.Init(mgr)
 
+
+
 	oc, err := odhClient.NewFromManager(mgr)
 	if err != nil {
 		setupLog.Error(err, "unable to create client")
 		os.Exit(1)
 	}
 
-	if err = (&dscictrl.DSCInitializationReconciler{
-		Client:   oc,
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("dscinitialization-controller"),
-	}).SetupWithManager(ctx, mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "DSCInitiatlization")
-		os.Exit(1)
-	}
+	/*
 
-	if err = dscctrl.NewDataScienceClusterReconciler(ctx, mgr); err != nil {
+		if err = (&dscictrl.DSCInitializationReconciler{
+			Client:   oc,
+			Scheme:   mgr.GetScheme(),
+			Recorder: mgr.GetEventRecorderFor("dscinitialization-controller"),
+		}).SetupWithManager(ctx, mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "DSCInitiatlization")
+			os.Exit(1)
+		}
+	*/
+
+	if err = datasciencecluster.NewDataScienceClusterReconciler(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DataScienceCluster")
 		os.Exit(1)
 	}
 
-	if err = (&setupcontroller.SetupControllerReconciler{
-		Client: oc,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "SetupController")
-		os.Exit(1)
-	}
+	/*
+		if err = (&setupcontroller.SetupControllerReconciler{
+			Client: oc,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "SetupController")
+			os.Exit(1)
+		}
+	*/
 
 	if err = (&secretgenerator.SecretGeneratorReconciler{
 		Client: oc,
-		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "SecretGenerator")
 		os.Exit(1)
 	}
 
+	/*
+		if err = (&certconfigmapgenerator.CertConfigmapGeneratorReconciler{
+			Client: oc,
+			Scheme: mgr.GetScheme(),
+		}).SetupWithManager(ctx, mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "CertConfigmapGenerator")
+			os.Exit(1)
+		}
+	*/
 	if err = (&certconfigmapgenerator.CertConfigmapGeneratorReconciler{
 		Client: oc,
 		Scheme: mgr.GetScheme(),
@@ -413,34 +439,34 @@ func main() { //nolint:funlen,maintidx,gocyclo
 		os.Exit(1)
 	}
 
-	if err := auth.NewServiceReconciler(ctx, mgr); err != nil {
-		os.Exit(1)
-	}
-
-	if platform == cluster.ManagedRhoai {
-		if err := monitoring.NewServiceReconciler(ctx, mgr); err != nil {
+	/*
+		if err := auth.NewServiceReconciler(ctx, mgr); err != nil {
 			os.Exit(1)
 		}
-	}
 
-	// Check if user opted for disabling DSC configuration
-	disableDSCConfig, existDSCConfig := os.LookupEnv("DISABLE_DSC_CONFIG")
-	if existDSCConfig && disableDSCConfig != "false" {
-		setupLog.Info("DSCI auto creation is disabled")
-	} else {
-		var createDefaultDSCIFunc manager.RunnableFunc = func(ctx context.Context) error {
-			err := upgrade.CreateDefaultDSCI(ctx, setupClient, platform, monitoringNamespace)
-			if err != nil {
-				setupLog.Error(err, "unable to create initial setup for the operator")
+		if platform == cluster.ManagedRhoai {
+			if err := monitoring.NewServiceReconciler(ctx, mgr); err != nil {
+				os.Exit(1)
 			}
-			return err
 		}
-		err := mgr.Add(createDefaultDSCIFunc)
-		if err != nil {
-			setupLog.Error(err, "error scheduling DSCI creation")
-			os.Exit(1)
+		// Check if user opted for disabling DSC configuration
+		disableDSCConfig, existDSCConfig := os.LookupEnv("DISABLE_DSC_CONFIG")
+		if existDSCConfig && disableDSCConfig != "false" {
+			setupLog.Info("DSCI auto creation is disabled")
+		} else {
+			var createDefaultDSCIFunc manager.RunnableFunc = func(ctx context.Context) error {
+				err := upgrade.CreateDefaultDSCI(ctx, setupClient, platform, monitoringNamespace)
+				if err != nil {
+					setupLog.Error(err, "unable to create initial setup for the operator")
+				}
+				return err
+			}
+			err := mgr.Add(createDefaultDSCIFunc)
+			if err != nil {
+				setupLog.Error(err, "error scheduling DSCI creation")
+				os.Exit(1)
+			}
 		}
-	}
 
 	// Create default DSC CR for managed RHOAI
 	if platform == cluster.ManagedRhoai {
@@ -457,21 +483,6 @@ func main() { //nolint:funlen,maintidx,gocyclo
 			os.Exit(1)
 		}
 	}
-
-	// TODO: to be removed: https://issues.redhat.com/browse/RHOAIENG-21080
-	var patchODCFunc manager.RunnableFunc = func(ctx context.Context) error {
-		if err := upgrade.PatchOdhDashboardConfig(ctx, setupClient, oldReleaseVersion, release); err != nil {
-			setupLog.Error(err, "Unable to patch the odhdashboardconfig")
-			return err
-		}
-		return nil
-	}
-
-	err = mgr.Add(patchODCFunc)
-	if err != nil {
-		setupLog.Error(err, "Error patching odhdashboardconfig")
-	}
-
 	// Cleanup resources from previous v2 releases
 	var cleanExistingResourceFunc manager.RunnableFunc = func(ctx context.Context) error {
 		if err = upgrade.CleanupExistingResource(ctx, setupClient, platform, oldReleaseVersion); err != nil {
@@ -480,10 +491,11 @@ func main() { //nolint:funlen,maintidx,gocyclo
 		return err
 	}
 
-	err = mgr.Add(cleanExistingResourceFunc)
-	if err != nil {
-		setupLog.Error(err, "error remove deprecated resources from previous version")
-	}
+		err = mgr.Add(cleanExistingResourceFunc)
+		if err != nil {
+			setupLog.Error(err, "error remove deprecated resources from previous version")
+		}
+	*/
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")

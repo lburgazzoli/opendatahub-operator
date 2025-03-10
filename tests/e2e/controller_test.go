@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -17,7 +18,6 @@ import (
 	ofapiv1 "github.com/operator-framework/api/pkg/operators/v1"
 	ofapi "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	"golang.org/x/exp/maps"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -246,7 +246,7 @@ func (tg *TestGroup) String() string {
 }
 
 func (tg *TestGroup) Names() []string {
-	return maps.Keys(tg.scenarios)
+	return slices.Collect(maps.Keys(tg.scenarios))
 }
 
 func (tg *TestGroup) Validate() error {
@@ -283,7 +283,7 @@ func (tg *TestGroup) Run(t *testing.T) {
 	}
 
 	if len(enabled) == 0 {
-		enabled = maps.Keys(tg.scenarios)
+		enabled = slices.Collect(maps.Keys(tg.scenarios))
 	}
 
 	enabled = slices.DeleteFunc(enabled, func(n string) bool {

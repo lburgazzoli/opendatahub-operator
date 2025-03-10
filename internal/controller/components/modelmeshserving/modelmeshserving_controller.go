@@ -60,9 +60,13 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 		Owns(&rbacv1.ClusterRole{}, reconciler.WithPredicates(clusterrole.IgnoreIfAggregationRule())).
 		Owns(&rbacv1.RoleBinding{}).
 		Owns(&rbacv1.ClusterRoleBinding{}).
-		Owns(&appsv1.Deployment{}, reconciler.WithPredicates(resources.NewDeploymentPredicate())).
+		Owns(
+			&appsv1.Deployment{},
+			reconciler.Partial(false),
+			reconciler.WithPredicates(resources.NewDeploymentPredicate())).
 		Watches(
 			&extv1.CustomResourceDefinition{},
+			reconciler.Partial(false),
 			reconciler.WithEventHandler(
 				handlers.ToNamed(componentApi.ModelMeshServingInstanceName)),
 			reconciler.WithPredicates(predicate.And(

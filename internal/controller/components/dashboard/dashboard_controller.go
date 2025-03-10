@@ -58,9 +58,12 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 		// By default, a predicated for changed generation is added by the Owns()
 		// method, however for deployments, we also need to retrieve status info
 		// hence we need a dedicated predicate to react to replicas status change
-		Owns(&appsv1.Deployment{}, reconciler.WithPredicates(resources.NewDeploymentPredicate())).
+		Owns(
+			&appsv1.Deployment{},
+			reconciler.Partial(false),
+			reconciler.WithPredicates(resources.NewDeploymentPredicate())).
 		// operands - openshift
-		Owns(&routev1.Route{}).
+		Owns(&routev1.Route{}, reconciler.Partial(false)).
 		Owns(&consolev1.ConsoleLink{}).
 		// Those APIs are provided by the component itself hence they should
 		// be watched dynamically
@@ -74,6 +77,7 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 		// chattering and avoid noisy neighborhoods
 		Watches(
 			&extv1.CustomResourceDefinition{},
+			reconciler.Partial(false),
 			reconciler.WithEventHandler(
 				handlers.ToNamed(componentApi.DashboardInstanceName)),
 			reconciler.WithPredicates(

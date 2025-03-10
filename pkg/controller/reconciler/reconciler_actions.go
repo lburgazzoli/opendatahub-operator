@@ -12,6 +12,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
 )
 
 type dynamicWatchFn func(client.Object, handler.EventHandler, ...predicate.Predicate) error
@@ -39,7 +40,17 @@ func (a *dynamicWatchAction) run(ctx context.Context, rr *types.ReconciliationRe
 			continue
 		}
 
-		err := a.fn(w.object, w.eventHandler, w.predicates...)
+		obj := w.object
+		if w.partial {
+			o, err := resources.ObjToPartial(rr.Scheme(), obj)
+			if err != nil {
+				return fmt.Errorf("unable to compute partial type: %w", err)
+			}
+
+			obj = o
+		}
+
+		err := a.fn(obj, w.eventHandler, w.predicates...)
 		if err != nil {
 			return fmt.Errorf("failed to create watcher for %s: %w", w.object.GetObjectKind().GroupVersionKind(), err)
 		}

@@ -206,6 +206,8 @@ var _ = Describe("Service Mesh setup", func() {
 					})
 
 					// then
+					// tctx, _ := context.WithTimeout(ctx, 10*time.Second)
+
 					Expect(featuresHandler.Apply(ctx, envTestClient)).To(MatchError(ContainSubstring("failed to find Service Mesh Control Plane")))
 				})
 

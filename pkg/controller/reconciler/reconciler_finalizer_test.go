@@ -1,4 +1,4 @@
-//nolint:testpackage
+//nolint:testpackage,ireturn
 package reconciler
 
 import (
@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/onsi/gomega"
+	"github.com/rs/xid"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -47,7 +48,6 @@ type MockManager struct {
 	mapper meta.RESTMapper
 }
 
-//nolint:ireturn
 func (f *MockManager) GetClient() client.Client   { return f.client }
 func (f *MockManager) GetScheme() *runtime.Scheme { return f.scheme }
 
@@ -133,6 +133,7 @@ func TestFinalizer_Add(t *testing.T) {
 	ctx, mgr, cli := setupTest(mockDashboard)
 
 	r, err := ReconcilerFor(mgr, mockDashboard).
+		WithInstanceName(xid.New().String()).
 		WithFinalizer(mockFinalizerAction).
 		Build(ctx)
 	g.Expect(err).ToNot(gomega.HaveOccurred())
@@ -183,7 +184,9 @@ func TestFinalizer_NotPresent(t *testing.T) {
 
 	ctx, mgr, cli := setupTest(mockDashboard)
 
-	r, err := ReconcilerFor(mgr, mockDashboard).Build(ctx)
+	r, err := ReconcilerFor(mgr, mockDashboard).
+		WithInstanceName(xid.New().String()).
+		Build(ctx)
 	g.Expect(err).ToNot(gomega.HaveOccurred())
 	g.Expect(r.Finalizer).To(gomega.BeEmpty())
 
@@ -226,6 +229,7 @@ func TestFinalizer_Remove(t *testing.T) {
 	ctx, mgr, cli := setupTest(mockDashboard)
 
 	r, err := ReconcilerFor(mgr, mockDashboard).
+		WithInstanceName(xid.New().String()).
 		WithFinalizer(mockFinalizerAction).
 		Build(ctx)
 	g.Expect(err).ToNot(gomega.HaveOccurred())

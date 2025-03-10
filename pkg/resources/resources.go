@@ -14,6 +14,7 @@ import (
 	routev1 "github.com/openshift/api/route/v1"
 	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
+	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -90,6 +91,29 @@ func GvkToUnstructured(gvk schema.GroupVersionKind) *unstructured.Unstructured {
 	u.SetGroupVersionKind(gvk)
 
 	return &u
+}
+
+func GvkToPartial(gvk schema.GroupVersionKind) *metav1.PartialObjectMetadata {
+	obj := metav1.PartialObjectMetadata{}
+	obj.SetGroupVersionKind(gvk)
+
+	return &obj
+}
+
+func ObjToPartial(s *runtime.Scheme, in client.Object) (*metav1.PartialObjectMetadata, error) {
+	if p, ok := in.(*metav1.PartialObjectMetadata); ok {
+		return p, nil
+	}
+
+	gvk, err := GetGroupVersionKindForObject(s, in)
+	if err != nil {
+		return nil, err
+	}
+
+	obj := metav1.PartialObjectMetadata{}
+	obj.SetGroupVersionKind(gvk)
+
+	return &obj, nil
 }
 
 func IngressHost(r routev1.Route) string {
@@ -347,7 +371,7 @@ func NamespacedNameFromObject(obj client.Object) types.NamespacedName {
 //
 // Parameters:
 //   - ctx: The context for the request, which can carry deadlines, cancellation signals, and other request-scoped values.
-//   - cli: A controller-runtime client used to update the Kubernetes object.
+//   - cli: A controller-runtime used to eventually retrieving the current Kubernetes object and update it.
 //   - obj: The Kubernetes object whose OwnerReferences are to be filtered. It must implement client.Object.
 //   - predicate: A function that takes an OwnerReference and returns true if the reference should be removed.
 //
@@ -356,10 +380,10 @@ func NamespacedNameFromObject(obj client.Object) types.NamespacedName {
 func RemoveOwnerReferences(
 	ctx context.Context,
 	cli client.Client,
-	obj client.Object,
+	ref client.Object,
 	predicate func(reference metav1.OwnerReference) bool,
 ) error {
-	oldRefs := obj.GetOwnerReferences()
+	oldRefs := ref.GetOwnerReferences()
 	if len(oldRefs) == 0 {
 		return nil
 	}
@@ -375,10 +399,43 @@ func RemoveOwnerReferences(
 		return nil
 	}
 
+	obj := ref
+	convert := false
+
+	// the kubernetes client does not support write operations related to
+	// a PartialObjectMetadata, for such reason, we need to retrieve the
+	// original object. Note that the retrieval may trigger a LIST+WATCH,
+	// causing duplication in the cache, hence the client should not be
+	// backed by a cache, to avoid excessive memory consumption.
+	if _, ok := obj.(*metav1.PartialObjectMetadata); ok {
+		obj = GvkToUnstructured(obj.GetObjectKind().GroupVersionKind())
+
+		err := cli.Get(ctx, client.ObjectKeyFromObject(ref), obj)
+		if err != nil {
+			if k8serr.IsNotFound(err) {
+				return nil
+			}
+
+			return fmt.Errorf(
+				"failed to retrieve object %s/%s with gvk %s to patch: %w",
+				ref.GetNamespace(),
+				ref.GetName(),
+				ref.GetObjectKind().GroupVersionKind(),
+				err,
+			)
+		}
+
+		convert = true
+	}
+
 	obj.SetOwnerReferences(newRefs)
 
 	// Update the object in the cluster
 	if err := cli.Update(ctx, obj); err != nil {
+		if k8serr.IsNotFound(err) {
+			return nil
+		}
+
 		return fmt.Errorf(
 			"failed to remove owner references from object %s/%s with gvk %s: %w",
 			obj.GetNamespace(),
@@ -386,6 +443,14 @@ func RemoveOwnerReferences(
 			obj.GetObjectKind().GroupVersionKind(),
 			err,
 		)
+	}
+
+	if convert {
+		ref.SetOwnerReferences(obj.GetOwnerReferences())
+		ref.SetLabels(obj.GetLabels())
+		ref.SetAnnotations(obj.GetAnnotations())
+		ref.SetGeneration(obj.GetGeneration())
+		ref.SetResourceVersion(obj.GetResourceVersion())
 	}
 
 	return nil
