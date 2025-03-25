@@ -20,8 +20,8 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -114,13 +114,13 @@ var StoredResourcesTotal = prometheus.NewGaugeVec(
 	[]string{
 		"apiVersion",
 		"kind",
-		"partial",
+		"envelope",
 	},
 )
 
 type StoredResource struct {
 	schema.GroupVersionKind
-	partial bool
+	envelope string
 }
 
 func init() { //nolint:gochecknoinits
@@ -307,17 +307,22 @@ func main() { //nolint:funlen,maintidx
 			handlerM.Lock()
 			defer handlerM.Unlock()
 
-			if _, ok := obj.(*metav1.PartialObjectMetadata); ok {
-				sr.partial = true
+			switch obj.(type) {
+			case *metav1.PartialObjectMetadata:
+				sr.envelope = "partial"
+			case *unstructured.Unstructured:
+				sr.envelope = "unstructured"
+			default:
+				sr.envelope = "typed"
 			}
 
 			if _, ok := handlers[sr]; !ok {
 				_, err = i.AddEventHandler(corecache.ResourceEventHandlerFuncs{
 					AddFunc: func(obj interface{}) {
-						StoredResourcesTotal.WithLabelValues(apiVersion, kind, strconv.FormatBool(sr.partial)).Inc()
+						StoredResourcesTotal.WithLabelValues(apiVersion, kind, sr.envelope).Inc()
 					},
 					DeleteFunc: func(obj interface{}) {
-						StoredResourcesTotal.WithLabelValues(apiVersion, kind, strconv.FormatBool(sr.partial)).Dec()
+						StoredResourcesTotal.WithLabelValues(apiVersion, kind, sr.envelope).Dec()
 					},
 				})
 
