@@ -3,10 +3,10 @@ package engine
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
-	"golang.org/x/exp/maps"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -371,7 +371,7 @@ func (gc *GC) collectDeletableResources(
 		}
 	}
 
-	resources := maps.Keys(resp)
+	resources := slices.Collect(maps.Keys(resp))
 	slices.SortFunc(resources, func(a, b Resource) int {
 		return strings.Compare(a.String(), b.String())
 	})

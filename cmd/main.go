@@ -20,10 +20,6 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/certconfigmapgenerator"
-	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/datasciencecluster"
-	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/secretgenerator"
-	odhClient "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/client"
 	"os"
 	"strconv"
 	"sync"
@@ -77,6 +73,18 @@ import (
 	dsciv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v1"
 	featurev1 "github.com/opendatahub-io/opendatahub-operator/v2/api/features/v1"
 	serviceApi "github.com/opendatahub-io/opendatahub-operator/v2/api/services/v1alpha1"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/certconfigmapgenerator"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/datasciencecluster"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/secretgenerator"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/webhook"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
+	cr "github.com/opendatahub-io/opendatahub-operator/v2/pkg/componentsregistry"
+	odhClient "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/client"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/logger"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
+
 	_ "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/codeflare"
 	_ "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/dashboard"
 	_ "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/datasciencepipelines"
@@ -90,13 +98,6 @@ import (
 	_ "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/trainingoperator"
 	_ "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/trustyai"
 	_ "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/workbenches"
-	"github.com/opendatahub-io/opendatahub-operator/v2/internal/webhook"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
-	cr "github.com/opendatahub-io/opendatahub-operator/v2/pkg/componentsregistry"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/logger"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
 )
 
 var (
@@ -376,8 +377,6 @@ func main() { //nolint:funlen,maintidx
 
 	webhook.Init(mgr)
 
-
-
 	oc, err := odhClient.NewFromManager(mgr)
 	if err != nil {
 		setupLog.Error(err, "unable to create client")
@@ -440,61 +439,61 @@ func main() { //nolint:funlen,maintidx
 	}
 
 	/*
-		if err := auth.NewServiceReconciler(ctx, mgr); err != nil {
-			os.Exit(1)
-		}
-
-		if platform == cluster.ManagedRhoai {
-			if err := monitoring.NewServiceReconciler(ctx, mgr); err != nil {
+			if err := auth.NewServiceReconciler(ctx, mgr); err != nil {
 				os.Exit(1)
 			}
-		}
-		// Check if user opted for disabling DSC configuration
-		disableDSCConfig, existDSCConfig := os.LookupEnv("DISABLE_DSC_CONFIG")
-		if existDSCConfig && disableDSCConfig != "false" {
-			setupLog.Info("DSCI auto creation is disabled")
-		} else {
-			var createDefaultDSCIFunc manager.RunnableFunc = func(ctx context.Context) error {
-				err := upgrade.CreateDefaultDSCI(ctx, setupClient, platform, monitoringNamespace)
+
+			if platform == cluster.ManagedRhoai {
+				if err := monitoring.NewServiceReconciler(ctx, mgr); err != nil {
+					os.Exit(1)
+				}
+			}
+			// Check if user opted for disabling DSC configuration
+			disableDSCConfig, existDSCConfig := os.LookupEnv("DISABLE_DSC_CONFIG")
+			if existDSCConfig && disableDSCConfig != "false" {
+				setupLog.Info("DSCI auto creation is disabled")
+			} else {
+				var createDefaultDSCIFunc manager.RunnableFunc = func(ctx context.Context) error {
+					err := upgrade.CreateDefaultDSCI(ctx, setupClient, platform, monitoringNamespace)
+					if err != nil {
+						setupLog.Error(err, "unable to create initial setup for the operator")
+					}
+					return err
+				}
+				err := mgr.Add(createDefaultDSCIFunc)
 				if err != nil {
-					setupLog.Error(err, "unable to create initial setup for the operator")
+					setupLog.Error(err, "error scheduling DSCI creation")
+					os.Exit(1)
+				}
+			}
+
+		// Create default DSC CR for managed RHOAI
+		if platform == cluster.ManagedRhoai {
+			var createDefaultDSCFunc manager.RunnableFunc = func(ctx context.Context) error {
+				err := upgrade.CreateDefaultDSC(ctx, setupClient)
+				if err != nil {
+					setupLog.Error(err, "unable to create default DSC CR by the operator")
 				}
 				return err
 			}
-			err := mgr.Add(createDefaultDSCIFunc)
+			err := mgr.Add(createDefaultDSCFunc)
 			if err != nil {
-				setupLog.Error(err, "error scheduling DSCI creation")
+				setupLog.Error(err, "error scheduling DSC creation")
 				os.Exit(1)
 			}
 		}
-
-	// Create default DSC CR for managed RHOAI
-	if platform == cluster.ManagedRhoai {
-		var createDefaultDSCFunc manager.RunnableFunc = func(ctx context.Context) error {
-			err := upgrade.CreateDefaultDSC(ctx, setupClient)
-			if err != nil {
-				setupLog.Error(err, "unable to create default DSC CR by the operator")
+		// Cleanup resources from previous v2 releases
+		var cleanExistingResourceFunc manager.RunnableFunc = func(ctx context.Context) error {
+			if err = upgrade.CleanupExistingResource(ctx, setupClient, platform, oldReleaseVersion); err != nil {
+				setupLog.Error(err, "unable to perform cleanup")
 			}
 			return err
 		}
-		err := mgr.Add(createDefaultDSCFunc)
-		if err != nil {
-			setupLog.Error(err, "error scheduling DSC creation")
-			os.Exit(1)
-		}
-	}
-	// Cleanup resources from previous v2 releases
-	var cleanExistingResourceFunc manager.RunnableFunc = func(ctx context.Context) error {
-		if err = upgrade.CleanupExistingResource(ctx, setupClient, platform, oldReleaseVersion); err != nil {
-			setupLog.Error(err, "unable to perform cleanup")
-		}
-		return err
-	}
 
-		err = mgr.Add(cleanExistingResourceFunc)
-		if err != nil {
-			setupLog.Error(err, "error remove deprecated resources from previous version")
-		}
+			err = mgr.Add(cleanExistingResourceFunc)
+			if err != nil {
+				setupLog.Error(err, "error remove deprecated resources from previous version")
+			}
 	*/
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
