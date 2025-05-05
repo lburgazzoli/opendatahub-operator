@@ -9,8 +9,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	dscv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v1"
@@ -68,5 +71,62 @@ func NewMockController(f func(m *MockController)) *MockController {
 	m := new(MockController)
 	f(m)
 
+	return m
+}
+
+type MockPredicate struct {
+	mock.Mock
+}
+
+func (p *MockPredicate) Create(e event.CreateEvent) bool {
+	args := p.Called(e)
+	return args.Bool(0)
+}
+
+func (p *MockPredicate) Delete(e event.DeleteEvent) bool {
+	args := p.Called(e)
+	return args.Bool(0)
+}
+
+func (p *MockPredicate) Update(e event.UpdateEvent) bool {
+	args := p.Called(e)
+	return args.Bool(0)
+}
+
+func (p *MockPredicate) Generic(e event.GenericEvent) bool {
+	args := p.Called(e)
+	return args.Bool(0)
+}
+
+func NewMockTypedPredicate(f func(m *MockPredicate)) *MockPredicate {
+	m := new(MockPredicate)
+	f(m)
+
+	return m
+}
+
+type MockEventHandler struct {
+	mock.Mock
+}
+
+func (m *MockEventHandler) Create(ctx context.Context, e event.TypedCreateEvent[client.Object], q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+	m.Called(ctx, e, q)
+}
+
+func (m *MockEventHandler) Update(ctx context.Context, e event.TypedUpdateEvent[client.Object], q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+	m.Called(ctx, e, q)
+}
+
+func (m *MockEventHandler) Delete(ctx context.Context, e event.TypedDeleteEvent[client.Object], q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+	m.Called(ctx, e, q)
+}
+
+func (m *MockEventHandler) Generic(ctx context.Context, e event.TypedGenericEvent[client.Object], q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+	m.Called(ctx, e, q)
+}
+
+func NewMockEventHandler(f func(m *MockEventHandler)) *MockEventHandler {
+	m := new(MockEventHandler)
+	f(m)
 	return m
 }

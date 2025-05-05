@@ -6,15 +6,12 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 )
 
-type dynamicWatchFn func(client.Object, handler.EventHandler, ...predicate.Predicate) error
+type dynamicWatchFn func(input watchInput) error
 
 type dynamicWatchAction struct {
 	fn      dynamicWatchFn
@@ -39,7 +36,7 @@ func (a *dynamicWatchAction) run(ctx context.Context, rr *types.ReconciliationRe
 			continue
 		}
 
-		err := a.fn(w.object, w.eventHandler, w.predicates...)
+		err := a.fn(w)
 		if err != nil {
 			return fmt.Errorf("failed to create watcher for %s: %w", w.object.GetObjectKind().GroupVersionKind(), err)
 		}

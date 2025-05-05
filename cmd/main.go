@@ -47,10 +47,12 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -75,6 +77,8 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/webhook"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
+	odhcli "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/client"
+	odhmetrics "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/metrics"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/logger"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
@@ -102,6 +106,8 @@ import (
 	_ "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/setup"
 )
 
+/*
+ */
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
@@ -296,8 +302,29 @@ func main() { //nolint:funlen,maintidx,gocyclo
 				obj.SetManagedFields(nil)
 			}
 
+			if u, ok := in.(*unstructured.Unstructured); ok {
+				switch u.GroupVersionKind() {
+				// CRDs are pretty big, but we don't need any information from
+				// the spec, we only need the status for some version check
+				case gvk.CustomResourceDefinition:
+					delete(u.Object, "spec")
+				// Webhook may have CA bundle injected, we don't need them
+				// ideally we should use PartialObjectMetadata for those
+				case gvk.ValidatingWebhookConfiguration, gvk.MutatingWebhookConfiguration:
+					delete(u.Object, "webhooks")
+				// ideally we should use PartialObjectMetadata for those
+				case gvk.ValidatingAdmissionPolicy, gvk.ValidatingAdmissionPolicyBinding:
+					delete(u.Object, "spec")
+				// ideally we should use PartialObjectMetadata for those
+				case gvk.Template:
+					delete(u.Object, "objects")
+					delete(u.Object, "parameters")
+				}
+			}
+
 			return in, nil
 		},
+		NewInformer: odhmetrics.NewInstrumentedInformerFn(scheme),
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{ // single pod does not need to have LeaderElection
@@ -338,6 +365,14 @@ func main() { //nolint:funlen,maintidx,gocyclo
 				// or lists from the cache instead of a live lookup.
 				Unstructured: true,
 			},
+		},
+		NewClient: func(config *rest.Config, options client.Options) (client.Client, error) {
+			c, err := client.New(config, options)
+			if err != nil {
+				return nil, err
+			}
+
+			return odhcli.Wrap(c), nil
 		},
 	})
 	if err != nil {

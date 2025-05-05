@@ -12,6 +12,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -20,6 +21,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	dsciv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v1"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/deploy"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
@@ -65,11 +67,12 @@ func (r *DSCInitializationReconciler) createOperatorResource(ctx context.Context
 func (r *DSCInitializationReconciler) appNamespaceHandler(ctx context.Context, dscInit *dsciv1.DSCInitialization, platform common.Platform) error {
 	log := logf.FromContext(ctx)
 
-	nsList := &corev1.NamespaceList{}
-	ns := &corev1.Namespace{}
+	nsList := unstructured.UnstructuredList{}
+	nsList.SetGroupVersionKind(gvk.Namespace)
+
 	dsciNsName := dscInit.Spec.ApplicationsNamespace
 
-	if err := r.Client.List(ctx, nsList, client.MatchingLabels{
+	if err := r.Client.List(ctx, &nsList, client.MatchingLabels{
 		labels.CustomizedAppNamespace: labels.True,
 	}); err != nil {
 		return err
@@ -78,21 +81,20 @@ func (r *DSCInitializationReconciler) appNamespaceHandler(ctx context.Context, d
 	switch len(nsList.Items) {
 	case 0:
 		// create namespace if not exist
-		desiredAppNS := &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: dsciNsName,
-			},
-		}
-		if err := r.Client.Get(ctx, client.ObjectKeyFromObject(desiredAppNS), ns); err != nil {
+		desiredAppNS := resources.GvkToUnstructured(gvk.Namespace)
+		desiredAppNS.SetName(dsciNsName)
+
+		if err := r.Client.Get(ctx, client.ObjectKeyFromObject(desiredAppNS), desiredAppNS); err != nil {
 			if !k8serr.IsNotFound(err) {
 				return err
 			}
 		}
+
 		log.Info("Application namespace set in DSCI not found, creating it with labels", "name", dsciNsName)
-		// // ensure generatedd-namespace:true and security label always on it
-		return r.createAppNamespace(ctx, dsciNsName, platform, map[string]string{labels.ODH.OwnedNamespace: labels.True}) // this indicate when uninstall, namespace will be deleted
+
+		return r.createAppNamespace(ctx, dsciNsName, platform, map[string]string{labels.ODH.OwnedNamespace: labels.True})
 	case 1:
-		if nsList.Items[0].Name != dsciNsName {
+		if nsList.Items[0].GetName() != dsciNsName {
 			return errors.New("DSCI must used the same namespace which has opendatahub.io/application-namespace=true label")
 		}
 		// ensure security label always on it
@@ -103,9 +105,9 @@ func (r *DSCInitializationReconciler) appNamespaceHandler(ctx context.Context, d
 }
 
 func (r *DSCInitializationReconciler) createAppNamespace(ctx context.Context, nsName string, platform common.Platform, extraLabel ...map[string]string) error {
-	desiredDefaultNS := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{Name: nsName},
-	}
+	desiredDefaultNS := resources.GvkToUnstructured(gvk.Namespace)
+	desiredDefaultNS.SetName(nsName)
+
 	labelList := map[string]string{
 		labels.SecurityEnforce: "baseline",
 	}

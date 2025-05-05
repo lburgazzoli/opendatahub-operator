@@ -86,6 +86,14 @@ linters:
         - predicate.Predicate
         - client.Object
         - client.Client
+        - client.SubResourceClient
+        - client.StatusWriter
+        - client.FieldIndexer
+        - client.Reader
+        - webhook.Server
+        - record.EventRecorder
+        - cache.Cache
+        - meta.RESTMapper
         - common.PlatformObject
         - types.AsyncAssertion
         - kubernetes.Interface

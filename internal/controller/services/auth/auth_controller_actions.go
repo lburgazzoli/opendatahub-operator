@@ -34,7 +34,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/annotations"
 )
 
-func initialize(ctx context.Context, rr *odhtypes.ReconciliationRequest) error {
+func initialize(_ context.Context, rr *odhtypes.ReconciliationRequest) error {
 	rr.Templates = []odhtypes.TemplateInfo{
 		{
 			FS:   resourcesFS,
@@ -54,7 +54,18 @@ func initialize(ctx context.Context, rr *odhtypes.ReconciliationRequest) error {
 }
 
 func bindRole(ctx context.Context, rr *odhtypes.ReconciliationRequest, groups []string, roleBindingName string, roleName string) error {
-	groupsToBind := []rbacv1.Subject{}
+	rb := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      roleBindingName,
+			Namespace: rr.DSCI.Spec.ApplicationsNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     roleName,
+		},
+	}
+
 	for _, e := range groups {
 		// we want to disallow adding system:authenticated to the adminGroups
 		if roleName == "admingroup-role" && e == "system:authenticated" || e == "" {
@@ -67,21 +78,10 @@ func bindRole(ctx context.Context, rr *odhtypes.ReconciliationRequest, groups []
 			APIGroup: "rbac.authorization.k8s.io",
 			Name:     e,
 		}
-		groupsToBind = append(groupsToBind, rs)
+
+		rb.Subjects = append(rb.Subjects, rs)
 	}
 
-	rb := &rbacv1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      roleBindingName,
-			Namespace: rr.DSCI.Spec.ApplicationsNamespace,
-		},
-		Subjects: groupsToBind,
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "Role",
-			Name:     roleName,
-		},
-	}
 	err := rr.AddResources(rb)
 	if err != nil {
 		return errors.New("error creating RoleBinding for group")
@@ -91,7 +91,17 @@ func bindRole(ctx context.Context, rr *odhtypes.ReconciliationRequest, groups []
 }
 
 func bindClusterRole(ctx context.Context, rr *odhtypes.ReconciliationRequest, groups []string, roleBindingName string, roleName string) error {
-	groupsToBind := []rbacv1.Subject{}
+	crb := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: roleBindingName,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     roleName,
+		},
+	}
+
 	for _, e := range groups {
 		// we want to disallow adding system:authenticated to the adminGroups
 		if roleName == "admingroupcluster-role" && e == "system:authenticated" || e == "" {
@@ -104,20 +114,10 @@ func bindClusterRole(ctx context.Context, rr *odhtypes.ReconciliationRequest, gr
 			APIGroup: "rbac.authorization.k8s.io",
 			Name:     e,
 		}
-		groupsToBind = append(groupsToBind, rs)
+
+		crb.Subjects = append(crb.Subjects, rs)
 	}
 
-	crb := &rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: roleBindingName,
-		},
-		Subjects: groupsToBind,
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     roleName,
-		},
-	}
 	err := rr.AddResources(crb)
 	if err != nil {
 		return errors.New("error creating RoleBinding for group")

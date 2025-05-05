@@ -2,6 +2,8 @@ package gvk
 
 import (
 	configv1 "github.com/openshift/api/config/v1"
+	routev1 "github.com/openshift/api/route/v1"
+	templatev1 "github.com/openshift/api/template/v1"
 	operatorsv1 "github.com/operator-framework/api/pkg/operators/v1"
 	operatorsv1alpha1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
@@ -320,6 +322,18 @@ var (
 		Kind:    "ValidatingAdmissionPolicyBinding",
 	}
 
+	ValidatingWebhookConfiguration = schema.GroupVersionKind{
+		Group:   admissionregistrationv1.SchemeGroupVersion.Group,
+		Version: admissionregistrationv1.SchemeGroupVersion.Version,
+		Kind:    "ValidatingWebhookConfiguration",
+	}
+
+	MutatingWebhookConfiguration = schema.GroupVersionKind{
+		Group:   admissionregistrationv1.SchemeGroupVersion.Group,
+		Version: admissionregistrationv1.SchemeGroupVersion.Version,
+		Kind:    "MutatingWebhookConfiguration",
+	}
+
 	MultiKueueConfigV1Alpha1 = schema.GroupVersionKind{
 		Group:   "kueue.x-k8s.io",
 		Version: "v1alpha1",
@@ -348,5 +362,35 @@ var (
 		Group:   networkingv1.SchemeGroupVersion.Group,
 		Version: networkingv1.SchemeGroupVersion.Version,
 		Kind:    "NetworkPolicy",
+	}
+
+	ServiceAccount = schema.GroupVersionKind{
+		Group:   corev1.SchemeGroupVersion.Group,
+		Version: corev1.SchemeGroupVersion.Version,
+		Kind:    "ServiceAccount",
+	}
+
+	Service = schema.GroupVersionKind{
+		Group:   corev1.SchemeGroupVersion.Group,
+		Version: corev1.SchemeGroupVersion.Version,
+		Kind:    "Service",
+	}
+
+	Route = schema.GroupVersionKind{
+		Group:   routev1.SchemeGroupVersion.Group,
+		Version: routev1.SchemeGroupVersion.Version,
+		Kind:    "Route",
+	}
+
+	PersistentVolumeClaim = schema.GroupVersionKind{
+		Group:   corev1.SchemeGroupVersion.Group,
+		Version: corev1.SchemeGroupVersion.Version,
+		Kind:    "PersistentVolumeClaim",
+	}
+
+	Template = schema.GroupVersionKind{
+		Group:   templatev1.SchemeGroupVersion.Group,
+		Version: templatev1.SchemeGroupVersion.Version,
+		Kind:    "Template",
 	}
 )

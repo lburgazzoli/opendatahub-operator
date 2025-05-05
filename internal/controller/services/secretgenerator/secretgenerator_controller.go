@@ -34,12 +34,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	annotation "github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/annotations"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
 )
 
 const (
@@ -56,14 +56,9 @@ type SecretGeneratorReconciler struct {
 func (r *SecretGeneratorReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	logf.FromContext(ctx).Info("Adding controller for Secret Generation.")
 
-	// Watch only new secrets with the corresponding annotation
-	predicates := predicate.Funcs{
+	filter := predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			if _, found := e.Object.GetAnnotations()[annotation.SecretNameAnnotation]; found {
-				return true
-			}
-
-			return false
+			return resources.HasAnnotation(e.Object, annotation.SecretNameAnnotation)
 		},
 		GenericFunc: func(e event.GenericEvent) bool {
 			return false
@@ -71,31 +66,23 @@ func (r *SecretGeneratorReconciler) SetupWithManager(ctx context.Context, mgr ct
 		// this only watch for secret deletion if has with annotation
 		// e.g. dashboard-oauth-client but not dashboard-oauth-client-generated
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			if _, found := e.Object.GetAnnotations()[annotation.SecretNameAnnotation]; found {
-				return true
-			}
-
-			return false
+			return resources.HasAnnotation(e.Object, annotation.SecretNameAnnotation)
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			return false
 		},
 	}
 
-	secretBuilder := ctrl.NewControllerManagedBy(mgr).Named("secret-generator-controller")
-	err := secretBuilder.For(&corev1.Secret{}).
-		Watches(
-			&corev1.Secret{},
-			handler.EnqueueRequestsFromMapFunc(
-				func(_ context.Context, a client.Object) []reconcile.Request {
-					namespacedName := types.NamespacedName{Name: a.GetName(), Namespace: a.GetNamespace()}
-					return []reconcile.Request{{NamespacedName: namespacedName}}
-				},
-			), builder.WithPredicates(predicates)).
-		WithEventFilter(predicates).
+	err := ctrl.NewControllerManagedBy(mgr).
+		Named("secret-generator-controller").
+		For(resources.GvkToUnstructured(gvk.Secret), builder.WithPredicates(filter)).
 		Complete(r)
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Reconcile will generate new secret with random data for the annotated secret

@@ -48,39 +48,25 @@ type MockManager struct {
 	mapper meta.RESTMapper
 }
 
-func (f *MockManager) GetClient() client.Client   { return f.client }
-func (f *MockManager) GetScheme() *runtime.Scheme { return f.scheme }
-
-//nolint:ireturn
-func (f *MockManager) GetRESTMapper() meta.RESTMapper { return f.mapper }
-func (f *MockManager) GetConfig() *rest.Config        { return &rest.Config{} }
-
-//nolint:ireturn
-func (f *MockManager) GetFieldIndexer() client.FieldIndexer { return nil }
-
-//nolint:ireturn
-func (f *MockManager) GetEventRecorderFor(name string) record.EventRecorder { return nil }
-
-//nolint:ireturn
-func (f *MockManager) GetCache() cache.Cache                                    { return nil }
-func (f *MockManager) GetLogger() logr.Logger                                   { return ctrl.Log }
-func (f *MockManager) Add(runnable manager.Runnable) error                      { return nil }
-func (f *MockManager) Elected() <-chan struct{}                                 { ch := make(chan struct{}); close(ch); return ch }
-func (f *MockManager) Start(ctx context.Context) error                          { <-ctx.Done(); return nil }
-func (f *MockManager) AddHealthzCheck(name string, check healthz.Checker) error { return nil }
-func (f *MockManager) AddMetricsServerExtraHandler(name string, handler http.Handler) error {
-	return nil
-}
-func (f *MockManager) AddReadyzCheck(name string, check healthz.Checker) error { return nil }
-
-//nolint:ireturn
-func (f *MockManager) GetAPIReader() client.Reader { return nil }
+func (f *MockManager) GetClient() client.Client                                { return f.client }
+func (f *MockManager) GetScheme() *runtime.Scheme                              { return f.scheme }
+func (f *MockManager) GetRESTMapper() meta.RESTMapper                          { return f.mapper }
+func (f *MockManager) GetConfig() *rest.Config                                 { return &rest.Config{} }
+func (f *MockManager) GetFieldIndexer() client.FieldIndexer                    { return nil }
+func (f *MockManager) GetEventRecorderFor(string) record.EventRecorder         { return nil }
+func (f *MockManager) GetCache() cache.Cache                                   { return nil }
+func (f *MockManager) GetLogger() logr.Logger                                  { return ctrl.Log }
+func (f *MockManager) Add(manager.Runnable) error                              { return nil }
+func (f *MockManager) Elected() <-chan struct{}                                { ch := make(chan struct{}); close(ch); return ch }
+func (f *MockManager) Start(ctx context.Context) error                         { <-ctx.Done(); return nil }
+func (f *MockManager) AddHealthzCheck(string, healthz.Checker) error           { return nil }
+func (f *MockManager) AddMetricsServerExtraHandler(string, http.Handler) error { return nil }
+func (f *MockManager) AddReadyzCheck(string, healthz.Checker) error            { return nil }
+func (f *MockManager) GetAPIReader() client.Reader                             { return nil }
 func (f *MockManager) GetControllerOptions() config.Controller {
 	return config.Controller{SkipNameValidation: ptr.To(true)}
 }
-func (f *MockManager) GetHTTPClient() *http.Client { return &http.Client{} }
-
-//nolint:ireturn
+func (f *MockManager) GetHTTPClient() *http.Client      { return &http.Client{} }
 func (f *MockManager) GetWebhookServer() webhook.Server { return nil }
 
 //nolint:ireturn

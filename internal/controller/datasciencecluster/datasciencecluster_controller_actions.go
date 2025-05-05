@@ -5,10 +5,7 @@ import (
 	"fmt"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	dscv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v1"
 	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
@@ -55,21 +52,6 @@ func checkPreConditions(ctx context.Context, rr *odhtype.ReconciliationRequest) 
 	}
 
 	return nil
-}
-
-func watchDataScienceClusters(ctx context.Context, cli client.Client) []reconcile.Request {
-	instanceList := &dscv1.DataScienceClusterList{}
-	err := cli.List(ctx, instanceList)
-	if err != nil {
-		return nil
-	}
-
-	requests := make([]reconcile.Request, len(instanceList.Items))
-	for i := range instanceList.Items {
-		requests[i] = reconcile.Request{NamespacedName: types.NamespacedName{Name: instanceList.Items[i].Name}}
-	}
-
-	return requests
 }
 
 func provisionComponents(_ context.Context, rr *odhtype.ReconciliationRequest) error {

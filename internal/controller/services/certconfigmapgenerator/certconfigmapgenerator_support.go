@@ -3,19 +3,17 @@ package certconfigmapgenerator
 
 import (
 	"context"
-	"reflect"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	dsciv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v1"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
 )
@@ -96,7 +94,7 @@ func DeleteOdhTrustedCABundleConfigMap(ctx context.Context, cli client.Client, n
 // Returns:
 //   - handler.EventHandler: Event handler that maps DSCInitialization events to namespace reconcile requests
 func dsciEventHandler(cli client.Client) handler.EventHandler {
-	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, _ client.Object) []reconcile.Request {
 		requests := make([]reconcile.Request, 0)
 
 		lo := client.ListOptions{
@@ -104,7 +102,8 @@ func dsciEventHandler(cli client.Client) handler.EventHandler {
 		}
 
 		for {
-			namespaces := corev1.NamespaceList{}
+			namespaces := unstructured.UnstructuredList{}
+			namespaces.SetGroupVersionKind(gvk.Namespace)
 
 			if err := cli.List(ctx, &namespaces, &lo); err != nil {
 				return []reconcile.Request{}
@@ -116,49 +115,40 @@ func dsciEventHandler(cli client.Client) handler.EventHandler {
 				})
 			}
 
-			if namespaces.Continue == "" {
+			lo.Continue = namespaces.GetContinue()
+
+			if lo.Continue == "" {
 				break
 			}
-
-			lo.Continue = namespaces.Continue
 		}
 
 		return requests
 	})
 }
 
-// dsciPredicates creates predicates for filtering DSCInitialization events. It determines when
-// reconciliation should be triggered based on relevant changes to DSCInitialization resources:
-// - Always reconcile on resource creation
-// - Reconcile on updates only when the TrustedCABundle configuration changes
-// - Never reconcile on resource deletion
-//
-// Parameters:
-//   - _: Unused client parameter (kept for interface compatibility)
-//
-// Returns:
-//   - predicate.Funcs: Event filter predicates for DSCInitialization events
-func dsciPredicates(_ client.Client) predicate.Funcs {
-	return predicate.Funcs{
-		CreateFunc: func(e event.CreateEvent) bool {
-			return true
-		},
+func IsReservedNamespace(ns *unstructured.Unstructured) bool {
+	switch {
+	case strings.HasPrefix(ns.GetName(), "openshift-"):
+		return true
+	case strings.HasPrefix(ns.GetName(), "kube-"):
+		return true
+	case ns.GetName() == "default":
+		return true
+	case ns.GetName() == "openshift":
+		return true
+	default:
+		return false
+	}
+}
 
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			dsciOld, ok := e.ObjectOld.(*dsciv1.DSCInitialization)
-			if !ok {
-				return false
-			}
-			dsciNew, ok := e.ObjectNew.(*dsciv1.DSCInitialization)
-			if !ok {
-				return false
-			}
-
-			return !reflect.DeepEqual(dsciOld.Spec.TrustedCABundle, dsciNew.Spec.TrustedCABundle)
-		},
-
-		DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
-			return false
-		},
+func IsActiveNamespace(ns *unstructured.Unstructured) bool {
+	phase, ok, err := unstructured.NestedString(ns.Object, "status", "phase")
+	switch {
+	case err != nil:
+		return false
+	case !ok:
+		return false
+	default:
+		return phase == string(corev1.NamespaceActive)
 	}
 }

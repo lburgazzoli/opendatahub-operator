@@ -22,11 +22,7 @@ import (
 	"path/filepath"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
-	routev1 "github.com/openshift/api/route/v1"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	networkingv1 "k8s.io/api/networking/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -48,6 +44,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/handlers"
 	rp "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/resources"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/deploy"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/logger"
@@ -265,73 +262,43 @@ func (r *DSCInitializationReconciler) Reconcile(ctx context.Context, req ctrl.Re
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *DSCInitializationReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+func (r *DSCInitializationReconciler) SetupWithManager(_ context.Context, mgr ctrl.Manager) error {
+	defPredicate := predicate.Or(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{})
+
 	return ctrl.NewControllerManagedBy(mgr).
-		// add predicates prevents meaningless reconciliations from being triggered
-		// not use WithEventFilter() because it conflict with secret and configmap predicate
-		For(
-			&dsciv1.DSCInitialization{},
-			builder.WithPredicates(predicate.Or(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{})),
-		).
-		Owns(
-			&corev1.Namespace{},
-			builder.WithPredicates(predicate.Or(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{}))).
-		Owns(
-			&corev1.Secret{},
-			builder.WithPredicates(predicate.Or(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{}))).
-		Owns(
-			&corev1.ConfigMap{},
-			builder.WithPredicates(predicate.Or(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{}))).
-		Owns(
-			&networkingv1.NetworkPolicy{},
-			builder.WithPredicates(predicate.Or(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{}))).
-		Owns(
-			&rbacv1.Role{},
-			builder.WithPredicates(predicate.Or(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{}))).
-		Owns(
-			&rbacv1.RoleBinding{},
-			builder.WithPredicates(predicate.Or(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{}))).
-		Owns(
-			&rbacv1.ClusterRole{},
-			builder.WithPredicates(predicate.Or(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{}))).
-		Owns(
-			&rbacv1.ClusterRoleBinding{},
-			builder.WithPredicates(predicate.Or(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{}))).
-		Owns(
-			&appsv1.Deployment{},
-			builder.WithPredicates(predicate.Or(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{}))).
-		Owns(
-			&corev1.ServiceAccount{},
-			builder.WithPredicates(predicate.Or(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{}))).
-		Owns(
-			&corev1.Service{},
-			builder.WithPredicates(predicate.Or(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{}))).
-		Owns(
-			&routev1.Route{},
-			builder.WithPredicates(predicate.Or(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{}))).
-		Owns(&corev1.PersistentVolumeClaim{},
-			builder.WithPredicates(predicate.Or(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{}))).
-		Watches(
-			&dscv1.DataScienceCluster{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, a client.Object) []reconcile.Request {
+		For(resources.GvkToUnstructured(gvk.DSCInitialization), builder.WithPredicates(defPredicate)).
+		//
+		// Owned
+		//
+		Owns(resources.GvkToUnstructured(gvk.Namespace), builder.WithPredicates(defPredicate)).
+		Owns(resources.GvkToUnstructured(gvk.Secret), builder.WithPredicates(defPredicate)).
+		Owns(resources.GvkToUnstructured(gvk.ConfigMap), builder.WithPredicates(defPredicate)).
+		Owns(resources.GvkToUnstructured(gvk.NetworkPolicy), builder.WithPredicates(defPredicate)).
+		Owns(resources.GvkToUnstructured(gvk.Role), builder.WithPredicates(defPredicate)).
+		Owns(resources.GvkToUnstructured(gvk.RoleBinding), builder.WithPredicates(defPredicate)).
+		Owns(resources.GvkToUnstructured(gvk.ClusterRole), builder.WithPredicates(defPredicate)).
+		Owns(resources.GvkToUnstructured(gvk.ClusterRoleBinding), builder.WithPredicates(defPredicate)).
+		Owns(resources.GvkToUnstructured(gvk.Deployment), builder.WithPredicates(defPredicate)).
+		Owns(resources.GvkToUnstructured(gvk.ServiceAccount), builder.WithPredicates(defPredicate)).
+		Owns(resources.GvkToUnstructured(gvk.Service), builder.WithPredicates(defPredicate)).
+		Owns(resources.GvkToUnstructured(gvk.Route), builder.WithPredicates(defPredicate)).
+		Owns(resources.GvkToUnstructured(gvk.PersistentVolumeClaim), builder.WithPredicates(defPredicate)).
+		//
+		// Watches
+		//
+		Watches(resources.GvkToUnstructured(gvk.DataScienceCluster),
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, _ client.Object) []reconcile.Request {
 				return r.watchDSCResource(ctx)
 			}),
-			builder.WithPredicates(rp.DSCDeletionPredicate), // TODO: is it needed?
-		).
-		Watches(
-			&corev1.Secret{},
+			builder.WithPredicates(rp.DSCDeletionPredicate)). // TODO: is it needed?
+		Watches(resources.GvkToUnstructured(gvk.Secret),
 			handler.EnqueueRequestsFromMapFunc(r.watchMonitoringSecretResource),
-			builder.WithPredicates(rp.SecretContentChangedPredicate),
-		).
-		Watches(
-			&corev1.ConfigMap{},
+			builder.WithPredicates(rp.PathDriftPredicate([]string{"data"}))).
+		Watches(resources.GvkToUnstructured(gvk.ConfigMap),
 			handler.EnqueueRequestsFromMapFunc(r.watchMonitoringConfigMapResource),
-			builder.WithPredicates(rp.CMContentChangedPredicate),
-		).
-		Watches(
-			&serviceApi.Auth{},
-			handler.EnqueueRequestsFromMapFunc(r.watchAuthResource),
-		).
+			builder.WithPredicates(rp.PathDriftPredicate([]string{"data"}))).
+		Watches(resources.GvkToUnstructured(gvk.Auth),
+			handlers.NewEventHandlerForGVK(mgr.GetClient(), gvk.DSCInitialization)).
 		Complete(r)
 }
 
@@ -373,23 +340,6 @@ func (r *DSCInitializationReconciler) watchDSCResource(ctx context.Context) []re
 
 		return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: "backup"}}}
 	}
-	return nil
-}
-
-func (r *DSCInitializationReconciler) watchAuthResource(ctx context.Context, a client.Object) []reconcile.Request {
-	log := logf.FromContext(ctx)
-	instanceList := &serviceApi.AuthList{}
-	if err := r.Client.List(ctx, instanceList); err != nil {
-		// do not handle if cannot get list
-		log.Error(err, "Failed to get AuthList")
-		return nil
-	}
-	if len(instanceList.Items) == 0 {
-		log.Info("Found no Auth instance in cluster, reconciling to recreate")
-
-		return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: "auth"}}}
-	}
-
 	return nil
 }
 

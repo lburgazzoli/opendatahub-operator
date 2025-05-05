@@ -19,3 +19,26 @@ var (
 		predicate.AnnotationChangedPredicate{},
 	)
 )
+
+// PredicateOptions configures the behavior of predicates.
+type PredicateOptions struct {
+	// AcceptCreate determines if create events should trigger reconciliation
+	AcceptCreate bool
+	// AcceptDelete determines if delete events should trigger reconciliation
+	AcceptDelete bool
+}
+
+// PredicateOption is a functional option for configuring predicates.
+type PredicateOption func(*PredicateOptions)
+
+func WithAcceptCreate(value bool) PredicateOption {
+	return func(o *PredicateOptions) {
+		o.AcceptCreate = value
+	}
+}
+
+func WithAcceptDelete(value bool) PredicateOption {
+	return func(o *PredicateOptions) {
+		o.AcceptDelete = value
+	}
+}

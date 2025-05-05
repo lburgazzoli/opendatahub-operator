@@ -29,6 +29,7 @@ import (
 	serviceApi "github.com/opendatahub-io/opendatahub-operator/v2/api/services/v1alpha1"
 	sr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/deploy"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/status/deployments"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/handlers"
@@ -72,8 +73,11 @@ func (h *serviceHandler) NewReconciler(ctx context.Context, mgr ctrl.Manager) er
 		//   for to objects that have the label components.platform.opendatahub.io/part-of
 		// or services.platform.opendatahub.io/part-of set to the current owner
 		//
-		Watches(&dscv1.DataScienceCluster{}, reconciler.WithEventHandler(handlers.ToNamed(serviceApi.MonitoringInstanceName)),
-			reconciler.WithPredicates(resources.DSCComponentUpdatePredicate)).
+		Watches(&dscv1.DataScienceCluster{},
+			reconciler.WithEventHandler(
+				handlers.NewEventHandlerForGVK(mgr.GetClient(), gvk.Auth)),
+			reconciler.WithPredicates(
+				resources.PathDriftPredicate([]string{"status.conditions", "status.components"}))).
 		// actions
 		WithAction(deployments.NewAction(
 			deployments.InNamespaceFn(func(_ context.Context, rr *types.ReconciliationRequest) (string, error) {

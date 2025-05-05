@@ -74,12 +74,6 @@ func ObjectFromUnstructured(s *runtime.Scheme, obj *unstructured.Unstructured, i
 		return fmt.Errorf("unable to ensure GroupVersionKind: %w", err)
 	}
 
-	// Validate that the GroupVersionKind is known in the scheme
-	gvk := intoObj.GetObjectKind().GroupVersionKind()
-	if _, err := s.New(gvk); err != nil {
-		return fmt.Errorf("unable to create object for GVK %s: %w", gvk, err)
-	}
-
 	return nil
 }
 
@@ -476,12 +470,10 @@ func IsOwnedByType(obj client.Object, ownerGVK schema.GroupVersionKind) (bool, e
 }
 
 func GvkToPartial(gvk schema.GroupVersionKind) *metav1.PartialObjectMetadata {
-	return &metav1.PartialObjectMetadata{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: gvk.GroupVersion().String(),
-			Kind:       gvk.Kind,
-		},
-	}
+	res := metav1.PartialObjectMetadata{}
+	res.SetGroupVersionKind(gvk)
+
+	return &res
 }
 
 // Apply patches an object using server-side apply.
@@ -620,4 +612,30 @@ func ListAvailableAPIResources(
 	}
 
 	return items, nil
+}
+
+// FromUnstructured converts an unstructured object to a typed object.
+// It will return an error if the conversion fails or if the object is nil.
+func FromUnstructured(obj client.Object, into client.Object) error {
+	if obj == nil {
+		return errors.New("nil object")
+	}
+
+	// Convert to unstructured first if it's not already
+	u, ok := obj.(*unstructured.Unstructured)
+	if !ok {
+		var err error
+		u, err = ToUnstructured(obj)
+		if err != nil {
+			return fmt.Errorf("unable to convert to unstructured: %w", err)
+		}
+	}
+
+	// Convert from unstructured to the target type
+	err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, into)
+	if err != nil {
+		return fmt.Errorf("unable to convert unstructured object to %T: %w", into, err)
+	}
+
+	return nil
 }

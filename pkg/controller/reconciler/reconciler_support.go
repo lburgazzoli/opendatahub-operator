@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"k8s.io/apimachinery/pkg/runtime"
 	"slices"
 	"strings"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/handlers"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/component"
+	pr "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/resources"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/annotations"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
@@ -29,20 +31,55 @@ import (
 )
 
 type forInput struct {
-	object  client.Object
-	options []builder.ForOption
-	gvk     schema.GroupVersionKind
+	object         client.Object
+	gvk            schema.GroupVersionKind
+	predicates     []predicate.Predicate
+	wrapPredicates bool
+}
+
+func (in forInput) Predicates(scheme *runtime.Scheme) []predicate.Predicate {
+	if !in.wrapPredicates {
+		return in.predicates
+	}
+
+	return []predicate.Predicate{
+		// ensure that the predicates are receiving the expected type,
+		pr.TypeAdapter(scheme, in.object, in.predicates...),
+	}
 }
 
 type DynamicPredicate func(context.Context, *types.ReconciliationRequest) bool
 
 type watchInput struct {
-	object       client.Object
-	eventHandler handler.EventHandler
-	predicates   []predicate.Predicate
-	owned        bool
-	dynamic      bool
-	dynamicPred  []DynamicPredicate
+	object           client.Object
+	gvk              schema.GroupVersionKind
+	eventHandler     handler.EventHandler
+	wrapEventHandler bool
+	predicates       []predicate.Predicate
+	wrapPredicates   bool
+	owned            bool
+	dynamic          bool
+	dynamicPred      []DynamicPredicate
+}
+
+func (in watchInput) Predicates(scheme *runtime.Scheme) []predicate.Predicate {
+	if !in.wrapPredicates {
+		return in.predicates
+	}
+
+	return []predicate.Predicate{
+		// ensure that the predicates are receiving the expected type,
+		pr.TypeAdapter(scheme, in.object, in.predicates...),
+	}
+}
+
+func (in watchInput) EventHandler(scheme *runtime.Scheme) handler.EventHandler {
+	if !in.wrapEventHandler {
+		return in.eventHandler
+	}
+
+	// ensure that the handler is receiving the expected type,
+	return handlers.TypedAdapter(scheme, in.object, in.eventHandler)
 }
 
 type WatchOpts func(*watchInput)
@@ -52,10 +89,20 @@ func WithPredicates(values ...predicate.Predicate) WatchOpts {
 		a.predicates = append(a.predicates, values...)
 	}
 }
+func WithPredicatesWrapper(value bool) WatchOpts {
+	return func(a *watchInput) {
+		a.wrapPredicates = value
+	}
+}
 
 func WithEventHandler(value handler.EventHandler) WatchOpts {
 	return func(a *watchInput) {
 		a.eventHandler = value
+	}
+}
+func WithEventHandlerWrapper(value bool) WatchOpts {
+	return func(a *watchInput) {
+		a.wrapEventHandler = value
 	}
 }
 
@@ -72,6 +119,14 @@ func Dynamic(predicates ...DynamicPredicate) WatchOpts {
 	}
 }
 
+type ForOpts func(input *forInput)
+
+func WithForPredicates(values ...predicate.Predicate) ForOpts {
+	return func(a *forInput) {
+		a.predicates = append(a.predicates, values...)
+	}
+}
+
 type ReconcilerBuilder[T common.PlatformObject] struct {
 	mgr                 ctrl.Manager
 	input               forInput
@@ -85,7 +140,7 @@ type ReconcilerBuilder[T common.PlatformObject] struct {
 	dependantConditions []string
 }
 
-func ReconcilerFor[T common.PlatformObject](mgr ctrl.Manager, object T, opts ...builder.ForOption) *ReconcilerBuilder[T] {
+func ReconcilerFor[T common.PlatformObject](mgr ctrl.Manager, object T, opts ...ForOpts) *ReconcilerBuilder[T] {
 	crb := ReconcilerBuilder[T]{
 		mgr:                 mgr,
 		happyCondition:      status.ConditionTypeReady,
@@ -95,19 +150,21 @@ func ReconcilerFor[T common.PlatformObject](mgr ctrl.Manager, object T, opts ...
 	gvk, err := mgr.GetClient().GroupVersionKindFor(object)
 	if err != nil {
 		crb.errors = multierror.Append(crb.errors, fmt.Errorf("unable to determine GVK: %w", err))
+		return &crb
 	}
 
-	iops := slices.Clone(opts)
-	if len(iops) == 0 {
-		iops = append(iops, builder.WithPredicates(
-			predicates.DefaultPredicate),
-		)
+	crb.input = forInput{}
+	crb.input.object = object
+	crb.input.gvk = gvk
+
+	for _, opt := range opts {
+		opt(&crb.input)
 	}
 
-	crb.input = forInput{
-		object:  object,
-		options: iops,
-		gvk:     gvk,
+	if len(crb.input.predicates) == 0 {
+		crb.input.predicates = append(crb.input.predicates, predicates.DefaultPredicate)
+	} else {
+		crb.input.wrapPredicates = true
 	}
 
 	return &crb
@@ -133,9 +190,20 @@ func (b *ReconcilerBuilder[T]) WithFinalizer(value actions.Fn) *ReconcilerBuilde
 	return b
 }
 
-func (b *ReconcilerBuilder[T]) Watches(object client.Object, opts ...WatchOpts) *ReconcilerBuilder[T] {
+func (b *ReconcilerBuilder[T]) WatchesGVK(gvk schema.GroupVersionKind, opts ...WatchOpts) *ReconcilerBuilder[T] {
+	return b.Watches(resources.GvkToUnstructured(gvk), opts...)
+}
+
+func (b *ReconcilerBuilder[T]) Watches(obj client.Object, opts ...WatchOpts) *ReconcilerBuilder[T] {
+	gvk, err := resources.GetGroupVersionKindForObject(b.mgr.GetScheme(), obj)
+	if err != nil {
+		b.errors = multierror.Append(b.errors, fmt.Errorf("unable to determine GVK: %w", err))
+		return b
+	}
+
 	in := watchInput{}
-	in.object = object
+	in.object = obj
+	in.gvk = gvk
 	in.owned = false
 
 	for _, opt := range opts {
@@ -151,8 +219,11 @@ func (b *ReconcilerBuilder[T]) Watches(object client.Object, opts ...WatchOpts) 
 	if len(in.predicates) == 0 {
 		in.predicates = append(in.predicates, predicate.And(
 			predicates.DefaultPredicate,
-			// use the platform.opendatahub.io/part-of label to filter
-			// events not related to the owner type
+			// The envelope of object(s) that is propagated to the predicate, depends on
+			// how the watch is being configured, so as an example, if the watcher is
+			// set up using an Unstructured object, then the event would carry an Unstructured
+			// object as well, this may lead to some misbehavior so this adapter ensures that
+			// the event carries the object in a type expected by the consumer
 			component.ForLabel(labels.PlatformPartOf, strings.ToLower(b.input.gvk.Kind)),
 		))
 	}
@@ -162,13 +233,20 @@ func (b *ReconcilerBuilder[T]) Watches(object client.Object, opts ...WatchOpts) 
 	return b
 }
 
-func (b *ReconcilerBuilder[T]) WatchesGVK(gvk schema.GroupVersionKind, opts ...WatchOpts) *ReconcilerBuilder[T] {
-	return b.Watches(resources.GvkToUnstructured(gvk), opts...)
+func (b *ReconcilerBuilder[T]) OwnsGVK(gvk schema.GroupVersionKind, opts ...WatchOpts) *ReconcilerBuilder[T] {
+	return b.Owns(resources.GvkToUnstructured(gvk), opts...)
 }
 
-func (b *ReconcilerBuilder[T]) Owns(object client.Object, opts ...WatchOpts) *ReconcilerBuilder[T] {
+func (b *ReconcilerBuilder[T]) Owns(obj client.Object, opts ...WatchOpts) *ReconcilerBuilder[T] {
+	gvk, err := resources.GetGroupVersionKindForObject(b.mgr.GetScheme(), obj)
+	if err != nil {
+		b.errors = multierror.Append(b.errors, fmt.Errorf("unable to determine GVK: %w", err))
+		return b
+	}
+
 	in := watchInput{}
-	in.object = object
+	in.object = obj
+	in.gvk = gvk
 	in.owned = true
 
 	for _, opt := range opts {
@@ -198,10 +276,6 @@ func (b *ReconcilerBuilder[T]) WithEventFilter(p predicate.Predicate) *Reconcile
 	return b
 }
 
-func (b *ReconcilerBuilder[T]) OwnsGVK(gvk schema.GroupVersionKind, opts ...WatchOpts) *ReconcilerBuilder[T] {
-	return b.Owns(resources.GvkToUnstructured(gvk), opts...)
-}
-
 func (b *ReconcilerBuilder[T]) Build(_ context.Context) (*Reconciler, error) {
 	if b.errors != nil {
 		return nil, b.errors
@@ -221,31 +295,17 @@ func (b *ReconcilerBuilder[T]) Build(_ context.Context) (*Reconciler, error) {
 		return nil, fmt.Errorf("failed to create reconciler for component %s: %w", name, err)
 	}
 
-	c := ctrl.NewControllerManagedBy(b.mgr)
-
-	// automatically add default predicates to the watched API if no
-	// predicates are provided
-	forOpts := b.input.options
-	if len(forOpts) == 0 {
-		forOpts = append(forOpts, builder.WithPredicates(predicate.Or(
-			predicate.GenerationChangedPredicate{},
-			predicate.LabelChangedPredicate{},
-			predicate.AnnotationChangedPredicate{},
-		)))
-	}
-
-	c = c.For(b.input.object, forOpts...)
+	c := ctrl.NewControllerManagedBy(b.mgr).
+		For(
+			resources.GvkToUnstructured(b.input.gvk),
+			builder.WithPredicates(
+				b.input.Predicates(b.mgr.GetScheme())...,
+			),
+		)
 
 	for i := range b.watches {
 		if b.watches[i].owned {
-			kinds, _, err := b.mgr.GetScheme().ObjectKinds(b.watches[i].object)
-			if err != nil {
-				return nil, err
-			}
-
-			for i := range kinds {
-				r.AddOwnedType(kinds[i])
-			}
+			r.AddOwnedType(b.watches[i].gvk)
 		}
 
 		// if the watch is dynamic, then the watcher will be registered
@@ -255,9 +315,11 @@ func (b *ReconcilerBuilder[T]) Build(_ context.Context) (*Reconciler, error) {
 		}
 
 		c = c.Watches(
-			b.watches[i].object,
-			b.watches[i].eventHandler,
-			builder.WithPredicates(b.watches[i].predicates...),
+			resources.GvkToUnstructured(b.watches[i].gvk),
+			b.watches[i].EventHandler(b.mgr.GetScheme()),
+			builder.WithPredicates(
+				b.watches[i].Predicates(b.mgr.GetScheme())...,
+			),
 		)
 	}
 
@@ -280,8 +342,15 @@ func (b *ReconcilerBuilder[T]) Build(_ context.Context) (*Reconciler, error) {
 	// internal action
 	r.AddAction(
 		newDynamicWatchAction(
-			func(obj client.Object, eventHandler handler.EventHandler, predicates ...predicate.Predicate) error {
-				return cc.Watch(source.Kind(b.mgr.GetCache(), obj, eventHandler, predicates...))
+			func(w watchInput) error {
+				src := source.TypedKind[client.Object](
+					b.mgr.GetCache(),
+					resources.GvkToUnstructured(w.gvk),
+					w.EventHandler(b.mgr.GetScheme()),
+					w.Predicates(b.mgr.GetScheme())...,
+				)
+
+				return cc.Watch(src)
 			},
 			b.watches,
 		),

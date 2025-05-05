@@ -22,16 +22,16 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
 	dscv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v1"
-	dsciv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v1"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/deploy"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/gc"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/handlers"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/dependent"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/resources"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 )
@@ -53,11 +53,11 @@ func NewDataScienceClusterReconciler(ctx context.Context, mgr ctrl.Manager) erro
 		Owns(&componentApi.ModelMeshServing{}, reconciler.WithPredicates(componentsPredicate)).
 		Owns(&componentApi.ModelController{}, reconciler.WithPredicates(componentsPredicate)).
 		Owns(&componentApi.FeastOperator{}, reconciler.WithPredicates(componentsPredicate)).
-		Watches(
-			&dsciv1.DSCInitialization{},
-			reconciler.WithEventMapper(func(ctx context.Context, _ client.Object) []reconcile.Request {
-				return watchDataScienceClusters(ctx, mgr.GetClient())
-			})).
+		WatchesGVK(
+			gvk.DSCInitialization,
+			reconciler.WithPredicates(resources.CreatedOrDeleted()),
+			reconciler.WithEventHandler(
+				handlers.NewEventHandlerForGVK(mgr.GetClient(), gvk.DataScienceCluster))).
 		WithAction(initialize).
 		WithAction(checkPreConditions).
 		WithAction(updateStatus).

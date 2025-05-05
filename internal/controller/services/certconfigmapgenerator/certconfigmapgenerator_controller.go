@@ -19,7 +19,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	dsciv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v1"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/handlers"
@@ -113,7 +112,7 @@ func NewWithManager(_ context.Context, mgr ctrl.Manager) error {
 		// cache for this controller and separate ones for components and services.
 		source.TypedKind[client.Object, ctrl.Request](
 			mgr.GetCache(),
-			&corev1.Namespace{},
+			resources.GvkToUnstructured(gvk.Namespace),
 			handlers.RequestFromObject(),
 			respredicates.AnnotationChanged(annotation.InjectionOfCABundleAnnotatoion),
 		),
@@ -151,28 +150,31 @@ func NewWithManager(_ context.Context, mgr ctrl.Manager) error {
 		// It uses the manager's shared cache to prevent the creation of redundant informers.
 		source.TypedKind[client.Object, ctrl.Request](
 			mgr.GetCache(),
-			&dsciv1.DSCInitialization{},
+			resources.GvkToUnstructured(gvk.DSCInitialization),
 			dsciEventHandler(r.sharedClient),
-			dsciPredicates(r.sharedClient),
+			respredicates.PathDriftPredicate([]string{"spec.trustedCABundle"}),
 		),
 	)
 
-	return b.Complete(
-		reconcile.AsReconciler[*corev1.Namespace](r.sharedClient, &r),
-	)
+	return b.Complete(&r)
 }
 
-// Reconcile will generate new configmap, odh-trusted-ca-bundle, that includes cluster-wide
-// trusted-ca bundle and custom ca bundle in every new namespace created.
-func (r *CertConfigmapGeneratorReconciler) Reconcile(ctx context.Context, ns *corev1.Namespace) (ctrl.Result, error) {
+func (r *CertConfigmapGeneratorReconciler) Reconcile(ctx context.Context, req reconcile.Request) (ctrl.Result, error) {
+	ns := resources.GvkToUnstructured(gvk.Namespace)
+	ns.SetName(req.Name)
+
+	if err := r.sharedClient.Get(ctx, req.NamespacedName, ns); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
 	l := logf.FromContext(ctx)
 
-	if !cluster.IsActiveNamespace(ns) {
+	if !IsActiveNamespace(ns) {
 		l.V(3).Info("Namespace not active, skip")
 		return ctrl.Result{}, nil
 	}
 
-	if cluster.IsReservedNamespace(ns) {
+	if IsReservedNamespace(ns) {
 		l.V(3).Info("Namespace is reserved, skip")
 		return ctrl.Result{}, nil
 	}
@@ -189,21 +191,21 @@ func (r *CertConfigmapGeneratorReconciler) Reconcile(ctx context.Context, ns *co
 	case dsci.Spec.TrustedCABundle == nil || dsci.Spec.TrustedCABundle.ManagementState != operatorv1.Managed:
 		l.Info("TrustedCABundle is not set as Managed, skip CA bundle injection and delete existing configmap")
 
-		if err := DeleteOdhTrustedCABundleConfigMap(ctx, r.certClient, ns.Name); err != nil {
+		if err := DeleteOdhTrustedCABundleConfigMap(ctx, r.certClient, ns.GetName()); err != nil {
 			return reconcile.Result{}, fmt.Errorf("error deleting existing configmap: %w", err)
 		}
 
 	case resources.HasAnnotation(ns, annotation.InjectionOfCABundleAnnotatoion, "false"):
 		l.Info("Namespace has opted-out of CA bundle injection, deleting it")
 
-		if err := DeleteOdhTrustedCABundleConfigMap(ctx, r.certClient, ns.Name); err != nil {
+		if err := DeleteOdhTrustedCABundleConfigMap(ctx, r.certClient, ns.GetName()); err != nil {
 			return reconcile.Result{}, fmt.Errorf("error deleting existing configmap: %w", err)
 		}
 
 	default:
 		l.Info("Adding CA bundle configmap")
 
-		if err := CreateOdhTrustedCABundleConfigMap(ctx, r.certClient, ns.Name, dsci.Spec.TrustedCABundle.CustomCABundle); err != nil {
+		if err := CreateOdhTrustedCABundleConfigMap(ctx, r.certClient, ns.GetName(), dsci.Spec.TrustedCABundle.CustomCABundle); err != nil {
 			return reconcile.Result{}, fmt.Errorf("error adding configmap to namespace: %w", err)
 		}
 	}

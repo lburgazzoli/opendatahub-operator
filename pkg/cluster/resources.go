@@ -59,8 +59,7 @@ func GetSingleton[T client.Object](ctx context.Context, cli client.Client, obj T
 	}
 
 	instances := unstructured.UnstructuredList{}
-	instances.SetAPIVersion(objGVK.GroupVersion().String())
-	instances.SetKind(objGVK.Kind)
+	instances.SetGroupVersionKind(objGVK)
 
 	if err := cli.List(ctx, &instances); err != nil {
 		return fmt.Errorf("failed to list resources of type %s: %w", objGVK, err)
@@ -92,48 +91,22 @@ func GetSingleton[T client.Object](ctx context.Context, cli client.Client, obj T
 
 // GetDSC retrieves the DataScienceCluster (DSC) instance from the Kubernetes cluster.
 func GetDSC(ctx context.Context, cli client.Client) (*dscv1.DataScienceCluster, error) {
-	instances := dscv1.DataScienceClusterList{}
-	if err := cli.List(ctx, &instances); err != nil {
-		return nil, fmt.Errorf("failed to list resources of type %s: %w", gvk.DataScienceCluster, err)
+	ret := dscv1.DataScienceCluster{}
+	if err := GetSingleton(ctx, cli, &ret); err != nil {
+		return nil, err
 	}
 
-	switch len(instances.Items) {
-	case 1:
-		return &instances.Items[0], nil
-	case 0:
-		return nil, k8serr.NewNotFound(
-			schema.GroupResource{
-				Group:    gvk.DataScienceCluster.Group,
-				Resource: "datascienceclusters",
-			},
-			"",
-		)
-	default:
-		return nil, fmt.Errorf("failed to get a valid %s instance, expected to find 1 instance, found %d", gvk.DataScienceCluster, len(instances.Items))
-	}
+	return &ret, nil
 }
 
 // GetDSCI retrieves the DSCInitialization (DSCI) instance from the Kubernetes cluster.
 func GetDSCI(ctx context.Context, cli client.Client) (*dsciv1.DSCInitialization, error) {
-	instances := dsciv1.DSCInitializationList{}
-	if err := cli.List(ctx, &instances); err != nil {
-		return nil, fmt.Errorf("failed to list resources of type %s: %w", gvk.DSCInitialization, err)
+	ret := dsciv1.DSCInitialization{}
+	if err := GetSingleton(ctx, cli, &ret); err != nil {
+		return nil, err
 	}
 
-	switch len(instances.Items) {
-	case 1:
-		return &instances.Items[0], nil
-	case 0:
-		return nil, k8serr.NewNotFound(
-			schema.GroupResource{
-				Group:    gvk.DSCInitialization.Group,
-				Resource: "dscinitializations",
-			},
-			"",
-		)
-	default:
-		return nil, fmt.Errorf("failed to get a valid %s instance, expected to find 1 instance, found %d", gvk.DSCInitialization, len(instances.Items))
-	}
+	return &ret, nil
 }
 
 // UpdatePodSecurityRolebinding update default rolebinding which is created in applications namespace by manifests
