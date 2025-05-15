@@ -31,7 +31,11 @@ import (
 
 const PlatformFieldOwner = "platform.opendatahub.io"
 
-func ToUnstructured(obj any) (*unstructured.Unstructured, error) {
+func ToUnstructured(obj client.Object) (*unstructured.Unstructured, error) {
+	if u, ok := obj.(*unstructured.Unstructured); ok {
+		return u, nil
+	}
+
 	data, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 	if err != nil {
 		return nil, fmt.Errorf("unable to convert object %T to unstructured: %w", obj, err)
@@ -74,12 +78,6 @@ func ObjectFromUnstructured(s *runtime.Scheme, obj *unstructured.Unstructured, i
 	err = EnsureGroupVersionKind(s, intoObj)
 	if err != nil {
 		return fmt.Errorf("unable to ensure GroupVersionKind: %w", err)
-	}
-
-	// Validate that the GroupVersionKind is known in the scheme
-	gvk := intoObj.GetObjectKind().GroupVersionKind()
-	if _, err := s.New(gvk); err != nil {
-		return fmt.Errorf("unable to create object for GVK %s: %w", gvk, err)
 	}
 
 	return nil

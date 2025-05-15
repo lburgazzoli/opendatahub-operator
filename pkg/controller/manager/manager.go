@@ -18,16 +18,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
-// CacheOption is a function that configures cache-specific options
 type CacheOption func(*cacheOptions)
 
-// cacheOptions configures cache-specific behavior
 type cacheOptions struct {
-	// localCacheGVKs is a set of GVKs that should use this cache
 	localCacheGVKs map[schema.GroupVersionKind]struct{}
 }
 
-// WithLocalTypes configures which GVKs should use this cache
 func WithLocalTypes(gvks ...schema.GroupVersionKind) CacheOption {
 	return func(o *cacheOptions) {
 		for _, gvk := range gvks {
@@ -36,22 +32,15 @@ func WithLocalTypes(gvks ...schema.GroupVersionKind) CacheOption {
 	}
 }
 
-// options configures the Manager
 type options struct {
-	// cache is a custom cache to use instead of the one from the delegate manager
-	cache cache.Cache
-	// cacheOpts contains the configuration for the custom cache
-	cacheOpts *cacheOptions
-	// typedGVKs is a set of GVKs that should be handled as typed objects
-	typedGVKs map[schema.GroupVersionKind]struct{}
-	// unstructuredGVKs is a set of GVKs that should be handled as unstructured objects
+	cache            cache.Cache
+	cacheOpts        *cacheOptions
+	typedGVKs        map[schema.GroupVersionKind]struct{}
 	unstructuredGVKs map[schema.GroupVersionKind]struct{}
 }
 
-// Option is a function that configures options
 type Option func(*options)
 
-// WithCache sets a custom cache for the Manager with specific cache options
 func WithCache(cache cache.Cache, opts ...CacheOption) Option {
 	return func(o *options) {
 		o.cache = cache
@@ -64,7 +53,6 @@ func WithCache(cache cache.Cache, opts ...CacheOption) Option {
 	}
 }
 
-// WithTypedTypes configures GVKs that should be handled as typed objects
 func WithTypedTypes(gvks ...schema.GroupVersionKind) Option {
 	return func(o *options) {
 		for _, gvk := range gvks {
@@ -73,7 +61,6 @@ func WithTypedTypes(gvks ...schema.GroupVersionKind) Option {
 	}
 }
 
-// WithUnstructuredTypes configures GVKs that should be handled as unstructured objects
 func WithUnstructuredTypes(gvks ...schema.GroupVersionKind) Option {
 	return func(o *options) {
 		for _, gvk := range gvks {
@@ -82,17 +69,12 @@ func WithUnstructuredTypes(gvks ...schema.GroupVersionKind) Option {
 	}
 }
 
-// Manager implements manager.Manager by delegating to an underlying manager.Manager
-// This allows for extension or interception of manager behavior.
 type Manager struct {
-	delegate manager.Manager
-	cache    cache.Cache
-	client   client.Client
-	// cacheOpts contains the configuration for the custom cache
-	cacheOpts *cacheOptions
-	// typedGVKs is a set of GVKs that should be handled as typed objects
-	typedGVKs map[schema.GroupVersionKind]struct{}
-	// unstructuredGVKs is a set of GVKs that should be handled as unstructured objects
+	delegate         manager.Manager
+	cache            cache.Cache
+	client           client.Client
+	cacheOpts        *cacheOptions
+	typedGVKs        map[schema.GroupVersionKind]struct{}
 	unstructuredGVKs map[schema.GroupVersionKind]struct{}
 }
 
@@ -114,24 +96,21 @@ func New(delegate manager.Manager, opts ...Option) *Manager {
 		unstructuredGVKs: options.unstructuredGVKs,
 	}
 
-	m.client = NewClient(delegate.GetClient(), &m)
+	m.client = NewClient(&m, delegate.GetClient())
 
 	return &m
 }
 
-// IsTypedObject returns true if the given GVK should be handled as a typed object
 func (d *Manager) IsTypedObject(gvk schema.GroupVersionKind) bool {
 	_, ok := d.typedGVKs[gvk]
 	return ok
 }
 
-// IsUnstructuredObject returns true if the given GVK should be handled as an unstructured object
 func (d *Manager) IsUnstructuredObject(gvk schema.GroupVersionKind) bool {
 	_, ok := d.unstructuredGVKs[gvk]
 	return ok
 }
 
-// GetTypedGVKs returns a slice of all GVKs that should be handled as typed objects
 func (d *Manager) GetTypedGVKs() []schema.GroupVersionKind {
 	out := make([]schema.GroupVersionKind, 0, len(d.typedGVKs))
 	for k := range d.typedGVKs {
@@ -140,7 +119,6 @@ func (d *Manager) GetTypedGVKs() []schema.GroupVersionKind {
 	return out
 }
 
-// GetUnstructuredGVKs returns a slice of all GVKs that should be handled as unstructured objects
 func (d *Manager) GetUnstructuredGVKs() []schema.GroupVersionKind {
 	out := make([]schema.GroupVersionKind, 0, len(d.unstructuredGVKs))
 	for k := range d.unstructuredGVKs {
@@ -149,7 +127,6 @@ func (d *Manager) GetUnstructuredGVKs() []schema.GroupVersionKind {
 	return out
 }
 
-// Manager interface methods
 func (d *Manager) Add(r manager.Runnable) error {
 	return d.delegate.Add(r)
 }
@@ -186,7 +163,6 @@ func (d *Manager) GetControllerOptions() config.Controller {
 	return d.delegate.GetControllerOptions()
 }
 
-// Cluster interface methods
 func (d *Manager) GetHTTPClient() *http.Client {
 	return d.delegate.GetHTTPClient()
 }

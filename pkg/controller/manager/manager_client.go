@@ -5,8 +5,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -15,17 +13,15 @@ import (
 
 var _ client.Client = (*Client)(nil)
 
-// Client wraps a client.Client to adapt Get and List operations based on the manager's configuration
 type Client struct {
 	client  client.Client
 	manager *Manager
 }
 
-// NewClient returns a new Client that wraps the given client.Client
-func NewClient(c client.Client, m *Manager) *Client {
+func NewClient(m *Manager, c client.Client) *Client {
 	return &Client{
-		client:  c,
 		manager: m,
+		client:  c,
 	}
 }
 
@@ -38,28 +34,33 @@ func (c *Client) Get(
 	gvk := out.GetObjectKind().GroupVersionKind()
 
 	switch {
+
+	case c.manager.IsTypedObject(gvk):
+		return c.client.Get(ctx, key, out, opts...)
+
 	case c.manager.IsUnstructuredObject(gvk):
-		u := &unstructured.Unstructured{}
-		u.SetGroupVersionKind(gvk)
+		u, err := ToUnstructured(c.Scheme(), out)
+		if err != nil {
+			return err
+		}
 
 		if err := c.client.Get(ctx, key, u, opts...); err != nil {
 			return err
 		}
 
-		return resources.ObjectFromUnstructured(c.Scheme(), u, out)
-
-	case c.manager.IsTypedObject(gvk):
-		return c.client.Get(ctx, key, out, opts...)
+		return FromUnstructured(c.Scheme(), u, out)
 
 	default:
-		p := &metav1.PartialObjectMetadata{}
-		p.SetGroupVersionKind(gvk)
+		p, err := ToPartial(c.Scheme(), out)
+		if err != nil {
+			return err
+		}
 
 		if err := c.client.Get(ctx, key, p, opts...); err != nil {
 			return err
 		}
 
-		return resources.FromPartialObjectMetadata(p, out)
+		return FromPartial(c.Scheme(), p, out)
 	}
 }
 
@@ -74,28 +75,32 @@ func (c *Client) List(
 	}
 
 	switch {
-	case c.manager.IsUnstructuredObject(gvk):
-		l := unstructured.UnstructuredList{}
-		l.SetGroupVersionKind(gvk)
-
-		if err := c.client.List(ctx, &l, opts...); err != nil {
-			return err
-		}
-
-		return resources.UnstructuredListToObjectList(c.Scheme(), l, out)
-
 	case c.manager.IsTypedObject(gvk):
 		return c.client.List(ctx, out, opts...)
 
-	default:
-		l := metav1.PartialObjectMetadataList{}
-		l.SetGroupVersionKind(gvk)
-
-		if err := c.client.List(ctx, &l, opts...); err != nil {
+	case c.manager.IsUnstructuredObject(gvk):
+		l, err := ToUnstructuredList(c.Scheme(), out)
+		if err != nil {
 			return err
 		}
 
-		return resources.FromPartialObjectMetadataList(c.Scheme(), l, out)
+		if err := c.client.List(ctx, l, opts...); err != nil {
+			return err
+		}
+
+		return FromUnstructuredList(c.Scheme(), *l, out)
+
+	default:
+		l, err := ToPartialList(c.Scheme(), out)
+		if err != nil {
+			return err
+		}
+
+		if err := c.client.List(ctx, l, opts...); err != nil {
+			return err
+		}
+
+		return FromPartialList(c.Scheme(), *l, out)
 	}
 }
 
