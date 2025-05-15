@@ -10,6 +10,8 @@ import (
 	"io"
 	"slices"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+
 	"github.com/davecgh/go-spew/spew"
 	routev1 "github.com/openshift/api/route/v1"
 	"gopkg.in/yaml.v3"
@@ -620,4 +622,154 @@ func ListAvailableAPIResources(
 	}
 
 	return items, nil
+}
+
+// ToPartialObjectMetadata converts any client.Object to a PartialObjectMetadata
+// preserving all metadata fields. If the input object is already a PartialObjectMetadata,
+// it is returned as is.
+func ToPartialObjectMetadata(obj client.Object) *metav1.PartialObjectMetadata {
+	// If the object is already a PartialObjectMetadata, return it directly
+	if partial, ok := obj.(*metav1.PartialObjectMetadata); ok {
+		return partial
+	}
+
+	partial := metav1.PartialObjectMetadata{}
+	partial.SetGroupVersionKind(obj.GetObjectKind().GroupVersionKind())
+	partial.SetName(obj.GetName())
+	partial.SetNamespace(obj.GetNamespace())
+	partial.SetLabels(obj.GetLabels())
+	partial.SetAnnotations(obj.GetAnnotations())
+	partial.SetOwnerReferences(obj.GetOwnerReferences())
+	partial.SetFinalizers(obj.GetFinalizers())
+	partial.SetGeneration(obj.GetGeneration())
+	partial.SetResourceVersion(obj.GetResourceVersion())
+	partial.SetUID(obj.GetUID())
+	partial.SetCreationTimestamp(obj.GetCreationTimestamp())
+	partial.SetDeletionTimestamp(obj.GetDeletionTimestamp())
+	partial.SetDeletionGracePeriodSeconds(obj.GetDeletionGracePeriodSeconds())
+
+	return &partial
+}
+
+// ToPartialObjectMetadataList converts a list of client.Objects to a PartialObjectMetadataList
+func ToPartialObjectMetadataList(items []client.Object, gvk schema.GroupVersionKind) *metav1.PartialObjectMetadataList {
+	list := metav1.PartialObjectMetadataList{}
+	list.SetGroupVersionKind(gvk)
+
+	partialItems := make([]metav1.PartialObjectMetadata, 0, len(items))
+	for _, obj := range items {
+		partialItems = append(partialItems, *ToPartialObjectMetadata(obj))
+	}
+
+	list.Items = partialItems
+
+	return &list
+}
+
+func UnstructuredListToObjectList(
+	s *runtime.Scheme,
+	in unstructured.UnstructuredList,
+	out client.ObjectList,
+) error {
+	items := make([]runtime.Object, 0, len(in.Items))
+	for _, u := range in.Items {
+		obj, err := s.New(u.GetObjectKind().GroupVersionKind())
+		if err != nil {
+			return err
+		}
+
+		o, ok := obj.(client.Object)
+		if !ok {
+			return errors.New("not a client.Object")
+		}
+
+		if err := ObjectFromUnstructured(s, &u, o); err != nil {
+			return err
+		}
+
+		items = append(items, obj)
+	}
+
+	return meta.SetList(out, items)
+}
+
+func GetGroupVersionKindForList(s *runtime.Scheme, list client.ObjectList) (schema.GroupVersionKind, error) {
+	gvk, unversioned, err := s.ObjectKinds(list)
+	if err != nil {
+		return schema.GroupVersionKind{}, err
+	}
+
+	switch {
+	case len(gvk) == 0:
+		return schema.GroupVersionKind{}, fmt.Errorf("no GVK found for list type %T", list)
+	case unversioned:
+		return schema.GroupVersionKind{}, fmt.Errorf("unversioned type not supported: %T", list)
+	default:
+		// Get the GVK of the items in the list
+		itemsGVK := gvk[0]
+		itemsGVK.Kind = itemsGVK.Kind[:len(itemsGVK.Kind)-4] // Remove "List" suffix
+		return itemsGVK, nil
+	}
+}
+
+// FromPartialObjectMetadata converts a PartialObjectMetadata back to a client.Object.
+// It creates a new instance of the target type and copies all metadata fields.
+// If the input object is already of the target type, it is returned as is.
+func FromPartialObjectMetadata(partial *metav1.PartialObjectMetadata, target client.Object) error {
+	// If the target is already a PartialObjectMetadata, just copy the data
+	if targetPartial, ok := target.(*metav1.PartialObjectMetadata); ok {
+		*targetPartial = *partial
+		return nil
+	}
+
+	// Ensure the target has the same GVK
+	target.GetObjectKind().SetGroupVersionKind(partial.GetObjectKind().GroupVersionKind())
+
+	// Copy all metadata fields
+	target.SetName(partial.GetName())
+	target.SetNamespace(partial.GetNamespace())
+	target.SetLabels(partial.GetLabels())
+	target.SetAnnotations(partial.GetAnnotations())
+	target.SetOwnerReferences(partial.GetOwnerReferences())
+	target.SetFinalizers(partial.GetFinalizers())
+	target.SetGeneration(partial.GetGeneration())
+	target.SetResourceVersion(partial.GetResourceVersion())
+	target.SetUID(partial.GetUID())
+	target.SetCreationTimestamp(partial.GetCreationTimestamp())
+	target.SetDeletionTimestamp(partial.GetDeletionTimestamp())
+	target.SetDeletionGracePeriodSeconds(partial.GetDeletionGracePeriodSeconds())
+
+	return nil
+}
+
+// FromPartialObjectMetadataList converts a PartialObjectMetadataList to a list of client.Objects.
+// It creates new instances of the target type for each item and copies all metadata fields.
+func FromPartialObjectMetadataList(
+	scheme *runtime.Scheme,
+	in metav1.PartialObjectMetadataList,
+	out client.ObjectList,
+) error {
+	items := make([]runtime.Object, 0, len(in.Items))
+	for _, partial := range in.Items {
+		// Create a new instance of the target type
+		obj, err := scheme.New(partial.GetObjectKind().GroupVersionKind())
+		if err != nil {
+			return fmt.Errorf("failed to create new instance for GVK %s: %w", partial.GetObjectKind().GroupVersionKind(), err)
+		}
+
+		// Cast to client.Object to access metadata methods
+		clientObj, ok := obj.(client.Object)
+		if !ok {
+			return fmt.Errorf("object type %T does not implement client.Object", obj)
+		}
+
+		// Copy metadata from partial object
+		if err := FromPartialObjectMetadata(&partial, clientObj); err != nil {
+			return fmt.Errorf("failed to convert partial object: %w", err)
+		}
+
+		items = append(items, clientObj)
+	}
+
+	return meta.SetList(out, items)
 }
