@@ -73,7 +73,7 @@ func Dynamic(predicates ...DynamicPredicate) WatchOpts {
 }
 
 type ReconcilerBuilder[T common.PlatformObject] struct {
-	mgr                 ctrl.Manager
+	mgr                 types.ControllerManager
 	input               forInput
 	watches             []watchInput
 	predicates          []predicate.Predicate
@@ -85,7 +85,7 @@ type ReconcilerBuilder[T common.PlatformObject] struct {
 	dependantConditions []string
 }
 
-func ReconcilerFor[T common.PlatformObject](mgr ctrl.Manager, object T, opts ...builder.ForOption) *ReconcilerBuilder[T] {
+func ReconcilerFor[T common.PlatformObject](mgr types.ControllerManager, object T, opts ...builder.ForOption) *ReconcilerBuilder[T] {
 	crb := ReconcilerBuilder[T]{
 		mgr:                 mgr,
 		happyCondition:      status.ConditionTypeReady,
@@ -254,10 +254,29 @@ func (b *ReconcilerBuilder[T]) Build(_ context.Context) (*Reconciler, error) {
 			continue
 		}
 
-		c = c.Watches(
-			b.watches[i].object,
-			b.watches[i].eventHandler,
-			builder.WithPredicates(b.watches[i].predicates...),
+		gvk, err := resources.GetGroupVersionKindForObject(b.mgr.GetScheme(), b.watches[i].object)
+		if err != nil {
+			return nil, err
+		}
+
+		var wo client.Object
+
+		switch {
+		case b.mgr.IsTypedObject(gvk):
+			wo = b.watches[i].object
+		case b.mgr.IsUnstructuredObject(gvk):
+			wo = resources.GvkToUnstructured(gvk)
+		default:
+			wo = resources.GvkToPartial(gvk)
+		}
+
+		c = c.WatchesRawSource(
+			source.Kind(
+				b.mgr.GetCacheForType(gvk),
+				wo,
+				b.watches[i].eventHandler,
+				b.watches[i].predicates...,
+			),
 		)
 	}
 
@@ -281,7 +300,30 @@ func (b *ReconcilerBuilder[T]) Build(_ context.Context) (*Reconciler, error) {
 	r.AddAction(
 		newDynamicWatchAction(
 			func(obj client.Object, eventHandler handler.EventHandler, predicates ...predicate.Predicate) error {
-				return cc.Watch(source.Kind(b.mgr.GetCache(), obj, eventHandler, predicates...))
+				gvk, err := resources.GetGroupVersionKindForObject(b.mgr.GetScheme(), obj)
+				if err != nil {
+					return err
+				}
+
+				var wo client.Object
+
+				switch {
+				case b.mgr.IsTypedObject(gvk):
+					wo = obj
+				case b.mgr.IsUnstructuredObject(gvk):
+					wo = resources.GvkToUnstructured(gvk)
+				default:
+					wo = resources.GvkToPartial(gvk)
+				}
+
+				return cc.Watch(
+					source.Kind(
+						b.mgr.GetCacheForType(gvk),
+						wo,
+						eventHandler,
+						predicates...,
+					),
+				)
 			},
 			b.watches,
 		),

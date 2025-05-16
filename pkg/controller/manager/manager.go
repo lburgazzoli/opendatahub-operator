@@ -2,9 +2,16 @@ package manager
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/source"
+
 	"github.com/go-logr/logr"
+	ctrlclient "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/client"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -21,13 +28,13 @@ import (
 type CacheOption func(*cacheOptions)
 
 type cacheOptions struct {
-	localCacheGVKs map[schema.GroupVersionKind]struct{}
+	sharedCacheGVKs map[schema.GroupVersionKind]struct{}
 }
 
-func WithLocalTypes(gvks ...schema.GroupVersionKind) CacheOption {
+func WithSharedTypes(gvks ...schema.GroupVersionKind) CacheOption {
 	return func(o *cacheOptions) {
 		for _, gvk := range gvks {
-			o.localCacheGVKs[gvk] = struct{}{}
+			o.sharedCacheGVKs[gvk] = struct{}{}
 		}
 	}
 }
@@ -45,7 +52,7 @@ func WithCache(cache cache.Cache, opts ...CacheOption) Option {
 	return func(o *options) {
 		o.cache = cache
 		o.cacheOpts = &cacheOptions{
-			localCacheGVKs: make(map[schema.GroupVersionKind]struct{}),
+			sharedCacheGVKs: make(map[schema.GroupVersionKind]struct{}),
 		}
 		for _, opt := range opts {
 			opt(o.cacheOpts)
@@ -79,7 +86,7 @@ type Manager struct {
 }
 
 // New returns a new Manager that wraps the given manager.Manager
-func New(delegate manager.Manager, opts ...Option) *Manager {
+func New(delegate manager.Manager, opts ...Option) (*Manager, error) {
 	options := &options{
 		typedGVKs:        make(map[schema.GroupVersionKind]struct{}),
 		unstructuredGVKs: make(map[schema.GroupVersionKind]struct{}),
@@ -90,132 +97,260 @@ func New(delegate manager.Manager, opts ...Option) *Manager {
 
 	m := Manager{
 		delegate:         delegate,
+		client:           delegate.GetClient(),
 		cache:            options.cache,
 		cacheOpts:        options.cacheOpts,
 		typedGVKs:        options.typedGVKs,
 		unstructuredGVKs: options.unstructuredGVKs,
 	}
 
-	m.client = NewClient(&m, delegate.GetClient())
+	if m.cache != nil {
+		c, err := client.New(delegate.GetConfig(), client.Options{
+			HTTPClient: delegate.GetHTTPClient(),
+			Scheme:     delegate.GetScheme(),
+			Mapper:     delegate.GetRESTMapper(),
+			Cache: &client.CacheOptions{
+				Reader: m.cache,
+			},
+		})
 
-	return &m
+		if err != nil {
+			return nil, fmt.Errorf("failed to create client: %w", err)
+		}
+
+		m.client = ctrlclient.New(delegate.GetClient()).WithFuncs(ctrlclient.Funcs{
+			Get:  m.get(c),
+			List: m.list(c),
+		})
+	}
+
+	return &m, nil
 }
 
-func (d *Manager) IsTypedObject(gvk schema.GroupVersionKind) bool {
-	_, ok := d.typedGVKs[gvk]
+func (m *Manager) IsTypedObject(gvk schema.GroupVersionKind) bool {
+	_, ok := m.typedGVKs[gvk]
 	return ok
 }
 
-func (d *Manager) IsUnstructuredObject(gvk schema.GroupVersionKind) bool {
-	_, ok := d.unstructuredGVKs[gvk]
+func (m *Manager) IsUnstructuredObject(gvk schema.GroupVersionKind) bool {
+	_, ok := m.unstructuredGVKs[gvk]
 	return ok
 }
 
-func (d *Manager) GetTypedGVKs() []schema.GroupVersionKind {
-	out := make([]schema.GroupVersionKind, 0, len(d.typedGVKs))
-	for k := range d.typedGVKs {
-		out = append(out, k)
-	}
-	return out
+func (m *Manager) Add(r manager.Runnable) error {
+	return m.delegate.Add(r)
 }
 
-func (d *Manager) GetUnstructuredGVKs() []schema.GroupVersionKind {
-	out := make([]schema.GroupVersionKind, 0, len(d.unstructuredGVKs))
-	for k := range d.unstructuredGVKs {
-		out = append(out, k)
-	}
-	return out
+func (m *Manager) Elected() <-chan struct{} {
+	return m.delegate.Elected()
 }
 
-func (d *Manager) Add(r manager.Runnable) error {
-	return d.delegate.Add(r)
+func (m *Manager) AddMetricsServerExtraHandler(path string, handler http.Handler) error {
+	return m.delegate.AddMetricsServerExtraHandler(path, handler)
 }
 
-func (d *Manager) Elected() <-chan struct{} {
-	return d.delegate.Elected()
+func (m *Manager) AddHealthzCheck(name string, check healthz.Checker) error {
+	return m.delegate.AddHealthzCheck(name, check)
 }
 
-func (d *Manager) AddMetricsServerExtraHandler(path string, handler http.Handler) error {
-	return d.delegate.AddMetricsServerExtraHandler(path, handler)
+func (m *Manager) AddReadyzCheck(name string, check healthz.Checker) error {
+	return m.delegate.AddReadyzCheck(name, check)
 }
 
-func (d *Manager) AddHealthzCheck(name string, check healthz.Checker) error {
-	return d.delegate.AddHealthzCheck(name, check)
+func (m *Manager) Start(ctx context.Context) error {
+	return m.delegate.Start(ctx)
 }
 
-func (d *Manager) AddReadyzCheck(name string, check healthz.Checker) error {
-	return d.delegate.AddReadyzCheck(name, check)
+func (m *Manager) GetWebhookServer() webhook.Server {
+	return m.delegate.GetWebhookServer()
 }
 
-func (d *Manager) Start(ctx context.Context) error {
-	return d.delegate.Start(ctx)
+func (m *Manager) GetLogger() logr.Logger {
+	return m.delegate.GetLogger()
 }
 
-func (d *Manager) GetWebhookServer() webhook.Server {
-	return d.delegate.GetWebhookServer()
+func (m *Manager) GetControllerOptions() config.Controller {
+	return m.delegate.GetControllerOptions()
 }
 
-func (d *Manager) GetLogger() logr.Logger {
-	return d.delegate.GetLogger()
+func (m *Manager) GetHTTPClient() *http.Client {
+	return m.delegate.GetHTTPClient()
 }
 
-func (d *Manager) GetControllerOptions() config.Controller {
-	return d.delegate.GetControllerOptions()
-}
-
-func (d *Manager) GetHTTPClient() *http.Client {
-	return d.delegate.GetHTTPClient()
-}
-
-func (d *Manager) GetConfig() *rest.Config {
-	return d.delegate.GetConfig()
+func (m *Manager) GetConfig() *rest.Config {
+	return m.delegate.GetConfig()
 }
 
 // GetCache returns the cache to use for the given GVK
-func (d *Manager) GetCache() cache.Cache {
-	if d.cache == nil {
-		return d.delegate.GetCache()
+func (m *Manager) GetCache() cache.Cache {
+	if m.cache == nil {
+		return m.delegate.GetCache()
 	}
-	return d.cache
+	return m.cache
 }
 
 // GetCacheForType returns the cache to use for the given GVK
-func (d *Manager) GetCacheForType(gvk schema.GroupVersionKind) cache.Cache {
-	if d.cache == nil || d.cacheOpts == nil {
-		return d.delegate.GetCache()
+func (m *Manager) GetCacheForType(gvk schema.GroupVersionKind) cache.Cache {
+	if m.cache == nil || m.cacheOpts == nil {
+		return m.delegate.GetCache()
 	}
 
-	if _, ok := d.cacheOpts.localCacheGVKs[gvk]; ok {
-		return d.cache
+	if _, ok := m.cacheOpts.sharedCacheGVKs[gvk]; ok {
+		return m.delegate.GetCache()
 	}
-	return d.delegate.GetCache()
+	return m.cache
 }
 
-// GetCacheForObject returns the cache to use for the given object
-func (d *Manager) GetCacheForObject(obj runtime.Object) cache.Cache {
-	return d.GetCacheForType(obj.GetObjectKind().GroupVersionKind())
+func (m *Manager) GetScheme() *runtime.Scheme {
+	return m.GetClient().Scheme()
 }
 
-func (d *Manager) GetScheme() *runtime.Scheme {
-	return d.GetClient().Scheme()
+func (m *Manager) GetClient() client.Client {
+	return m.client
 }
 
-func (d *Manager) GetClient() client.Client {
-	return d.delegate.GetClient()
+func (m *Manager) GetFieldIndexer() client.FieldIndexer {
+	return m.delegate.GetFieldIndexer()
 }
 
-func (d *Manager) GetFieldIndexer() client.FieldIndexer {
-	return d.delegate.GetFieldIndexer()
+func (m *Manager) GetEventRecorderFor(name string) record.EventRecorder {
+	return m.delegate.GetEventRecorderFor(name)
 }
 
-func (d *Manager) GetEventRecorderFor(name string) record.EventRecorder {
-	return d.delegate.GetEventRecorderFor(name)
+func (m *Manager) GetRESTMapper() meta.RESTMapper {
+	return m.delegate.GetRESTMapper()
 }
 
-func (d *Manager) GetRESTMapper() meta.RESTMapper {
-	return d.delegate.GetRESTMapper()
+func (m *Manager) GetAPIReader() client.Reader {
+	return m.delegate.GetAPIReader()
 }
 
-func (d *Manager) GetAPIReader() client.Reader {
-	return d.delegate.GetAPIReader()
+func (m *Manager) Source(
+	obj client.Object,
+	eh handler.EventHandler,
+	predicates ...predicate.Predicate,
+) source.Source {
+	// assuming gvk is always set to the object
+	gvk := obj.GetObjectKind().GroupVersionKind()
+
+	var wo client.Object
+
+	switch {
+	case m.IsTypedObject(gvk):
+		wo = obj
+	case m.IsUnstructuredObject(gvk):
+		wo = resources.GvkToUnstructured(gvk)
+	default:
+		wo = resources.GvkToPartial(gvk)
+	}
+
+	return source.Kind(
+		m.GetCacheForType(gvk),
+		wo,
+		eh,
+		predicates...,
+	)
+}
+
+func (m *Manager) get(xc client.Client) func(
+	cli client.Client,
+	ctx context.Context,
+	key client.ObjectKey,
+	out client.Object,
+	opts ...client.GetOption,
+) error {
+	return func(
+		cli client.Client,
+		ctx context.Context,
+		key client.ObjectKey,
+		out client.Object,
+		opts ...client.GetOption,
+	) error {
+		gvk := out.GetObjectKind().GroupVersionKind()
+
+		if _, ok := m.cacheOpts.sharedCacheGVKs[gvk]; ok {
+			return cli.Get(ctx, key, out, opts...)
+		}
+
+		switch {
+		case m.IsTypedObject(gvk):
+			return xc.Get(ctx, key, out, opts...)
+
+		case m.IsUnstructuredObject(gvk):
+			u, err := ToUnstructured(xc.Scheme(), out)
+			if err != nil {
+				return err
+			}
+
+			if err := xc.Get(ctx, key, u, opts...); err != nil {
+				return err
+			}
+
+			return FromUnstructured(xc.Scheme(), u, out)
+
+		default:
+			p, err := ToPartial(xc.Scheme(), out)
+			if err != nil {
+				return err
+			}
+
+			if err := xc.Get(ctx, key, p, opts...); err != nil {
+				return err
+			}
+
+			return FromPartial(xc.Scheme(), p, out)
+		}
+	}
+}
+
+func (m *Manager) list(xc client.Client) func(
+	cli client.Client,
+	ctx context.Context,
+	out client.ObjectList,
+	opts ...client.ListOption,
+) error {
+	return func(
+		cli client.Client,
+		ctx context.Context,
+		out client.ObjectList,
+		opts ...client.ListOption,
+	) error {
+		gvk, err := resources.GetGroupVersionKindForList(m.client.Scheme(), out)
+		if err != nil {
+			return err
+		}
+
+		if _, ok := m.cacheOpts.sharedCacheGVKs[gvk]; ok {
+			return cli.List(ctx, out, opts...)
+		}
+
+		switch {
+		case m.IsTypedObject(gvk):
+			return xc.List(ctx, out, opts...)
+
+		case m.IsUnstructuredObject(gvk):
+			l, err := ToUnstructuredList(xc.Scheme(), out)
+			if err != nil {
+				return err
+			}
+
+			if err := xc.List(ctx, l, opts...); err != nil {
+				return err
+			}
+
+			return FromUnstructuredList(xc.Scheme(), *l, out)
+
+		default:
+			l, err := ToPartialList(xc.Scheme(), out)
+			if err != nil {
+				return err
+			}
+
+			if err := xc.List(ctx, l, opts...); err != nil {
+				return err
+			}
+
+			return FromPartialList(xc.Scheme(), *l, out)
+		}
+	}
 }
