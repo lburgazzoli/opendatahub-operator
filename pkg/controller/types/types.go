@@ -6,19 +6,18 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	dsciv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v1"
@@ -44,13 +43,13 @@ type Controller interface {
 type ControllerManager interface {
 	manager.Manager
 
-	IsTypedObject(schema.GroupVersionKind) bool
+	IsTypedObject(s schema.GroupVersionKind) bool
 
-	IsUnstructuredObject(schema.GroupVersionKind) bool
+	IsUnstructuredObject(s schema.GroupVersionKind) bool
 
-	GetCacheForType(schema.GroupVersionKind) cache.Cache
+	GetCacheForType(s schema.GroupVersionKind) cache.Cache
 
-	Source(client.Object, handler.EventHandler, ...predicate.Predicate) source.Source
+	Source(obj client.Object, eh handler.EventHandler, predicates ...predicate.Predicate) source.Source
 }
 
 type ResourceObject interface {

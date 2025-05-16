@@ -10,13 +10,12 @@ import (
 	"io"
 	"slices"
 
-	"k8s.io/apimachinery/pkg/api/meta"
-
 	"github.com/davecgh/go-spew/spew"
 	routev1 "github.com/openshift/api/route/v1"
 	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,7 +30,7 @@ import (
 
 const PlatformFieldOwner = "platform.opendatahub.io"
 
-func ToUnstructured(obj client.Object) (*unstructured.Unstructured, error) {
+func ToUnstructured(obj any) (*unstructured.Unstructured, error) {
 	if u, ok := obj.(*unstructured.Unstructured); ok {
 		return u, nil
 	}
@@ -649,7 +648,6 @@ func ToPartialObjectMetadata(obj client.Object) *metav1.PartialObjectMetadata {
 	return &partial
 }
 
-// ToPartialObjectMetadataList converts a list of client.Objects to a PartialObjectMetadataList
 func ToPartialObjectMetadataList(items []client.Object, gvk schema.GroupVersionKind) *metav1.PartialObjectMetadataList {
 	list := metav1.PartialObjectMetadataList{}
 	list.SetGroupVersionKind(gvk)

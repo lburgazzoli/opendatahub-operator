@@ -9,11 +9,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	dscv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v1"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 )
 
 type MockComponentHandler struct {
@@ -36,7 +36,7 @@ func (m *MockComponentHandler) NewCRObject(dsc *dscv1.DataScienceCluster) common
 	return m.Called(dsc).Get(0).(common.PlatformObject)
 }
 
-func (m *MockComponentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager) error {
+func (m *MockComponentHandler) NewComponentReconciler(ctx context.Context, mgr types.ControllerManager) error {
 	return m.Called(ctx, mgr).Error(0)
 }
 

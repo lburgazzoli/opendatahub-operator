@@ -68,6 +68,7 @@ import (
 	dsciv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v1"
 	featurev1 "github.com/opendatahub-io/opendatahub-operator/v2/api/features/v1"
 	serviceApi "github.com/opendatahub-io/opendatahub-operator/v2/api/services/v1alpha1"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components"
 	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	dscctrl "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/datasciencecluster"
 	dscictrl "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/dscinitialization"
@@ -291,9 +292,14 @@ func main() { //nolint:funlen,maintidx,gocyclo
 			},
 		},
 		DefaultTransform: func(in any) (any, error) {
-			// Nilcheck managed fields to avoid hitting https://github.com/kubernetes/kubernetes/issues/124337
+			// Remove managed fields for all objects
 			if obj, err := meta.Accessor(in); err == nil && obj.GetManagedFields() != nil {
 				obj.SetManagedFields(nil)
+			}
+
+			// Handle specific types that need additional transformations
+			if obj, ok := in.(*apiextensionsv1.CustomResourceDefinition); ok {
+				obj.Spec = apiextensionsv1.CustomResourceDefinitionSpec{}
 			}
 
 			return in, nil
@@ -368,7 +374,11 @@ func main() { //nolint:funlen,maintidx,gocyclo
 	}
 
 	// Initialize component reconcilers
-	if err = CreateComponentReconcilers(ctx, mgr); err != nil {
+	if err = components.CreateComponentReconcilers(
+		ctx,
+		mgr,
+		components.WithDefaultNamespaces(oDHCache),
+	); err != nil {
 		setupLog.Error(err, "unable to create component controllers")
 		os.Exit(1)
 	}
@@ -521,19 +531,6 @@ func createODHGeneralCacheConfig(ctx context.Context, cli client.Client, platfor
 		namespaceConfigs[n] = cache.Config{}
 	}
 	return namespaceConfigs, nil
-}
-
-func CreateComponentReconcilers(ctx context.Context, mgr manager.Manager) error {
-	l := logf.FromContext(ctx)
-
-	return cr.ForEach(func(ch cr.ComponentHandler) error {
-		l.Info("creating reconciler", "type", "component", "name", ch.GetName())
-		if err := ch.NewComponentReconciler(ctx, mgr); err != nil {
-			return fmt.Errorf("error creating %s component reconciler: %w", ch.GetName(), err)
-		}
-
-		return nil
-	})
 }
 
 func CreateServiceReconcilers(ctx context.Context, mgr manager.Manager) error {

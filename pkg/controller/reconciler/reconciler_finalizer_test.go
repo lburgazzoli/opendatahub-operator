@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/onsi/gomega"
+	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -29,6 +30,7 @@ import (
 
 	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
 	dsciv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v1"
+	manager2 "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/manager"
 	odhtypes "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 )
 
@@ -84,7 +86,9 @@ func (f *MockManager) GetHTTPClient() *http.Client { return &http.Client{} }
 func (f *MockManager) GetWebhookServer() webhook.Server { return nil }
 
 //nolint:ireturn
-func setupTest(mockDashboard *componentApi.Dashboard) (context.Context, *MockManager, client.WithWatch) {
+func setupTest(t *testing.T, mockDashboard *componentApi.Dashboard) (context.Context, odhtypes.ControllerManager, client.WithWatch) {
+	t.Helper()
+
 	ctx := context.Background()
 
 	scheme := runtime.NewScheme()
@@ -116,7 +120,10 @@ func setupTest(mockDashboard *componentApi.Dashboard) (context.Context, *MockMan
 
 	mockMgr := &MockManager{client: mockClient, scheme: scheme, mapper: mapper}
 
-	return ctx, mockMgr, mockClient
+	m, err := manager2.Wrap(mockMgr)
+	assert.NoError(t, err)
+
+	return ctx, m, mockClient
 }
 
 func TestFinalizer_Add(t *testing.T) {
@@ -132,7 +139,7 @@ func TestFinalizer_Add(t *testing.T) {
 		},
 	}
 
-	ctx, mgr, cli := setupTest(mockDashboard)
+	ctx, mgr, cli := setupTest(t, mockDashboard)
 
 	r, err := ReconcilerFor(mgr, mockDashboard).
 		WithFinalizer(mockFinalizerAction).
@@ -183,7 +190,7 @@ func TestFinalizer_NotPresent(t *testing.T) {
 		},
 	}
 
-	ctx, mgr, cli := setupTest(mockDashboard)
+	ctx, mgr, cli := setupTest(t, mockDashboard)
 
 	r, err := ReconcilerFor(mgr, mockDashboard).Build(ctx)
 	g.Expect(err).ToNot(gomega.HaveOccurred())
@@ -225,7 +232,7 @@ func TestFinalizer_Remove(t *testing.T) {
 		},
 	}
 
-	ctx, mgr, cli := setupTest(mockDashboard)
+	ctx, mgr, cli := setupTest(t, mockDashboard)
 
 	r, err := ReconcilerFor(mgr, mockDashboard).
 		WithFinalizer(mockFinalizerAction).

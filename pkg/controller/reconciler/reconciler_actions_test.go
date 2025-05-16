@@ -9,9 +9,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/rs/xid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
@@ -126,7 +123,7 @@ func TestDynamicWatchAction_Run(t *testing.T) {
 				dynamicPred: test.preds,
 			}}
 
-			mockFn := func(_ client.Object, _ handler.EventHandler, _ ...predicate.Predicate) error {
+			mockFn := func(watchInput) error {
 				return nil
 			}
 
@@ -153,7 +150,7 @@ func TestDynamicWatchAction_Inputs(t *testing.T) {
 	g := NewWithT(t)
 	ctx := context.Background()
 
-	mockFn := func(_ client.Object, _ handler.EventHandler, _ ...predicate.Predicate) error {
+	mockFn := func(_ watchInput) error {
 		return nil
 	}
 
@@ -202,7 +199,7 @@ func TestDynamicWatchAction_NotTwice(t *testing.T) {
 	g := NewWithT(t)
 	ctx := context.Background()
 
-	mockFn := func(_ client.Object, _ handler.EventHandler, _ ...predicate.Predicate) error {
+	mockFn := func(_ watchInput) error {
 		return nil
 	}
 

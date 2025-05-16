@@ -10,11 +10,9 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
@@ -29,15 +27,16 @@ import (
 )
 
 type forInput struct {
-	object  client.Object
-	options []builder.ForOption
-	gvk     schema.GroupVersionKind
+	object     client.Object
+	gvk        schema.GroupVersionKind
+	predicates []predicate.Predicate
 }
 
 type DynamicPredicate func(context.Context, *types.ReconciliationRequest) bool
 
 type watchInput struct {
 	object       client.Object
+	gvk          schema.GroupVersionKind
 	eventHandler handler.EventHandler
 	predicates   []predicate.Predicate
 	owned        bool
@@ -72,6 +71,14 @@ func Dynamic(predicates ...DynamicPredicate) WatchOpts {
 	}
 }
 
+type ForOpts func(input *forInput)
+
+func WithForPredicates(values ...predicate.Predicate) ForOpts {
+	return func(a *forInput) {
+		a.predicates = append(a.predicates, values...)
+	}
+}
+
 type ReconcilerBuilder[T common.PlatformObject] struct {
 	mgr                 types.ControllerManager
 	input               forInput
@@ -85,29 +92,29 @@ type ReconcilerBuilder[T common.PlatformObject] struct {
 	dependantConditions []string
 }
 
-func ReconcilerFor[T common.PlatformObject](mgr types.ControllerManager, object T, opts ...builder.ForOption) *ReconcilerBuilder[T] {
+func ReconcilerFor[T common.PlatformObject](mgr types.ControllerManager, object T, opts ...ForOpts) *ReconcilerBuilder[T] {
 	crb := ReconcilerBuilder[T]{
 		mgr:                 mgr,
 		happyCondition:      status.ConditionTypeReady,
 		dependantConditions: []string{status.ConditionTypeProvisioningSucceeded},
 	}
 
-	gvk, err := mgr.GetClient().GroupVersionKindFor(object)
+	gvk, err := resources.GetGroupVersionKindForObject(mgr.GetScheme(), object)
 	if err != nil {
 		crb.errors = multierror.Append(crb.errors, fmt.Errorf("unable to determine GVK: %w", err))
 	}
 
-	iops := slices.Clone(opts)
-	if len(iops) == 0 {
-		iops = append(iops, builder.WithPredicates(
-			predicates.DefaultPredicate),
-		)
+	crb.input = forInput{
+		object: object,
+		gvk:    gvk,
 	}
 
-	crb.input = forInput{
-		object:  object,
-		options: iops,
-		gvk:     gvk,
+	for _, opt := range opts {
+		opt(&crb.input)
+	}
+
+	if len(crb.input.predicates) == 0 {
+		crb.input.predicates = append(crb.input.predicates, predicates.DefaultPredicate)
 	}
 
 	return &crb
@@ -134,9 +141,16 @@ func (b *ReconcilerBuilder[T]) WithFinalizer(value actions.Fn) *ReconcilerBuilde
 }
 
 func (b *ReconcilerBuilder[T]) Watches(object client.Object, opts ...WatchOpts) *ReconcilerBuilder[T] {
+	gvk, err := resources.GetGroupVersionKindForObject(b.mgr.GetScheme(), object)
+	if err != nil {
+		b.errors = multierror.Append(b.errors, fmt.Errorf("unable to determine GVK: %w", err))
+		return b
+	}
+
 	in := watchInput{}
 	in.object = object
 	in.owned = false
+	in.gvk = gvk
 
 	for _, opt := range opts {
 		opt(&in)
@@ -167,9 +181,16 @@ func (b *ReconcilerBuilder[T]) WatchesGVK(gvk schema.GroupVersionKind, opts ...W
 }
 
 func (b *ReconcilerBuilder[T]) Owns(object client.Object, opts ...WatchOpts) *ReconcilerBuilder[T] {
+	gvk, err := resources.GetGroupVersionKindForObject(b.mgr.GetScheme(), object)
+	if err != nil {
+		b.errors = multierror.Append(b.errors, fmt.Errorf("unable to determine GVK: %w", err))
+		return b
+	}
+
 	in := watchInput{}
 	in.object = object
 	in.owned = true
+	in.gvk = gvk
 
 	for _, opt := range opts {
 		opt(&in)
@@ -222,23 +243,17 @@ func (b *ReconcilerBuilder[T]) Build(_ context.Context) (*Reconciler, error) {
 	}
 
 	c := ctrl.NewControllerManagedBy(b.mgr)
+	c = c.Named(name)
 
-	// automatically add default predicates to the watched API if no
-	// predicates are provided
-	forOpts := b.input.options
-	if len(forOpts) == 0 {
-		forOpts = append(forOpts, builder.WithPredicates(predicate.Or(
-			predicate.GenerationChangedPredicate{},
-			predicate.LabelChangedPredicate{},
-			predicate.AnnotationChangedPredicate{},
-		)))
-	}
+	c = c.WatchesRawSource(b.mgr.Source(
+		b.input.object,
+		&handler.EnqueueRequestForObject{},
+		b.input.predicates...,
+	))
 
-	c = c.For(b.input.object, forOpts...)
-
-	for i := range b.watches {
-		if b.watches[i].owned {
-			kinds, _, err := b.mgr.GetScheme().ObjectKinds(b.watches[i].object)
+	for _, w := range b.watches {
+		if w.owned {
+			kinds, _, err := b.mgr.GetScheme().ObjectKinds(w.object)
 			if err != nil {
 				return nil, err
 			}
@@ -250,34 +265,15 @@ func (b *ReconcilerBuilder[T]) Build(_ context.Context) (*Reconciler, error) {
 
 		// if the watch is dynamic, then the watcher will be registered
 		// at later stage
-		if b.watches[i].dynamic {
+		if w.dynamic {
 			continue
 		}
 
-		gvk, err := resources.GetGroupVersionKindForObject(b.mgr.GetScheme(), b.watches[i].object)
-		if err != nil {
-			return nil, err
-		}
-
-		var wo client.Object
-
-		switch {
-		case b.mgr.IsTypedObject(gvk):
-			wo = b.watches[i].object
-		case b.mgr.IsUnstructuredObject(gvk):
-			wo = resources.GvkToUnstructured(gvk)
-		default:
-			wo = resources.GvkToPartial(gvk)
-		}
-
-		c = c.WatchesRawSource(
-			source.Kind(
-				b.mgr.GetCacheForType(gvk),
-				wo,
-				b.watches[i].eventHandler,
-				b.watches[i].predicates...,
-			),
-		)
+		c = c.WatchesRawSource(b.mgr.Source(
+			w.object,
+			w.eventHandler,
+			w.predicates...,
+		))
 	}
 
 	for i := range b.predicates {
@@ -299,31 +295,12 @@ func (b *ReconcilerBuilder[T]) Build(_ context.Context) (*Reconciler, error) {
 	// internal action
 	r.AddAction(
 		newDynamicWatchAction(
-			func(obj client.Object, eventHandler handler.EventHandler, predicates ...predicate.Predicate) error {
-				gvk, err := resources.GetGroupVersionKindForObject(b.mgr.GetScheme(), obj)
-				if err != nil {
-					return err
-				}
-
-				var wo client.Object
-
-				switch {
-				case b.mgr.IsTypedObject(gvk):
-					wo = obj
-				case b.mgr.IsUnstructuredObject(gvk):
-					wo = resources.GvkToUnstructured(gvk)
-				default:
-					wo = resources.GvkToPartial(gvk)
-				}
-
-				return cc.Watch(
-					source.Kind(
-						b.mgr.GetCacheForType(gvk),
-						wo,
-						eventHandler,
-						predicates...,
-					),
-				)
+			func(in watchInput) error {
+				return cc.Watch(b.mgr.Source(
+					in.object,
+					in.eventHandler,
+					in.predicates...,
+				))
 			},
 			b.watches,
 		),

@@ -1,3 +1,4 @@
+//nolint:ireturn
 package manager
 
 import (
@@ -5,13 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/source"
-
 	"github.com/go-logr/logr"
-	ctrlclient "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/client"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -20,9 +15,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/config"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+
+	ctrlclient "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/client"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
 )
 
 type CacheOption func(*cacheOptions)
@@ -85,8 +86,8 @@ type Manager struct {
 	unstructuredGVKs map[schema.GroupVersionKind]struct{}
 }
 
-// New returns a new Manager that wraps the given manager.Manager
-func New(delegate manager.Manager, opts ...Option) (*Manager, error) {
+// Wrap returns a new Manager that wraps the given manager.Manager.
+func Wrap(delegate manager.Manager, opts ...Option) (*Manager, error) {
 	options := &options{
 		typedGVKs:        make(map[schema.GroupVersionKind]struct{}),
 		unstructuredGVKs: make(map[schema.GroupVersionKind]struct{}),
@@ -181,7 +182,6 @@ func (m *Manager) GetConfig() *rest.Config {
 	return m.delegate.GetConfig()
 }
 
-// GetCache returns the cache to use for the given GVK
 func (m *Manager) GetCache() cache.Cache {
 	if m.cache == nil {
 		return m.delegate.GetCache()
@@ -189,7 +189,6 @@ func (m *Manager) GetCache() cache.Cache {
 	return m.cache
 }
 
-// GetCacheForType returns the cache to use for the given GVK
 func (m *Manager) GetCacheForType(gvk schema.GroupVersionKind) cache.Cache {
 	if m.cache == nil || m.cacheOpts == nil {
 		return m.delegate.GetCache()

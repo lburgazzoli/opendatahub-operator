@@ -31,6 +31,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/deploy"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/gc"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/manager"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/dependent"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
@@ -39,7 +40,12 @@ import (
 func NewDataScienceClusterReconciler(ctx context.Context, mgr ctrl.Manager) error {
 	componentsPredicate := dependent.New(dependent.WithWatchStatus(true))
 
-	_, err := reconciler.ReconcilerFor(mgr, &dscv1.DataScienceCluster{}).
+	m, err := manager.Wrap(mgr)
+	if err != nil {
+		return err
+	}
+
+	_, err = reconciler.ReconcilerFor(m, &dscv1.DataScienceCluster{}).
 		Owns(&componentApi.Dashboard{}, reconciler.WithPredicates(componentsPredicate)).
 		Owns(&componentApi.Workbenches{}, reconciler.WithPredicates(componentsPredicate)).
 		Owns(&componentApi.Ray{}, reconciler.WithPredicates(componentsPredicate)).

@@ -29,6 +29,7 @@ import (
 	sr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/deploy"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/render/template"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/manager"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
 )
 
@@ -53,7 +54,12 @@ func (h *serviceHandler) GetManagementState(platform common.Platform) operatorv1
 }
 
 func (h *serviceHandler) NewReconciler(ctx context.Context, mgr ctrl.Manager) error {
-	_, err := reconciler.ReconcilerFor(mgr, &serviceApi.Auth{}).
+	m, err := manager.Wrap(mgr)
+	if err != nil {
+		return err
+	}
+
+	_, err = reconciler.ReconcilerFor(m, &serviceApi.Auth{}).
 		// operands - owned
 		Owns(&rbacv1.ClusterRoleBinding{}).
 		Owns(&rbacv1.ClusterRole{}).

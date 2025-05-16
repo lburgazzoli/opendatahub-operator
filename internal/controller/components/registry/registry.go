@@ -6,7 +6,6 @@ import (
 	"github.com/hashicorp/go-multierror"
 	operatorv1 "github.com/openshift/api/operator/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	dscv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v1"
@@ -25,7 +24,7 @@ type ComponentHandler interface {
 	// e.g. Dashboard in datasciencecluster.opendatahub.io group
 	// It returns interface, but it simplifies DSC reconciler code a lot
 	NewCRObject(dsc *dscv1.DataScienceCluster) common.PlatformObject
-	NewComponentReconciler(ctx context.Context, mgr ctrl.Manager) error
+	NewComponentReconciler(ctx context.Context, mgr types.ControllerManager) error
 	// UpdateDSCStatus updates the component specific status part of the DSC
 	UpdateDSCStatus(ctx context.Context, rr *types.ReconciliationRequest) (metav1.ConditionStatus, error)
 }
