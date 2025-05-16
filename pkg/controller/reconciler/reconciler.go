@@ -92,6 +92,10 @@ func NewReconciler[T common.PlatformObject](mgr manager.Manager, name string, ob
 				return res, fmt.Errorf("unable to construct instance of %v", t)
 			}
 
+			if err := resources.EnsureGroupVersionKind(mgr.GetScheme(), res); err != nil {
+				return res, fmt.Errorf("unable to determine GVK of %v: %w", t, err)
+			}
+
 			return res, nil
 		},
 		conditionsManagerFactory: func(accessor common.ConditionsAccessor) *conditions.Manager {

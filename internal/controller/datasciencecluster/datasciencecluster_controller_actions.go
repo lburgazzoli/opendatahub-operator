@@ -3,6 +3,7 @@ package datasciencecluster
 import (
 	"context"
 	"fmt"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -72,7 +73,7 @@ func watchDataScienceClusters(ctx context.Context, cli client.Client) []reconcil
 	return requests
 }
 
-func provisionComponents(_ context.Context, rr *odhtype.ReconciliationRequest) error {
+func provisionComponents(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
 	instance, ok := rr.Instance.(*dscv1.DataScienceCluster)
 	if !ok {
 		return fmt.Errorf("resource instance %v is not a dscv1.DataScienceCluster)", rr.Instance)
@@ -85,6 +86,7 @@ func provisionComponents(_ context.Context, rr *odhtype.ReconciliationRequest) e
 	// force gc to run
 	rr.Generated = true
 
+	l := logf.FromContext(ctx)
 	err := cr.ForEach(func(component cr.ComponentHandler) error {
 		ms := component.GetManagementState(instance)
 		if ms != operatorv1.Managed {
@@ -92,6 +94,9 @@ func provisionComponents(_ context.Context, rr *odhtype.ReconciliationRequest) e
 		}
 
 		ci := component.NewCRObject(instance)
+
+		l.Info(">>> Provisioning component", "gvk", ci.GetObjectKind().GroupVersionKind())
+
 		if err := rr.AddResources(ci); err != nil {
 			return err
 		}

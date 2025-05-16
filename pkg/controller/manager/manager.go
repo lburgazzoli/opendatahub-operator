@@ -232,6 +232,10 @@ func (m *Manager) Source(
 	// assuming gvk is always set to the object
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
+	if gvk.Kind == "" {
+		panic("foo")
+	}
+
 	var wo client.Object
 
 	switch {

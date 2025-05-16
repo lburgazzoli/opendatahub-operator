@@ -99,14 +99,13 @@ func ReconcilerFor[T common.PlatformObject](mgr types.ControllerManager, object 
 		dependantConditions: []string{status.ConditionTypeProvisioningSucceeded},
 	}
 
-	gvk, err := resources.GetGroupVersionKindForObject(mgr.GetScheme(), object)
-	if err != nil {
+	if err := resources.EnsureGroupVersionKind(mgr.GetScheme(), object); err != nil {
 		crb.errors = multierror.Append(crb.errors, fmt.Errorf("unable to determine GVK: %w", err))
 	}
 
 	crb.input = forInput{
 		object: object,
-		gvk:    gvk,
+		gvk:    object.GetObjectKind().GroupVersionKind(),
 	}
 
 	for _, opt := range opts {
@@ -140,17 +139,16 @@ func (b *ReconcilerBuilder[T]) WithFinalizer(value actions.Fn) *ReconcilerBuilde
 	return b
 }
 
-func (b *ReconcilerBuilder[T]) Watches(object client.Object, opts ...WatchOpts) *ReconcilerBuilder[T] {
-	gvk, err := resources.GetGroupVersionKindForObject(b.mgr.GetScheme(), object)
-	if err != nil {
+func (b *ReconcilerBuilder[T]) Watches(obj client.Object, opts ...WatchOpts) *ReconcilerBuilder[T] {
+	if err := resources.EnsureGroupVersionKind(b.mgr.GetScheme(), obj); err != nil {
 		b.errors = multierror.Append(b.errors, fmt.Errorf("unable to determine GVK: %w", err))
 		return b
 	}
 
 	in := watchInput{}
-	in.object = object
+	in.object = obj
 	in.owned = false
-	in.gvk = gvk
+	in.gvk = obj.GetObjectKind().GroupVersionKind()
 
 	for _, opt := range opts {
 		opt(&in)
@@ -180,17 +178,16 @@ func (b *ReconcilerBuilder[T]) WatchesGVK(gvk schema.GroupVersionKind, opts ...W
 	return b.Watches(resources.GvkToUnstructured(gvk), opts...)
 }
 
-func (b *ReconcilerBuilder[T]) Owns(object client.Object, opts ...WatchOpts) *ReconcilerBuilder[T] {
-	gvk, err := resources.GetGroupVersionKindForObject(b.mgr.GetScheme(), object)
-	if err != nil {
+func (b *ReconcilerBuilder[T]) Owns(obj client.Object, opts ...WatchOpts) *ReconcilerBuilder[T] {
+	if err := resources.EnsureGroupVersionKind(b.mgr.GetScheme(), obj); err != nil {
 		b.errors = multierror.Append(b.errors, fmt.Errorf("unable to determine GVK: %w", err))
 		return b
 	}
 
 	in := watchInput{}
-	in.object = object
+	in.object = obj
 	in.owned = true
-	in.gvk = gvk
+	in.gvk = obj.GetObjectKind().GroupVersionKind()
 
 	for _, opt := range opts {
 		opt(&in)

@@ -94,6 +94,10 @@ func createComponentManager(
 		return nil, fmt.Errorf("unable to create cache: %w", err)
 	}
 
+	if err := mgr.Add(cc); err != nil {
+		return nil, fmt.Errorf("unable to add the components cache to the manager: %w", err)
+	}
+
 	// Create a specialized manager that shares component types using the base manager
 	cm, err := ctrlmanager.Wrap(
 		mgr,
@@ -106,6 +110,10 @@ func createComponentManager(
 		ctrlmanager.WithCache(
 			cc,
 			ctrlmanager.WithSharedTypes(
+				// global
+				gvk.DataScienceCluster,
+				gvk.DSCInitialization,
+				// components
 				gvk.Dashboard,
 				gvk.Workbenches,
 				gvk.ModelMeshServing,
@@ -123,10 +131,6 @@ func createComponentManager(
 	)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create specialized manager: %w", err)
-	}
-
-	if err := mgr.Add(cm); err != nil {
-		return nil, fmt.Errorf("unable to add the components cache to the manager: %w", err)
 	}
 
 	return cm, nil
