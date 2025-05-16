@@ -394,3 +394,25 @@ var (
 		Kind:    "Template",
 	}
 )
+
+var (
+	PlatformTypes = []schema.GroupVersionKind{
+		// global
+		DataScienceCluster,
+		DSCInitialization,
+		// components
+		CodeFlare,
+		Dashboard,
+		DataSciencePipelines,
+		FeastOperator,
+		Kserve,
+		Kueue,
+		ModelController,
+		ModelMeshServing,
+		ModelRegistry,
+		Ray,
+		TrainingOperator,
+		TrustyAI,
+		Workbenches,
+	}
+)

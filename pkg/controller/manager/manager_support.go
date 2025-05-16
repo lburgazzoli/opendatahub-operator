@@ -56,11 +56,20 @@ func FromUnstructuredList(
 	in unstructured.UnstructuredList,
 	out client.ObjectList,
 ) error {
+	if ul, ok := out.(*unstructured.UnstructuredList); ok {
+		ul.Object = in.Object
+		ul.Items = in.Items
+
+		return nil
+	}
+
 	items := make([]runtime.Object, 0, len(in.Items))
 	for _, u := range in.Items {
-		obj, err := s.New(u.GetObjectKind().GroupVersionKind())
+		gvk := u.GetObjectKind().GroupVersionKind()
+
+		obj, err := s.New(gvk)
 		if err != nil {
-			return err
+			return fmt.Errorf("unable to create a new instance of type %s: %w", gvk, err)
 		}
 
 		o, ok := obj.(client.Object)
@@ -69,13 +78,17 @@ func FromUnstructuredList(
 		}
 
 		if err := FromUnstructured(s, &u, o); err != nil {
-			return err
+			return fmt.Errorf("unable to convert from unstructured: %w", err)
 		}
 
 		items = append(items, obj)
 	}
 
-	return meta.SetList(out, items)
+	if err := meta.SetList(out, items); err != nil {
+		return fmt.Errorf("unable to set list items: %w", err)
+	}
+
+	return nil
 }
 
 func ToPartial(s *runtime.Scheme, in client.Object) (*metav1.PartialObjectMetadata, error) {

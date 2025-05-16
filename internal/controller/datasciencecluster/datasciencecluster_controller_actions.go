@@ -3,12 +3,12 @@ package datasciencecluster
 import (
 	"context"
 	"fmt"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	dscv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v1"
@@ -95,7 +95,7 @@ func provisionComponents(ctx context.Context, rr *odhtype.ReconciliationRequest)
 
 		ci := component.NewCRObject(instance)
 
-		l.Info(">>> Provisioning component", "gvk", ci.GetObjectKind().GroupVersionKind())
+		l.Info("provisioning component", "gvk", ci.GetObjectKind().GroupVersionKind())
 
 		if err := rr.AddResources(ci); err != nil {
 			return err

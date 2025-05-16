@@ -103,30 +103,15 @@ func createComponentManager(
 		mgr,
 		ctrlmanager.WithTypedTypes(
 			gvk.CustomResourceDefinition,
-			gvk.Deployment,
 			gvk.ConfigMap,
 			gvk.Template,
 		),
+		ctrlmanager.WithUnstructuredTypes(
+			gvk.Deployment,
+		),
 		ctrlmanager.WithCache(
 			cc,
-			ctrlmanager.WithSharedTypes(
-				// global
-				gvk.DataScienceCluster,
-				gvk.DSCInitialization,
-				// components
-				gvk.Dashboard,
-				gvk.Workbenches,
-				gvk.ModelMeshServing,
-				gvk.DataSciencePipelines,
-				gvk.Kserve,
-				gvk.Kueue,
-				gvk.CodeFlare,
-				gvk.Ray,
-				gvk.TrustyAI,
-				gvk.ModelRegistry,
-				gvk.TrainingOperator,
-				gvk.FeastOperator,
-			),
+			ctrlmanager.WithSharedTypes(gvk.PlatformTypes...),
 		),
 	)
 	if err != nil {

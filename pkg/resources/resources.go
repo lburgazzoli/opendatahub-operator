@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 
 	"github.com/davecgh/go-spew/spew"
 	routev1 "github.com/openshift/api/route/v1"
@@ -701,9 +702,8 @@ func GetGroupVersionKindForList(s *runtime.Scheme, list client.ObjectList) (sche
 	case unversioned:
 		return schema.GroupVersionKind{}, fmt.Errorf("unversioned type not supported: %T", list)
 	default:
-		// Get the GVK of the items in the list
 		itemsGVK := gvk[0]
-		itemsGVK.Kind = itemsGVK.Kind[:len(itemsGVK.Kind)-4] // Remove "List" suffix
+		itemsGVK.Kind = strings.TrimSuffix(itemsGVK.Kind, "List")
 		return itemsGVK, nil
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/conditions"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
@@ -74,12 +75,13 @@ func (a *Action) run(ctx context.Context, rr *types.ReconciliationRequest) error
 		return fmt.Errorf("resource instance %v is not a ResourceObject", rr.Instance)
 	}
 
-	deployments := &appsv1.DeploymentList{}
-
 	ns, err := a.namespaceFn(ctx, rr)
 	if err != nil {
 		return fmt.Errorf("unable to compute namespace: %w", err)
 	}
+
+	deployments := &appsv1.DeploymentList{}
+	deployments.SetGroupVersionKind(gvk.Deployment)
 
 	err = rr.Client.List(
 		ctx,

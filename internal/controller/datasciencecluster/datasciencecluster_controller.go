@@ -29,6 +29,7 @@ import (
 	dscv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v1"
 	dsciv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v1"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/deploy"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/gc"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/manager"
@@ -40,25 +41,29 @@ import (
 func NewDataScienceClusterReconciler(ctx context.Context, mgr ctrl.Manager) error {
 	componentsPredicate := dependent.New(dependent.WithWatchStatus(true))
 
-	m, err := manager.Wrap(mgr)
+	// Create a specialized manager that shares component types using the base manager
+	m, err := manager.Wrap(
+		mgr,
+		manager.WithTypedTypes(gvk.PlatformTypes...),
+	)
 	if err != nil {
 		return err
 	}
 
 	_, err = reconciler.ReconcilerFor(m, &dscv1.DataScienceCluster{}).
-		Owns(&componentApi.Dashboard{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.Workbenches{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.Ray{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.ModelRegistry{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.TrustyAI{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.Kueue{}, reconciler.WithPredicates(componentsPredicate)).
 		Owns(&componentApi.CodeFlare{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.TrainingOperator{}, reconciler.WithPredicates(componentsPredicate)).
+		Owns(&componentApi.Dashboard{}, reconciler.WithPredicates(componentsPredicate)).
 		Owns(&componentApi.DataSciencePipelines{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.Kserve{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.ModelMeshServing{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.ModelController{}, reconciler.WithPredicates(componentsPredicate)).
 		Owns(&componentApi.FeastOperator{}, reconciler.WithPredicates(componentsPredicate)).
+		Owns(&componentApi.Kserve{}, reconciler.WithPredicates(componentsPredicate)).
+		Owns(&componentApi.Kueue{}, reconciler.WithPredicates(componentsPredicate)).
+		Owns(&componentApi.ModelController{}, reconciler.WithPredicates(componentsPredicate)).
+		Owns(&componentApi.ModelMeshServing{}, reconciler.WithPredicates(componentsPredicate)).
+		Owns(&componentApi.ModelRegistry{}, reconciler.WithPredicates(componentsPredicate)).
+		Owns(&componentApi.Ray{}, reconciler.WithPredicates(componentsPredicate)).
+		Owns(&componentApi.TrainingOperator{}, reconciler.WithPredicates(componentsPredicate)).
+		Owns(&componentApi.TrustyAI{}, reconciler.WithPredicates(componentsPredicate)).
+		Owns(&componentApi.Workbenches{}, reconciler.WithPredicates(componentsPredicate)).
 		Watches(
 			&dsciv1.DSCInitialization{},
 			reconciler.WithEventMapper(func(ctx context.Context, _ client.Object) []reconcile.Request {
