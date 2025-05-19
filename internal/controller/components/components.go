@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -14,6 +12,7 @@ import (
 
 	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
+	odhcache "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/cache"
 	ctrlmanager "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/manager"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 
@@ -70,18 +69,7 @@ func createComponentManager(
 		Scheme:                      mgr.GetScheme(),
 		Mapper:                      mgr.GetRESTMapper(),
 		ReaderFailOnMissingInformer: true,
-		DefaultTransform: func(in any) (any, error) {
-			if obj, err := meta.Accessor(in); err == nil && obj.GetManagedFields() != nil {
-				obj.SetManagedFields(nil)
-			}
-
-			// Handle specific types that need additional transformations
-			if obj, ok := in.(*apiextensionsv1.CustomResourceDefinition); ok {
-				obj.Spec = apiextensionsv1.CustomResourceDefinitionSpec{}
-			}
-
-			return in, nil
-		},
+		DefaultTransform:            odhcache.DefaultTransformFn,
 	}
 
 	for _, opt := range opts {
@@ -102,9 +90,11 @@ func createComponentManager(
 	cm, err := ctrlmanager.Wrap(
 		mgr,
 		ctrlmanager.WithTypedTypes(
-			gvk.CustomResourceDefinition,
 			gvk.ConfigMap,
 			gvk.Template,
+		),
+		ctrlmanager.WithTypedTypes(
+			gvk.CoreSharedTypes...,
 		),
 		ctrlmanager.WithUnstructuredTypes(
 			gvk.Deployment,
@@ -112,6 +102,7 @@ func createComponentManager(
 		ctrlmanager.WithCache(
 			cc,
 			ctrlmanager.WithSharedTypes(gvk.PlatformTypes...),
+			ctrlmanager.WithSharedTypes(gvk.CoreSharedTypes...),
 		),
 	)
 	if err != nil {

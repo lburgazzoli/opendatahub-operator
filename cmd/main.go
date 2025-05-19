@@ -46,7 +46,6 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -76,6 +75,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/webhook"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
+	odhcache "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/cache"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/logger"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
@@ -149,7 +149,7 @@ func initServices(_ context.Context, p common.Platform) error {
 	})
 }
 
-func main() { //nolint:funlen,maintidx,gocyclo
+func main() { //nolint:funlen,maintidx
 	// Viper settings
 	viper.SetEnvPrefix("ODH_MANAGER")
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
@@ -291,19 +291,7 @@ func main() { //nolint:funlen,maintidx,gocyclo
 				Namespaces: oDHCache,
 			},
 		},
-		DefaultTransform: func(in any) (any, error) {
-			// Remove managed fields for all objects
-			if obj, err := meta.Accessor(in); err == nil && obj.GetManagedFields() != nil {
-				obj.SetManagedFields(nil)
-			}
-
-			// Handle specific types that need additional transformations
-			if obj, ok := in.(*apiextensionsv1.CustomResourceDefinition); ok {
-				obj.Spec = apiextensionsv1.CustomResourceDefinitionSpec{}
-			}
-
-			return in, nil
-		},
+		DefaultTransform: odhcache.DefaultTransformFn,
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{ // single pod does not need to have LeaderElection

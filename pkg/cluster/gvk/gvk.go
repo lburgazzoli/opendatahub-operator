@@ -415,4 +415,9 @@ var (
 		TrustyAI,
 		Workbenches,
 	}
+
+	CoreSharedTypes = []schema.GroupVersionKind{
+		CustomResourceDefinition,
+		Namespace,
+	}
 )
