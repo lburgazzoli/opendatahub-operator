@@ -158,7 +158,7 @@ func dsciPredicates(_ client.Client) predicate.Funcs {
 		},
 
 		DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
-			return false
+			return true
 		},
 	}
 }

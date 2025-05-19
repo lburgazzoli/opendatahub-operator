@@ -269,6 +269,11 @@ func (m *Manager) get(xc client.Client) func(
 		out client.Object,
 		opts ...client.GetOption,
 	) error {
+		err := resources.EnsureGroupVersionKind(cli.Scheme(), out)
+		if err != nil {
+			return fmt.Errorf("unable to compute gvk: %w", err)
+		}
+
 		gvk := out.GetObjectKind().GroupVersionKind()
 
 		if _, ok := m.cacheOpts.sharedCacheGVKs[gvk]; ok {

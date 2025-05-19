@@ -76,6 +76,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	odhcache "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/cache"
+	odhmetrics "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/metrics"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/logger"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
@@ -292,6 +293,7 @@ func main() { //nolint:funlen,maintidx
 			},
 		},
 		DefaultTransform: odhcache.DefaultTransformFn,
+		NewInformer:      odhmetrics.NewInstrumentedInformerFn(scheme, "shared"),
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{ // single pod does not need to have LeaderElection

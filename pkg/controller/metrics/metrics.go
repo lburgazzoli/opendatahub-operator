@@ -21,6 +21,7 @@ var StoredResourcesTotal = prometheus.NewGaugeVec(
 		Help: "TODO",
 	},
 	[]string{
+		"name",
 		"apiVersion",
 		"kind",
 		"envelope",
@@ -53,6 +54,7 @@ type StoredResource struct {
 
 func NewInstrumentedInformerFn(
 	scheme *runtime.Scheme,
+	name string,
 ) func(cache.ListerWatcher, runtime.Object, time.Duration, cache.Indexers) cache.SharedIndexInformer {
 	handlers := make(map[StoredResource]struct{})
 	handlerM := sync.Mutex{}
@@ -87,10 +89,10 @@ func NewInstrumentedInformerFn(
 		if _, ok := handlers[sres]; !ok {
 			_, err = i.AddEventHandler(cache.ResourceEventHandlerFuncs{
 				AddFunc: func(obj interface{}) {
-					StoredResourcesTotal.WithLabelValues(apiVersion, kind, sres.envelope).Inc()
+					StoredResourcesTotal.WithLabelValues(name, apiVersion, kind, sres.envelope).Inc()
 				},
 				DeleteFunc: func(obj interface{}) {
-					StoredResourcesTotal.WithLabelValues(apiVersion, kind, sres.envelope).Dec()
+					StoredResourcesTotal.WithLabelValues(name, apiVersion, kind, sres.envelope).Dec()
 				},
 			})
 

@@ -14,6 +14,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	odhcache "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/cache"
 	ctrlmanager "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/manager"
+	odhmetrics "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/metrics"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 
 	// Side effect imports to ensure component packages are registered.
@@ -70,6 +71,7 @@ func createComponentManager(
 		Mapper:                      mgr.GetRESTMapper(),
 		ReaderFailOnMissingInformer: true,
 		DefaultTransform:            odhcache.DefaultTransformFn,
+		NewInformer:                 odhmetrics.NewInstrumentedInformerFn(mgr.GetScheme(), "components"),
 	}
 
 	for _, opt := range opts {

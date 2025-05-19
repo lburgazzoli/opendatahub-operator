@@ -58,6 +58,12 @@ var (
 		Kind:    "ClusterVersion",
 	}
 
+	Authentication = schema.GroupVersionKind{
+		Group:   configv1.SchemeGroupVersion.Group,
+		Version: configv1.SchemeGroupVersion.Version,
+		Kind:    "Authentication",
+	}
+
 	DataScienceCluster = schema.GroupVersionKind{
 		Group:   dscv1.GroupVersion.Group,
 		Version: dscv1.GroupVersion.Version,
