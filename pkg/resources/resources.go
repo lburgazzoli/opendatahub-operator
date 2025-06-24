@@ -392,7 +392,7 @@ func FormatNamespacedName(nn types.NamespacedName) string {
 	return nn.String()
 }
 
-func FormatUnstructuredName(obj *unstructured.Unstructured) string {
+func FormatObjectName(obj client.Object) string {
 	if obj.GetNamespace() == "" {
 		return obj.GetName()
 	}

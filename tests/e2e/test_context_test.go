@@ -555,7 +555,7 @@ func (tc *TestContext) EnsureResourceConditionMet(obj any, condition gTypes.Gome
 	tc.g.Expect(err).NotTo(HaveOccurred())
 
 	// Construct a meaningful resource identifier
-	resourceID := resources.FormatUnstructuredName(u)
+	resourceID := resources.FormatObjectName(u)
 
 	// Perform the assertion using the custom condition
 	tc.g.Expect(obj).To(

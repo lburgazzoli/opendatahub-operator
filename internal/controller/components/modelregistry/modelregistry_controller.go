@@ -29,8 +29,8 @@ import (
 
 	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
 	dsciv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v1"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/cleanup"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/deploy"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/gc"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/render/kustomize"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/render/template"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/status/deployments"
@@ -87,7 +87,7 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 		WithAction(deployments.NewAction()).
 		WithAction(updateStatus).
 		// must be the final action
-		WithAction(gc.NewAction()).
+		WithAction(cleanup.NewAction()).
 		// declares the list of additional, controller specific conditions that are
 		// contributing to the controller readiness status
 		WithConditions(conditionTypes...).

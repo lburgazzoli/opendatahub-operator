@@ -1,7 +1,8 @@
-package gc
+package cleanup
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -46,6 +47,22 @@ func DefaultObjectPredicate(rr *odhTypes.ReconciliationRequest, obj unstructured
 	return rr.Instance.GetGeneration() != int64(g), nil
 }
 
-func DefaultTypePredicate(_ *odhTypes.ReconciliationRequest, _ schema.GroupVersionKind) (bool, error) {
+func CatchAllObjectPredicate(_ *odhTypes.ReconciliationRequest, _ unstructured.Unstructured) (bool, error) {
+	return true, nil
+}
+
+func NamesInObjectPredicate(names ...string) ObjectPredicateFn {
+	return func(_ *odhTypes.ReconciliationRequest, u unstructured.Unstructured) (bool, error) {
+		return slices.Contains(names, u.GetName()), nil
+	}
+}
+
+func NamesNotInObjectPredicate(names ...string) ObjectPredicateFn {
+	return func(_ *odhTypes.ReconciliationRequest, u unstructured.Unstructured) (bool, error) {
+		return !slices.Contains(names, u.GetName()), nil
+	}
+}
+
+func CatchAllTypePredicate(_ *odhTypes.ReconciliationRequest, _ schema.GroupVersionKind) (bool, error) {
 	return true, nil
 }

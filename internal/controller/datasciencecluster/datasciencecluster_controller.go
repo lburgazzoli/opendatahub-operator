@@ -29,8 +29,8 @@ import (
 	dscv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v1"
 	dsciv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v1"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/cleanup"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/deploy"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/gc"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/dependent"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
@@ -65,8 +65,8 @@ func NewDataScienceClusterReconciler(ctx context.Context, mgr ctrl.Manager) erro
 		WithAction(deploy.NewAction(
 			deploy.WithCache()),
 		).
-		WithAction(gc.NewAction(
-			gc.WithTypePredicate(
+		WithAction(cleanup.NewAction(
+			cleanup.WithTypePredicate(
 				func(rr *types.ReconciliationRequest, objGVK schema.GroupVersionKind) (bool, error) {
 					return rr.Controller.Owns(objGVK), nil
 				},

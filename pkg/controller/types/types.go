@@ -73,10 +73,12 @@ type TemplateInfo struct {
 }
 
 type ReconciliationRequest struct {
+	Kind     schema.GroupVersionKind
+	Instance common.PlatformObject
+
 	Client     client.Client
 	Controller Controller
 	Conditions *conditions.Manager
-	Instance   common.PlatformObject
 	DSCI       *dsciv1.DSCInitialization
 	Release    common.Release
 	Manifests  []ManifestInfo
