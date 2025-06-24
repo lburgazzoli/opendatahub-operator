@@ -230,9 +230,16 @@ func (r *Reconciler) delete(ctx context.Context, res common.PlatformObject) erro
 	l := log.FromContext(ctx)
 	l.Info("delete")
 
+	// Compute owner GVK from reconciliation request instance
+	igvk, err := resources.GetGroupVersionKindForObject(r.Client.Scheme(), res)
+	if err != nil {
+		return fmt.Errorf("failed to get instance GVK: %w", err)
+	}
+
 	rr := types.ReconciliationRequest{
 		Client:     r.Client,
 		Controller: r,
+		Kind:       igvk,
 		Instance:   res,
 		Conditions: r.conditionsManagerFactory(res),
 		Release:    r.Release,
@@ -272,9 +279,16 @@ func (r *Reconciler) apply(ctx context.Context, res common.PlatformObject) error
 	l := log.FromContext(ctx)
 	l.Info("apply")
 
+	// Compute owner GVK from reconciliation request instance
+	igvk, err := resources.GetGroupVersionKindForObject(r.Client.Scheme(), res)
+	if err != nil {
+		return fmt.Errorf("failed to get instance GVK: %w", err)
+	}
+
 	rr := types.ReconciliationRequest{
 		Client:     r.Client,
 		Controller: r,
+		Kind:       igvk,
 		Instance:   res,
 		Conditions: r.conditionsManagerFactory(res),
 		Release:    r.Release,
@@ -342,7 +356,7 @@ func (r *Reconciler) apply(ctx context.Context, res common.PlatformObject) error
 		is.ObservedGeneration = rr.Instance.GetGeneration()
 	}
 
-	err := resources.ApplyStatus(
+	err = resources.ApplyStatus(
 		ctx,
 		r.Client,
 		rr.Instance,
