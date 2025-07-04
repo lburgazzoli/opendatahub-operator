@@ -51,17 +51,14 @@ type MockManager struct {
 func (f *MockManager) GetClient() client.Client   { return f.client }
 func (f *MockManager) GetScheme() *runtime.Scheme { return f.scheme }
 
-//nolint:ireturn
 func (f *MockManager) GetRESTMapper() meta.RESTMapper { return f.mapper }
 func (f *MockManager) GetConfig() *rest.Config        { return &rest.Config{} }
 
-//nolint:ireturn
 func (f *MockManager) GetFieldIndexer() client.FieldIndexer { return nil }
 
 //nolint:ireturn
 func (f *MockManager) GetEventRecorderFor(name string) record.EventRecorder { return nil }
 
-//nolint:ireturn
 func (f *MockManager) GetCache() cache.Cache                                    { return nil }
 func (f *MockManager) GetLogger() logr.Logger                                   { return ctrl.Log }
 func (f *MockManager) Add(runnable manager.Runnable) error                      { return nil }
@@ -73,14 +70,12 @@ func (f *MockManager) AddMetricsServerExtraHandler(name string, handler http.Han
 }
 func (f *MockManager) AddReadyzCheck(name string, check healthz.Checker) error { return nil }
 
-//nolint:ireturn
 func (f *MockManager) GetAPIReader() client.Reader { return nil }
 func (f *MockManager) GetControllerOptions() config.Controller {
 	return config.Controller{SkipNameValidation: ptr.To(true)}
 }
 func (f *MockManager) GetHTTPClient() *http.Client { return &http.Client{} }
 
-//nolint:ireturn
 func (f *MockManager) GetWebhookServer() webhook.Server { return nil }
 
 //nolint:ireturn

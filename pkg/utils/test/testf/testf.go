@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"testing"
 	"time"
 
 	"github.com/onsi/gomega"
+	"github.com/onsi/gomega/types"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -129,7 +129,7 @@ func (tc *TestContext) Scheme() *runtime.Scheme {
 	return tc.client.Scheme()
 }
 
-func (tc *TestContext) NewWithT(t *testing.T, opts ...WithTOpts) *WithT {
+func (tc *TestContext) NewWithT(t types.GomegaTestingT, opts ...WithTOpts) *WithT {
 	t.Helper()
 
 	g := gomega.NewWithT(t)

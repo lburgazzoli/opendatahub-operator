@@ -101,6 +101,12 @@ func toType(in any) (any, error) {
 			res = append(res, v.Items[i].Object)
 		}
 		return res, nil
+	case *unstructured.UnstructuredList:
+		res := make([]any, 0, len(v.Items))
+		for i := range v.Items {
+			res = append(res, v.Items[i].Object)
+		}
+		return res, nil
 	case []unstructured.Unstructured:
 		res := make([]any, 0, len(v))
 		for i := range v {
