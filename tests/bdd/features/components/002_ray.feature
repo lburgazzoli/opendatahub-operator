@@ -8,6 +8,7 @@ Feature: Ray
     Given the consistently timeout is `10s`
 
     # platform
+    Given I set variable `dsciName` to `test-dsci`
     Given I set variable `dscName` to `test-dsc`
 
     # component
@@ -47,22 +48,15 @@ Feature: Ray
     """
 
   Scenario: Managed
-    When I update the `dsc` `{{.dscName}}` with expression `.spec.components.{{.componentName}}.managementState = "Managed"`
+    When I set the `{{.componentName}}` component management state to `Managed` in the DataScienceCluster
 
-    Then eventually the `ray` `{{.componentInstance}}` has conditions:
-      | type     | status |
-      | Ready    | True   |
-    And eventually the `dsc` `{{.dscName}}` has conditions:
-      | type     | status |
-      | Ready    | True   |
-      | RayReady | True   |
+    Then eventually the component `ray` should be ready
+    And eventually the component `{{.componentName}}` should be ready in the DataScienceCluster
     And eventually the `rays.components.platform.opendatahub.io` `default-ray` should exist
 
   Scenario Outline: Resource Creation and Ownership <resourceType>
 
-    And eventually `<resourceType>` in namespace `<namespace>` with selector `platform.opendatahub.io/part-of={{.componentName}}` should match expressions:
-      | length > 0                                                                                                             |
-      | .[0].metadata.ownerReferences[] \| select(.kind == "{{.componentKind}}" and .name == "{{.componentInstance}}") != null |
+    And eventually the resources `<resourceType>` in namespace `<namespace>` with selector `platform.opendatahub.io/part-of={{.componentName}}` should be owned by type `{{.componentKind}}` named `{{.componentInstance}}`
 
     Examples:
       | resourceType      | namespace         |
@@ -73,9 +67,7 @@ Feature: Ray
       | rolebindings      | {{.appNamespace}} |
 
   Scenario Outline: Cluster Resource Creation and Ownership <resourceType>
-    And eventually `<resourceType>` with selector `platform.opendatahub.io/part-of={{.componentName}}` should match expressions:
-      | length > 0                                                                                                             |
-      | .[0].metadata.ownerReferences[] \| select(.kind == "{{.componentKind}}" and .name == "{{.componentInstance}}") != null |
+    And eventually the resources `<resourceType>` with selector `platform.opendatahub.io/part-of={{.componentName}}` should be owned by type `{{.componentKind}}` named `{{.componentInstance}}`
 
     Examples:
       | resourceType        |
@@ -103,20 +95,17 @@ Feature: Ray
       | .spec.template.spec.containers[0].resources.requests.memory == "{{.requestsMemory}}" |
 
   Scenario: Removed
-    When I update the `dsc` `{{.dscName}}` with expression `.spec.components.{{.componentName}}.managementState = "Removed"`
-    Then eventually the `dsc` `{{.dscName}}` matches expression `.status.conditions[] | select(.type == "RayReady") | .status == "False"`
-    And eventually the `dsc` `{{.dscName}}` has conditions:
-      | type     | status |
-      | Ready    | True   |
-      | RayReady | False  |
-
+    When I set the `{{.componentName}}` component management state to `Removed` in the DataScienceCluster
+    Then eventually the component `{{.componentName}}` should not be ready in the DataScienceCluster
+    
     And eventually the `rays.components.platform.opendatahub.io` `{{.componentInstance}}` should not exist
     And eventually the `deployment` `{{.deploymentName}}` in namespace `{{.appNamespace}}` should not exist
     And eventually `deployments` in namespace `{{.appNamespace}}` with selector `platform.opendatahub.io/part-of={{.componentName}}` should match expression `length == 0`
 
-    Scenario: Cleanup
-      When I delete the `dsc` `{{.dscName}}`
-      Then eventually the `dsc` `{{.dscName}}` should not exist
-      
-      When I delete the `dsci` `{{.dsciName}}`
-      Then eventually the `dsci` `{{.dsciName}}` should not exist
+  Scenario: Cleanup
+    When I delete the `dsc` `{{.dscName}}`
+    Then eventually the `dsc` `{{.dscName}}` should not exist
+    
+    When I delete the `dsci` `{{.dsciName}}`
+    Then eventually the `dsci` `{{.dsciName}}` should not exist
+

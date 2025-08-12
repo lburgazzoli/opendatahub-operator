@@ -159,6 +159,7 @@ func TestFeatures(t *testing.T) {
 						bdd.InitializeConfigurationSteps(sctx)
 						bdd.InitializeVariableSteps(sctx)
 						bdd.InitializeResourceSteps(sctx)
+						bdd.InitializeComponentSteps(sctx)
 					},
 					Options: &opt,
 				}

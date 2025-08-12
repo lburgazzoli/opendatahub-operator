@@ -48,23 +48,16 @@ Feature: Codeflare
           managementState: Removed
     """
 
-
   Scenario: Managed
-    When I update the `dsc` `{{.dscName}}` with expression `.spec.components.{{.componentName}}.managementState = "Managed"`
-    Then eventually the `codeflare` `{{.componentInstance}}` has conditions:
-      | type     | status |
-      | Ready    | True   |
-    And eventually the `dsc` `{{.dscName}}` has conditions:
-      | type           | status |
-      | Ready          | True   |
-      | CodeFlareReady | True   |
+    When I set the `{{.componentName}}` component management state to `Managed` in the DataScienceCluster
+    
+    Then eventually the component `codeflare` should be ready
+    And eventually the component `{{.componentName}}` should be ready in the DataScienceCluster
     And eventually the `codeflares.components.platform.opendatahub.io` `default-codeflare` should exist
 
   Scenario Outline: Resource Creation and Ownership <resourceType>
 
-    And eventually `<resourceType>` in namespace `<namespace>` with selector `platform.opendatahub.io/part-of={{.componentName}}` should match expressions:
-      | length > 0                                                                                                             |
-      | .[0].metadata.ownerReferences[] \| select(.kind == "{{.componentKind}}" and .name == "{{.componentInstance}}") != null |
+    And eventually the resources `<resourceType>` in namespace `<namespace>` with selector `platform.opendatahub.io/part-of={{.componentName}}` should be owned by type `{{.componentKind}}` named `{{.componentInstance}}`
 
     Examples:
       | resourceType      | namespace         |
@@ -75,9 +68,7 @@ Feature: Codeflare
       | rolebindings      | {{.appNamespace}} |
 
   Scenario Outline: Cluster Resource Creation and Ownership <resourceType>
-    And eventually `<resourceType>` with selector `platform.opendatahub.io/part-of={{.componentName}}` should match expressions:
-      | length > 0                                                                                                             |
-      | .[0].metadata.ownerReferences[] \| select(.kind == "{{.componentKind}}" and .name == "{{.componentInstance}}") != null |
+    And eventually the resources `<resourceType>` with selector `platform.opendatahub.io/part-of={{.componentName}}` should be owned by type `{{.componentKind}}` named `{{.componentInstance}}`
 
     Examples:
       | resourceType        |
@@ -105,13 +96,9 @@ Feature: Codeflare
       | .spec.template.spec.containers[0].resources.requests.memory == "{{.requestsMemory}}" |
 
   Scenario: Removed
-    When I update the `dsc` `{{.dscName}}` with expression `.spec.components.{{.componentName}}.managementState = "Removed"`
-    Then eventually the `dsc` `{{.dscName}}` matches expression `.status.conditions[] | select(.type == "CodeFlareReady") | .status == "False"`
-    And eventually the `dsc` `{{.dscName}}` has conditions:
-      | type           | status |
-      | Ready          | True   |
-      | CodeFlareReady | False  |
-
+    When I set the `{{.componentName}}` component management state to `Removed` in the DataScienceCluster
+    Then eventually the component `{{.componentName}}` should not be ready in the DataScienceCluster
+    
     And eventually the `codeflares.components.platform.opendatahub.io` `{{.componentInstance}}` should not exist
     And eventually the `deployment` `{{.deploymentName}}` in namespace `{{.appNamespace}}` should not exist
     And eventually `deployments` in namespace `{{.appNamespace}}` with selector `platform.opendatahub.io/part-of={{.componentName}}` should match expression `length == 0`
@@ -122,3 +109,4 @@ Feature: Codeflare
     
     When I delete the `dsci` `{{.dsciName}}`
     Then eventually the `dsci` `{{.dsciName}}` should not exist
+
