@@ -81,17 +81,8 @@ func initializeGeneralResourceSteps(ctx *godog.ScenarioContext) {
 		"^(eventually|consistently) the resources `([^`]+)` should be owned by type `([^`]+)`$",
 		func(ctx context.Context, mode string, resourceType string, ownerType string) error {
 			tc := TestCtx(ctx)
-			var err error
-
-			resourceType, err = tc.Variables().Interpolate(resourceType)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate resourceType '%s': %w", resourceType, err)
-			}
-
-			ownerType, err = tc.Variables().Interpolate(ownerType)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate ownerType '%s': %w", ownerType, err)
-			}
+			resourceType = tc.Variables().MustInterpolate(resourceType)
+			ownerType = tc.Variables().MustInterpolate(ownerType)
 
 			expression := fmt.Sprintf(`length > 0 and .[0].metadata.ownerReferences[] | select(.kind == "%s") != null`, ownerType)
 			return ResourceListMatchesExpressions(ctx, AssertionMode(mode), resourceType, "", "", expression)
@@ -101,22 +92,9 @@ func initializeGeneralResourceSteps(ctx *godog.ScenarioContext) {
 		"^(eventually|consistently) the resources `([^`]+)` in namespace `([^`]+)` should be owned by type `([^`]+)`$",
 		func(ctx context.Context, mode string, resourceType string, namespace string, ownerType string) error {
 			tc := TestCtx(ctx)
-			var err error
-
-			resourceType, err = tc.Variables().Interpolate(resourceType)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate resourceType '%s': %w", resourceType, err)
-			}
-
-			namespace, err = tc.Variables().Interpolate(namespace)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate namespace '%s': %w", namespace, err)
-			}
-
-			ownerType, err = tc.Variables().Interpolate(ownerType)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate ownerType '%s': %w", ownerType, err)
-			}
+			resourceType = tc.Variables().MustInterpolate(resourceType)
+			namespace = tc.Variables().MustInterpolate(namespace)
+			ownerType = tc.Variables().MustInterpolate(ownerType)
 
 			expression := fmt.Sprintf(`length > 0 and .[0].metadata.ownerReferences[] | select(.kind == "%s") != null`, ownerType)
 			return ResourceListMatchesExpressions(ctx, AssertionMode(mode), resourceType, namespace, "", expression)
@@ -126,22 +104,9 @@ func initializeGeneralResourceSteps(ctx *godog.ScenarioContext) {
 		"^(eventually|consistently) the resources `([^`]+)` should be owned by type `([^`]+)` named `([^`]+)`$",
 		func(ctx context.Context, mode string, resourceType string, ownerType string, ownerName string) error {
 			tc := TestCtx(ctx)
-			var err error
-
-			resourceType, err = tc.Variables().Interpolate(resourceType)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate resourceType '%s': %w", resourceType, err)
-			}
-
-			ownerType, err = tc.Variables().Interpolate(ownerType)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate ownerType '%s': %w", ownerType, err)
-			}
-
-			ownerName, err = tc.Variables().Interpolate(ownerName)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate ownerName '%s': %w", ownerName, err)
-			}
+			resourceType = tc.Variables().MustInterpolate(resourceType)
+			ownerType = tc.Variables().MustInterpolate(ownerType)
+			ownerName = tc.Variables().MustInterpolate(ownerName)
 
 			expression := fmt.Sprintf(`length > 0 and .[0].metadata.ownerReferences[] | select(.kind == "%s" and .name == "%s") != null`, ownerType, ownerName)
 			return ResourceListMatchesExpressions(ctx, AssertionMode(mode), resourceType, "", "", expression)
@@ -151,27 +116,10 @@ func initializeGeneralResourceSteps(ctx *godog.ScenarioContext) {
 		"^(eventually|consistently) the resources `([^`]+)` in namespace `([^`]+)` should be owned by type `([^`]+)` named `([^`]+)`$",
 		func(ctx context.Context, mode string, resourceType string, namespace string, ownerType string, ownerName string) error {
 			tc := TestCtx(ctx)
-			var err error
-
-			resourceType, err = tc.Variables().Interpolate(resourceType)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate resourceType '%s': %w", resourceType, err)
-			}
-
-			namespace, err = tc.Variables().Interpolate(namespace)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate namespace '%s': %w", namespace, err)
-			}
-
-			ownerType, err = tc.Variables().Interpolate(ownerType)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate ownerType '%s': %w", ownerType, err)
-			}
-
-			ownerName, err = tc.Variables().Interpolate(ownerName)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate ownerName '%s': %w", ownerName, err)
-			}
+			resourceType = tc.Variables().MustInterpolate(resourceType)
+			namespace = tc.Variables().MustInterpolate(namespace)
+			ownerType = tc.Variables().MustInterpolate(ownerType)
+			ownerName = tc.Variables().MustInterpolate(ownerName)
 
 			expression := fmt.Sprintf(`length > 0 and .[0].metadata.ownerReferences[] | select(.kind == "%s" and .name == "%s") != null`, ownerType, ownerName)
 			return ResourceListMatchesExpressions(ctx, AssertionMode(mode), resourceType, namespace, "", expression)
@@ -182,22 +130,9 @@ func initializeGeneralResourceSteps(ctx *godog.ScenarioContext) {
 		"^(eventually|consistently) the resources `([^`]+)` with selector `([^`]+)` should be owned by type `([^`]+)`$",
 		func(ctx context.Context, mode string, resourceType string, selector string, ownerType string) error {
 			tc := TestCtx(ctx)
-			var err error
-
-			resourceType, err = tc.Variables().Interpolate(resourceType)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate resourceType '%s': %w", resourceType, err)
-			}
-
-			selector, err = tc.Variables().Interpolate(selector)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate selector '%s': %w", selector, err)
-			}
-
-			ownerType, err = tc.Variables().Interpolate(ownerType)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate ownerType '%s': %w", ownerType, err)
-			}
+			resourceType = tc.Variables().MustInterpolate(resourceType)
+			selector = tc.Variables().MustInterpolate(selector)
+			ownerType = tc.Variables().MustInterpolate(ownerType)
 
 			expression := fmt.Sprintf(`length > 0 and .[0].metadata.ownerReferences[] | select(.kind == "%s") != null`, ownerType)
 			return ResourceListMatchesExpressions(ctx, AssertionMode(mode), resourceType, "", selector, expression)
@@ -207,27 +142,10 @@ func initializeGeneralResourceSteps(ctx *godog.ScenarioContext) {
 		"^(eventually|consistently) the resources `([^`]+)` in namespace `([^`]+)` with selector `([^`]+)` should be owned by type `([^`]+)`$",
 		func(ctx context.Context, mode string, resourceType string, namespace string, selector string, ownerType string) error {
 			tc := TestCtx(ctx)
-			var err error
-
-			resourceType, err = tc.Variables().Interpolate(resourceType)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate resourceType '%s': %w", resourceType, err)
-			}
-
-			namespace, err = tc.Variables().Interpolate(namespace)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate namespace '%s': %w", namespace, err)
-			}
-
-			selector, err = tc.Variables().Interpolate(selector)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate selector '%s': %w", selector, err)
-			}
-
-			ownerType, err = tc.Variables().Interpolate(ownerType)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate ownerType '%s': %w", ownerType, err)
-			}
+			resourceType = tc.Variables().MustInterpolate(resourceType)
+			namespace = tc.Variables().MustInterpolate(namespace)
+			selector = tc.Variables().MustInterpolate(selector)
+			ownerType = tc.Variables().MustInterpolate(ownerType)
 
 			expression := fmt.Sprintf(`length > 0 and .[0].metadata.ownerReferences[] | select(.kind == "%s") != null`, ownerType)
 			return ResourceListMatchesExpressions(ctx, AssertionMode(mode), resourceType, namespace, selector, expression)
@@ -237,27 +155,10 @@ func initializeGeneralResourceSteps(ctx *godog.ScenarioContext) {
 		"^(eventually|consistently) the resources `([^`]+)` with selector `([^`]+)` should be owned by type `([^`]+)` named `([^`]+)`$",
 		func(ctx context.Context, mode string, resourceType string, selector string, ownerType string, ownerName string) error {
 			tc := TestCtx(ctx)
-			var err error
-
-			resourceType, err = tc.Variables().Interpolate(resourceType)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate resourceType '%s': %w", resourceType, err)
-			}
-
-			selector, err = tc.Variables().Interpolate(selector)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate selector '%s': %w", selector, err)
-			}
-
-			ownerType, err = tc.Variables().Interpolate(ownerType)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate ownerType '%s': %w", ownerType, err)
-			}
-
-			ownerName, err = tc.Variables().Interpolate(ownerName)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate ownerName '%s': %w", ownerName, err)
-			}
+			resourceType = tc.Variables().MustInterpolate(resourceType)
+			selector = tc.Variables().MustInterpolate(selector)
+			ownerType = tc.Variables().MustInterpolate(ownerType)
+			ownerName = tc.Variables().MustInterpolate(ownerName)
 
 			expression := fmt.Sprintf(`length > 0 and .[0].metadata.ownerReferences[] | select(.kind == "%s" and .name == "%s") != null`, ownerType, ownerName)
 			return ResourceListMatchesExpressions(ctx, AssertionMode(mode), resourceType, "", selector, expression)
@@ -267,32 +168,11 @@ func initializeGeneralResourceSteps(ctx *godog.ScenarioContext) {
 		"^(eventually|consistently) the resources `([^`]+)` in namespace `([^`]+)` with selector `([^`]+)` should be owned by type `([^`]+)` named `([^`]+)`$",
 		func(ctx context.Context, mode string, resourceType string, namespace string, selector string, ownerType string, ownerName string) error {
 			tc := TestCtx(ctx)
-			var err error
-
-			resourceType, err = tc.Variables().Interpolate(resourceType)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate resourceType '%s': %w", resourceType, err)
-			}
-
-			namespace, err = tc.Variables().Interpolate(namespace)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate namespace '%s': %w", namespace, err)
-			}
-
-			selector, err = tc.Variables().Interpolate(selector)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate selector '%s': %w", selector, err)
-			}
-
-			ownerType, err = tc.Variables().Interpolate(ownerType)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate ownerType '%s': %w", ownerType, err)
-			}
-
-			ownerName, err = tc.Variables().Interpolate(ownerName)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate ownerName '%s': %w", ownerName, err)
-			}
+			resourceType = tc.Variables().MustInterpolate(resourceType)
+			namespace = tc.Variables().MustInterpolate(namespace)
+			selector = tc.Variables().MustInterpolate(selector)
+			ownerType = tc.Variables().MustInterpolate(ownerType)
+			ownerName = tc.Variables().MustInterpolate(ownerName)
 
 			expression := fmt.Sprintf(`length > 0 and .[0].metadata.ownerReferences[] | select(.kind == "%s" and .name == "%s") != null`, ownerType, ownerName)
 			return ResourceListMatchesExpressions(ctx, AssertionMode(mode), resourceType, namespace, selector, expression)

@@ -33,12 +33,7 @@ func initializeComponentManagementSteps(ctx *godog.ScenarioContext) {
 		"^I set the `([^`]+)` component management state to `([^`]+)` in the DataScienceCluster$",
 		func(ctx context.Context, componentName string, managementState string) error {
 			tc := TestCtx(ctx)
-			var err error
-
-			componentName, err = tc.Variables().Interpolate(componentName)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate componentName '%s': %w", componentName, err)
-			}
+			componentName = tc.Variables().MustInterpolate(componentName)
 
 			expression := fmt.Sprintf(`.spec.components.%s.managementState = "%s"`, componentName, managementState)
 			return UpdateResourceSingletonWithExpressions(ctx, "dsc", "", "", expression)
@@ -48,12 +43,7 @@ func initializeComponentManagementSteps(ctx *godog.ScenarioContext) {
 		"^(eventually|consistently) the component `([^`]+)` should be ready in the DataScienceCluster$",
 		func(ctx context.Context, mode string, componentName string) error {
 			tc := TestCtx(ctx)
-			var err error
-
-			componentName, err = tc.Variables().Interpolate(componentName)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate componentName '%s': %w", componentName, err)
-			}
+			componentName = tc.Variables().MustInterpolate(componentName)
 
 			expression := buildConditionExpression(componentName, metav1.ConditionTrue)
 			return ResourceSingletonMatchesExpressions(ctx, AssertionMode(mode), "dsc", "", "", expression)
@@ -63,12 +53,7 @@ func initializeComponentManagementSteps(ctx *godog.ScenarioContext) {
 		"^(eventually|consistently) the component `([^`]+)` should not be ready in the DataScienceCluster$",
 		func(ctx context.Context, mode string, componentName string) error {
 			tc := TestCtx(ctx)
-			var err error
-
-			componentName, err = tc.Variables().Interpolate(componentName)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate componentName '%s': %w", componentName, err)
-			}
+			componentName = tc.Variables().MustInterpolate(componentName)
 
 			expression := buildConditionExpression(componentName, metav1.ConditionFalse)
 			return ResourceSingletonMatchesExpressions(ctx, AssertionMode(mode), "dsc", "", "", expression)
@@ -78,12 +63,7 @@ func initializeComponentManagementSteps(ctx *godog.ScenarioContext) {
 		"^expect the component `([^`]+)` to be ready in the DataScienceCluster$",
 		func(ctx context.Context, componentName string) error {
 			tc := TestCtx(ctx)
-			var err error
-
-			componentName, err = tc.Variables().Interpolate(componentName)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate componentName '%s': %w", componentName, err)
-			}
+			componentName = tc.Variables().MustInterpolate(componentName)
 
 			expression := buildConditionExpression(componentName, metav1.ConditionTrue)
 			return ResourceSingletonMatchesExpressions(ctx, ExpectMode, "dsc", "", "", expression)
@@ -93,12 +73,7 @@ func initializeComponentManagementSteps(ctx *godog.ScenarioContext) {
 		"^expect the component `([^`]+)` to not be ready in the DataScienceCluster$",
 		func(ctx context.Context, componentName string) error {
 			tc := TestCtx(ctx)
-			var err error
-
-			componentName, err = tc.Variables().Interpolate(componentName)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate componentName '%s': %w", componentName, err)
-			}
+			componentName = tc.Variables().MustInterpolate(componentName)
 
 			expression := buildConditionExpression(componentName, metav1.ConditionFalse)
 			return ResourceSingletonMatchesExpressions(ctx, ExpectMode, "dsc", "", "", expression)
@@ -108,12 +83,7 @@ func initializeComponentManagementSteps(ctx *godog.ScenarioContext) {
 		"^(eventually|consistently) the component `([^`]+)` should be ready$",
 		func(ctx context.Context, mode string, componentType string) error {
 			tc := TestCtx(ctx)
-			var err error
-
-			componentType, err = tc.Variables().Interpolate(componentType)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate componentType '%s': %w", componentType, err)
-			}
+			componentType = tc.Variables().MustInterpolate(componentType)
 
 			expression := buildComponentReadinessExpression(metav1.ConditionTrue)
 			return ResourceSingletonMatchesExpressions(ctx, AssertionMode(mode), componentType, "", "", expression)
@@ -123,12 +93,7 @@ func initializeComponentManagementSteps(ctx *godog.ScenarioContext) {
 		"^(eventually|consistently) the component `([^`]+)` should not be ready$",
 		func(ctx context.Context, mode string, componentType string) error {
 			tc := TestCtx(ctx)
-			var err error
-
-			componentType, err = tc.Variables().Interpolate(componentType)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate componentType '%s': %w", componentType, err)
-			}
+			componentType = tc.Variables().MustInterpolate(componentType)
 
 			expression := buildComponentReadinessExpression(metav1.ConditionFalse)
 			return ResourceSingletonMatchesExpressions(ctx, AssertionMode(mode), componentType, "", "", expression)
@@ -138,12 +103,7 @@ func initializeComponentManagementSteps(ctx *godog.ScenarioContext) {
 		"^expect the component `([^`]+)` to be ready$",
 		func(ctx context.Context, componentType string) error {
 			tc := TestCtx(ctx)
-			var err error
-
-			componentType, err = tc.Variables().Interpolate(componentType)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate componentType '%s': %w", componentType, err)
-			}
+			componentType = tc.Variables().MustInterpolate(componentType)
 
 			expression := buildComponentReadinessExpression(metav1.ConditionTrue)
 			return ResourceSingletonMatchesExpressions(ctx, ExpectMode, componentType, "", "", expression)
@@ -153,12 +113,7 @@ func initializeComponentManagementSteps(ctx *godog.ScenarioContext) {
 		"^expect the component `([^`]+)` to not be ready$",
 		func(ctx context.Context, componentType string) error {
 			tc := TestCtx(ctx)
-			var err error
-
-			componentType, err = tc.Variables().Interpolate(componentType)
-			if err != nil {
-				return fmt.Errorf("failed to interpolate componentType '%s': %w", componentType, err)
-			}
+			componentType = tc.Variables().MustInterpolate(componentType)
 
 			expression := buildComponentReadinessExpression(metav1.ConditionFalse)
 			return ResourceSingletonMatchesExpressions(ctx, ExpectMode, componentType, "", "", expression)
