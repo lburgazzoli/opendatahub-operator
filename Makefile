@@ -172,6 +172,14 @@ lint-fix: golangci-lint ## Run golangci-lint against code.
 	$(GOLANGCI_LINT) run --fix
 	$(GOLANGCI_LINT) fmt
 
+.PHONY: lint-api
+lint-api: golangci-kube-api-linter ## Run kube-api-linter against API code.
+	$(GOLANGCI_KUBE_API_LINTER) run --config .golangci-kal.yml ./api/...
+
+.PHONY: lint-api-fix
+lint-api-fix: golangci-kube-api-linter ## Run kube-api-linter against API code with fixes.
+	$(GOLANGCI_KUBE_API_LINTER) run --config .golangci-kal.yml ./api/... --fix
+
 .PHONY: get-manifests
 get-manifests: ## Fetch components manifests from remote git repo
 	./get_all_manifests.sh
@@ -267,6 +275,8 @@ $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 CLEANFILES += $(LOCALBIN)
 
+GOLANGCI_KUBE_API_LINTER ?= $(LOCALBIN)/golangci-kube-api-linter
+
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
@@ -295,6 +305,11 @@ $(OPERATOR_SDK): $(LOCALBIN)
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+
+.PHONY: golangci-kube-api-linter
+golangci-kube-api-linter: $(GOLANGCI_KUBE_API_LINTER) ## Build custom golangci-lint with kube-api-linter.
+$(GOLANGCI_KUBE_API_LINTER): $(GOLANGCI_LINT) .custom-gcl.yml
+	$(GOLANGCI_LINT) custom
 
 OS=$(shell uname -s)
 ARCH=$(shell uname -m)
