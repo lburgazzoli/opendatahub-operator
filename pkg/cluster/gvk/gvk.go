@@ -599,4 +599,16 @@ var (
 		Version: "v1",
 		Kind:    "ValidatingAdmissionPolicyBinding",
 	}
+
+	MutatingWebhookConfiguration = schema.GroupVersionKind{
+		Group:   "admissionregistration.k8s.io",
+		Version: "v1",
+		Kind:    "MutatingWebhookConfiguration",
+	}
+
+	ValidatingWebhookConfiguration = schema.GroupVersionKind{
+		Group:   "admissionregistration.k8s.io",
+		Version: "v1",
+		Kind:    "ValidatingWebhookConfiguration",
+	}
 )

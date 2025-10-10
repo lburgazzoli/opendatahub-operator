@@ -99,6 +99,8 @@ linters:
         - gomega.AsyncAssertion
         - labels.Selector
         - manager.Manager
+        - sigs.k8s.io/controller-runtime/pkg/webhook.Server
+        - github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/k3senv.Option
     lll:
       line-length: 180
     nolintlint:

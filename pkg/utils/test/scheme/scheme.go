@@ -10,7 +10,9 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 	coordinationv1 "k8s.io/api/coordination/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 
 	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
@@ -56,4 +58,14 @@ func New() (*runtime.Scheme, error) {
 	}
 
 	return s, nil
+}
+
+// RegisterUnstructuredTypes registers unstructured types and their corresponding list types
+// for the given GroupVersionKinds. This is useful for testing with types that don't have
+// compiled Go structs.
+func RegisterUnstructuredTypes(s *runtime.Scheme, gvks ...schema.GroupVersionKind) {
+	for _, gvk := range gvks {
+		s.AddKnownTypeWithName(gvk, &unstructured.Unstructured{})
+		s.AddKnownTypeWithName(gvk.GroupVersion().WithKind(gvk.Kind+"List"), &unstructured.UnstructuredList{})
+	}
 }

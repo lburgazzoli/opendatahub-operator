@@ -413,15 +413,15 @@ func FormatNamespacedName(nn types.NamespacedName) string {
 	return nn.String()
 }
 
-func FormatUnstructuredName(obj *unstructured.Unstructured) string {
+func FormatObjectName(obj client.Object) string {
 	if obj.GetNamespace() == "" {
 		return obj.GetName()
 	}
 	return obj.GetNamespace() + string(types.Separator) + obj.GetName()
 }
 
-func FormatObjectReference(u *unstructured.Unstructured) string {
-	gvk := u.GroupVersionKind().String()
+func FormatObjectReference(u client.Object) string {
+	gvk := u.GetObjectKind().GroupVersionKind().String()
 	name := u.GetName()
 	ns := u.GetNamespace()
 	if ns != "" {

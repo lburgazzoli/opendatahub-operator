@@ -78,9 +78,7 @@ func (f *MockManager) GetAPIReader() client.Reader { return nil }
 func (f *MockManager) GetControllerOptions() config.Controller {
 	return config.Controller{SkipNameValidation: ptr.To(true)}
 }
-func (f *MockManager) GetHTTPClient() *http.Client { return &http.Client{} }
-
-//nolint:ireturn
+func (f *MockManager) GetHTTPClient() *http.Client      { return &http.Client{} }
 func (f *MockManager) GetWebhookServer() webhook.Server { return nil }
 
 //nolint:ireturn
