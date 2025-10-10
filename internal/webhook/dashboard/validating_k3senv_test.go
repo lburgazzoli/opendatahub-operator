@@ -16,11 +16,12 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/lburgazzoli/k3s-envtest/pkg/k3senv"
+
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/webhook/dashboard"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/webhook/envtestutil"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/k3senv"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/matchers/jq"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/scheme"
 
@@ -62,9 +63,9 @@ func TestValidator_K3sEnv_Integration(t *testing.T) {
 	env, err := k3senv.New(&k3senv.Options{
 		Scheme:  s,
 		CertDir: t.TempDir(),
-		KustomizationPaths: []string{
-			"config/crd",
-			"config/webhook",
+		Manifests: []string{
+			"config/crd/bases",
+			"config/webhook/manifests.yaml",
 		},
 		Objects: []client.Object{
 			envtestutil.MockAcceleratorProfileCRD(),
