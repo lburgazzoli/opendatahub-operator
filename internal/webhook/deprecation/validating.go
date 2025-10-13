@@ -11,7 +11,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -46,12 +45,8 @@ func (v *TypeValidator) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (v *TypeValidator) Handle(ctx context.Context, req admission.Request) admission.Response {
-	log := logf.FromContext(ctx)
-
 	if !v.isExpectedKind(req.Kind) {
-		err := fmt.Errorf("unexpected kind: %s", req.Kind)
-		log.Error(err, "got wrong kind", "group", req.Kind.Group, "version", req.Kind.Version, "kind", req.Kind.Kind)
-		return admission.Errored(http.StatusBadRequest, err)
+		return admission.Errored(http.StatusBadRequest, fmt.Errorf("unexpected kind: %s", req.Kind))
 	}
 
 	var resp admission.Response

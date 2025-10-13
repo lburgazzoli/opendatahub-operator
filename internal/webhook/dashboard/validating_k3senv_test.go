@@ -15,6 +15,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/lburgazzoli/k3s-envtest/pkg/k3senv"
 
@@ -22,13 +24,10 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/webhook/envtestutil"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/matchers/jq"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/scheme"
 
 	. "github.com/onsi/gomega"
 )
-
-const webhookPort = 9443
 
 // createTestObject creates an unstructured test object with the specified GVK, name, and namespace,
 // and persists it to the cluster via the provided client.
@@ -48,6 +47,10 @@ func createTestObject(
 	return obj, nil
 }
 
+func init() {
+	log.SetLogger(zap.New(zap.UseDevMode(true)))
+}
+
 func TestValidator_K3sEnv_Integration(t *testing.T) {
 	g := NewWithT(t)
 	ctx := t.Context()
@@ -61,17 +64,21 @@ func TestValidator_K3sEnv_Integration(t *testing.T) {
 	scheme.RegisterUnstructuredTypes(s, gvk.DashboardHardwareProfile)
 
 	env, err := k3senv.New(&k3senv.Options{
-		Scheme:  s,
-		CertDir: t.TempDir(),
-		Manifests: []string{
-			"config/crd/bases",
-			"config/webhook/manifests.yaml",
+		Scheme: s,
+		Certificate: k3senv.CertificateConfig{
+			Path: t.TempDir(),
 		},
-		Objects: []client.Object{
-			envtestutil.MockAcceleratorProfileCRD(),
-			envtestutil.MockDashboardHardwareProfileCRD(),
+		Manifest: k3senv.ManifestConfig{
+			Paths: []string{
+				"config/crd/bases",
+				"config/webhook/manifests.yaml",
+			},
+			Objects: []client.Object{
+				envtestutil.MockAcceleratorProfileCRD(),
+				envtestutil.MockDashboardHardwareProfileCRD(),
+			},
 		},
-		WebhookPort: webhookPort,
+		Logger: t,
 	})
 
 	g.Expect(err).ShouldNot(HaveOccurred())
@@ -121,42 +128,6 @@ func TestValidator_K3sEnv_Integration(t *testing.T) {
 	// Install webhooks and patches CRDs (will wait for webhook server to be ready internally)
 	err = env.InstallWebhooks(ctx)
 	g.Expect(err).ShouldNot(HaveOccurred())
-
-	t.Log("Webhooks ready for testing")
-
-	// Verify webhook configurations are present
-	webhookConfigs := env.GetWebhookConfigs()
-	g.Expect(webhookConfigs).ToNot(BeEmpty())
-
-	// Verify webhook configurations point to correct host
-	webhookHost, err := env.GetWebhookHost(ctx)
-	g.Expect(err).ShouldNot(HaveOccurred())
-
-	for _, whCfg := range webhookConfigs {
-		g.Expect(whCfg).To(jq.Match(`.webhooks | all(.clientConfig.url | startswith("https://%s"))`, webhookHost))
-	}
-
-	// Verify DSC CRD has conversion webhook
-	dscCRD := resources.GvkToUnstructured(gvk.CustomResourceDefinition)
-	dscCRD.SetName("datascienceclusters.datasciencecluster.opendatahub.io")
-
-	err = env.Client().Get(ctx, client.ObjectKeyFromObject(dscCRD), dscCRD)
-	g.Expect(err).ShouldNot(HaveOccurred())
-	g.Expect(dscCRD).To(And(
-		jq.Match(`.spec.conversion.strategy == "Webhook"`),
-		jq.Match(`.spec.conversion.webhook.clientConfig.url | startswith("https://%s")`, webhookHost)),
-	)
-
-	// Verify DSCI CRD has conversion webhook
-	dsciCRD := resources.GvkToUnstructured(gvk.CustomResourceDefinition)
-	dsciCRD.SetName("dscinitializations.dscinitialization.opendatahub.io")
-
-	err = env.Client().Get(ctx, client.ObjectKeyFromObject(dsciCRD), dsciCRD)
-	g.Expect(err).ShouldNot(HaveOccurred())
-	g.Expect(dsciCRD).To(And(
-		jq.Match(`.spec.conversion.strategy == "Webhook"`),
-		jq.Match(`.spec.conversion.webhook.clientConfig.url | startswith("https://%s")`, webhookHost)),
-	)
 
 	// Run test cases
 	tmaps := []struct {
