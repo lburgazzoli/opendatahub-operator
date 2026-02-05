@@ -43,6 +43,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/render/kustomize"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/status/deployments"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/status/releases"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/upgrade"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/conditions"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/handlers"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates"
@@ -54,8 +55,10 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 )
 
-func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager) error {
-	b := reconciler.ReconcilerFor(mgr, &componentApi.Kueue{}).
+func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager, opts ...reconciler.ReconcilerOpt) error {
+	upgradeAction := upgrade.NewAction(mgr, upgrade.WithFn(cleanupDeprecatedVAPB))
+
+	_, err := reconciler.ReconcilerFor(mgr, &componentApi.Kueue{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
 		Owns(&rbacv1.ClusterRoleBinding{}).
@@ -137,6 +140,7 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 				handlers.ToNamed(componentApi.KueueInstanceName),
 			),
 		).
+		WithAction(upgradeAction.Run).
 		WithAction(checkPreConditions).
 		WithAction(initialize).
 		WithAction(dependency.NewAction(
@@ -171,11 +175,8 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 		WithAction(gc.NewAction()).
 		// declares the list of additional, controller specific conditions that are
 		// contributing to the controller readiness status
-		WithConditions(conditionTypes...)
+		WithConditions(conditionTypes...).
+		Build(ctx, opts...)
 
-	if _, err := b.Build(ctx); err != nil {
-		return err // no need customize error, it is done in the caller main
-	}
-
-	return nil
+	return err
 }
