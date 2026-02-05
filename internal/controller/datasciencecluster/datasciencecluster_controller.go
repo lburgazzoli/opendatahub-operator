@@ -20,7 +20,6 @@ package datasciencecluster
 import (
 	"context"
 
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -31,12 +30,18 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/deploy"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/gc"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/upgrade"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/dependent"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 )
 
-func NewDataScienceClusterReconciler(ctx context.Context, mgr ctrl.Manager) error {
+func NewDataScienceClusterReconciler(ctx context.Context, mgr ctrl.Manager, opts ...reconciler.ReconcilerOpt) error {
+	upgradeAction := upgrade.NewAction(mgr,
+		upgrade.WithFn(cleanupDeprecatedRoleBindings),
+		upgrade.WithFn(migrateHardwareProfiles),
+		upgrade.NonBlocking(),
+	)
+
 	componentsPredicate := dependent.New(dependent.WithWatchStatus(true))
 
 	_, err := reconciler.ReconcilerFor(mgr, &dscv2.DataScienceCluster{}).
@@ -61,6 +66,7 @@ func NewDataScienceClusterReconciler(ctx context.Context, mgr ctrl.Manager) erro
 			reconciler.WithEventMapper(func(ctx context.Context, _ client.Object) []reconcile.Request {
 				return watchDataScienceClusters(ctx, mgr.GetClient())
 			})).
+		WithAction(upgradeAction.Run).
 		WithAction(initialize).
 		WithAction(checkPreConditions).
 		WithAction(updateStatus).
@@ -69,18 +75,10 @@ func NewDataScienceClusterReconciler(ctx context.Context, mgr ctrl.Manager) erro
 			deploy.WithCache()),
 		).
 		WithAction(gc.NewAction(
-			gc.WithTypePredicate(
-				func(rr *types.ReconciliationRequest, objGVK schema.GroupVersionKind) (bool, error) {
-					return rr.Controller.Owns(objGVK), nil
-				},
-			),
+			gc.WithTypePredicate(gc.OwnedTypePredicate),
 		)).
 		WithConditions(status.ConditionTypeComponentsReady).
-		Build(ctx)
+		Build(ctx, opts...)
 
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
