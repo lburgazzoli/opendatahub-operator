@@ -34,6 +34,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/gc"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/render/kustomize"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/status/deployments"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/upgrade"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/handlers"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/component"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/resources"
@@ -41,7 +42,9 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 )
 
-func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager) error {
+func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager, opts ...reconciler.ReconcilerOpt) error {
+	upgradeAction := upgrade.NewAction(mgr, upgrade.WithFn(cleanupLegacyDeployment))
+
 	_, err := reconciler.ReconcilerFor(
 		mgr,
 		&componentApi.ModelController{},
@@ -66,6 +69,7 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 			reconciler.WithPredicates(
 				component.ForLabel(labels.ODH.Component(LegacyComponentName), labels.True)),
 		).
+		WithAction(upgradeAction.Run).
 		WithAction(initialize).
 		WithAction(kustomize.NewAction(
 			kustomize.WithLabel(labels.ODH.Component(LegacyComponentName), labels.True),
@@ -80,11 +84,7 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 		// declares the list of additional, controller specific conditions that are
 		// contributing to the controller readiness status
 		WithConditions(conditionTypes...).
-		Build(ctx) // include GenerationChangedPredicate no need set in each Owns() above
+		Build(ctx, opts...) // include GenerationChangedPredicate no need set in each Owns() above
 
-	if err != nil {
-		return err // no need customize error, it is done in the caller main
-	}
-
-	return nil
+	return err
 }

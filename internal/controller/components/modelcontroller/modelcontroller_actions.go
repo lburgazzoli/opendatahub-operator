@@ -29,7 +29,6 @@ import (
 )
 
 func initialize(_ context.Context, rr *odhtypes.ReconciliationRequest) error {
-	// early exist
 	mc, ok := rr.Instance.(*componentApi.ModelController)
 	if !ok {
 		return fmt.Errorf("resource instance %v is not a componentApi.ModelController)", rr.Instance)
