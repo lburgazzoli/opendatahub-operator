@@ -248,6 +248,10 @@ endif
 	@$(call fetch-external-crds,github.com/openshift/api,route/v1)
 	@$(call fetch-external-crds,github.com/openshift/api,user/v1)
 	@$(call fetch-external-crds,github.com/openshift/api,config/v1,authentications)
+	@$(call fetch-external-crds,github.com/openshift/api,template/v1,templates)
+	@$(call fetch-external-crds,github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring,v1,prometheusrules podmonitors servicemonitors)
+	@$(call fetch-external-crds,github.com/operator-framework/api,pkg/operators/v2)
+	@$(call fetch-external-crds,sigs.k8s.io/gateway-api,apis/v1,gateways gatewayclasses httproutes)
 CLEANFILES += config/crd/bases config/rhoai/crd/bases config/crd/external config/rhoai/crd/external config/rbac/role.yaml config/rhoai/rbac/role.yaml config/webhook/manifests.yaml config/rhoai/webhook/manifests.yaml
 
 .PHONY: manifests-all

@@ -93,12 +93,20 @@ linters:
         - predicate.Predicate
         - client.Object
         - client.Client
+        - client.FieldIndexer
+        - client.Reader
+        - client.WithWatch
         - common.PlatformObject
         - types.AsyncAssertion
         - kubernetes.Interface
         - gomega.AsyncAssertion
         - labels.Selector
         - manager.Manager
+        - record.EventRecorder
+        - meta.RESTMapper
+        - cache.Cache
+        - webhook.Server
+        - watch.Interface
     lll:
       line-length: 180
     nolintlint:

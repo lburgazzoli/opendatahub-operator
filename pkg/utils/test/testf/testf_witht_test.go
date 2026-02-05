@@ -24,11 +24,11 @@ import (
 
 // Common test helpers to reduce duplication across test functions
 
-// prepareTestConfigMap creates a unique ConfigMap and returns a matcher for it along with the unstructured object and key.
+// prepareTestConfigMap creates a unique ConfigMap and returns a matcher for it along with the unstructured object.
 // This is used for tests that create new ConfigMaps (e.g., TestCreate).
 //
 //nolint:ireturn
-func prepareTestConfigMap(g Gomega, template corev1.ConfigMap) (types.GomegaMatcher, *unstructured.Unstructured, client.ObjectKey) {
+func prepareTestConfigMap(g Gomega, template corev1.ConfigMap) (types.GomegaMatcher, *unstructured.Unstructured) {
 	cm := template.DeepCopy()
 	cm.Name = xid.New().String()
 	if cm.Data == nil {
@@ -42,11 +42,10 @@ func prepareTestConfigMap(g Gomega, template corev1.ConfigMap) (types.GomegaMatc
 		jq.Match(`.data.foo == "bar"`),
 	)
 
-	key := client.ObjectKeyFromObject(cm)
 	obj, err := resources.ToUnstructured(cm)
 	g.Expect(err).ShouldNot(HaveOccurred())
 
-	return matcher, obj, key
+	return matcher, obj
 }
 
 // prepareUpdateTestConfigMap creates a ConfigMap from template and returns an unstructured object for update tests.
@@ -405,9 +404,9 @@ func TestCreate(t *testing.T) {
 	t.Run("Get", func(t *testing.T) {
 		wt := tc.NewWithT(t)
 
-		matcher, obj, key := prepareTestConfigMap(g, cmTemplate)
+		matcher, obj := prepareTestConfigMap(g, cmTemplate)
 
-		v, err := wt.Create(obj, key).Get()
+		v, err := wt.Create(obj).Get()
 
 		g.Expect(err).ShouldNot(HaveOccurred())
 		g.Expect(v).Should(matcher)
@@ -416,36 +415,36 @@ func TestCreate(t *testing.T) {
 	t.Run("Eventually", func(t *testing.T) {
 		wt := tc.NewWithT(t)
 
-		matcher, obj, key := prepareTestConfigMap(g, cmTemplate)
+		matcher, obj := prepareTestConfigMap(g, cmTemplate)
 
-		v := wt.Create(obj, key).Eventually().Should(matcher)
+		v := wt.Create(obj).Eventually().Should(matcher)
 		g.Expect(v).Should(matcher)
 	})
 
 	t.Run("Eventually Succeed", func(t *testing.T) {
 		wt := tc.NewWithT(t)
 
-		matcher, obj, key := prepareTestConfigMap(g, cmTemplate)
+		matcher, obj := prepareTestConfigMap(g, cmTemplate)
 
-		v := wt.Create(obj, key).Eventually().Should(Succeed())
+		v := wt.Create(obj).Eventually().Should(Succeed())
 		g.Expect(v).Should(matcher)
 	})
 
 	t.Run("Consistently", func(t *testing.T) {
 		wt := tc.NewWithT(t)
 
-		matcher, obj, key := prepareTestConfigMap(g, cmTemplate)
+		matcher, obj := prepareTestConfigMap(g, cmTemplate)
 
-		v := wt.Create(obj, key).Consistently().WithTimeout(1 * time.Second).Should(matcher)
+		v := wt.Create(obj).Consistently().WithTimeout(1 * time.Second).Should(matcher)
 		g.Expect(v).Should(matcher)
 	})
 
 	t.Run("Consistently Succeed", func(t *testing.T) {
 		wt := tc.NewWithT(t)
 
-		matcher, obj, key := prepareTestConfigMap(g, cmTemplate)
+		matcher, obj := prepareTestConfigMap(g, cmTemplate)
 
-		v := wt.Create(obj, key).Consistently().WithTimeout(1 * time.Second).Should(Succeed())
+		v := wt.Create(obj).Consistently().WithTimeout(1 * time.Second).Should(Succeed())
 		g.Expect(v).Should(matcher)
 	})
 }

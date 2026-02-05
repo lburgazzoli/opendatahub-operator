@@ -214,7 +214,7 @@ func (b *ReconcilerBuilder[T]) OwnsGVK(gvk schema.GroupVersionKind, opts ...Watc
 	return b.Owns(resources.GvkToUnstructured(gvk), opts...)
 }
 
-func (b *ReconcilerBuilder[T]) Build(_ context.Context) (*Reconciler, error) {
+func (b *ReconcilerBuilder[T]) Build(_ context.Context, reconcilerOpts ...ReconcilerOpt) (*Reconciler, error) {
 	if b.errors != nil {
 		return nil, b.errors
 	}
@@ -228,7 +228,9 @@ func (b *ReconcilerBuilder[T]) Build(_ context.Context) (*Reconciler, error) {
 		return nil, errors.New("invalid type for object")
 	}
 
-	r, err := NewReconciler(b.mgr, name, obj, WithConditionsManagerFactory(b.happyCondition, b.dependentConditions...))
+	// Combine conditions manager with any additional reconciler options passed to Build
+	opts := append([]ReconcilerOpt{WithConditionsManagerFactory(b.happyCondition, b.dependentConditions...)}, reconcilerOpts...)
+	r, err := NewReconciler(b.mgr, name, obj, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create reconciler for component %s: %w", name, err)
 	}

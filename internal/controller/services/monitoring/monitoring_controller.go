@@ -88,7 +88,7 @@ func monitoringNamespace(_ context.Context, rr *odhtypes.ReconciliationRequest) 
 	return m.Spec.Namespace, nil
 }
 
-func (h *serviceHandler) NewReconciler(ctx context.Context, mgr ctrl.Manager) error {
+func (h *serviceHandler) NewReconciler(ctx context.Context, mgr ctrl.Manager, opts ...reconciler.ReconcilerOpt) error {
 	_, err := reconciler.ReconcilerFor(mgr, &serviceApi.Monitoring{}).
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).
@@ -167,7 +167,7 @@ func (h *serviceHandler) NewReconciler(ctx context.Context, mgr ctrl.Manager) er
 		// Sync CA from ConfigMap to Secret (handles initial creation and rotation updates)
 		WithAction(syncPrometheusWebTLSCA).
 		WithAction(gc.NewAction()).
-		Build(ctx)
+		Build(ctx, opts...)
 
 	if err != nil {
 		return fmt.Errorf("could not create the monitoring controller: %w", err)

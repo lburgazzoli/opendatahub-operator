@@ -42,7 +42,7 @@ import (
 )
 
 // NewComponentReconciler creates a ComponentReconciler for the Workbenches API.
-func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager) error {
+func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager, opts ...reconciler.ReconcilerOpt) error {
 	_, err := reconciler.ReconcilerFor(mgr, &componentApi.Workbenches{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
@@ -81,7 +81,7 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 		// declares the list of additional, controller specific conditions that are
 		// contributing to the controller readiness status
 		WithConditions(conditionTypes...).
-		Build(ctx)
+		Build(ctx, opts...)
 
 	if err != nil {
 		return err

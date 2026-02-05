@@ -9,6 +9,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	dsciv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v2"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
 )
 
 // ServiceHandler is an interface to manage a service
@@ -17,7 +18,7 @@ type ServiceHandler interface {
 	Init(platform common.Platform) error
 	GetName() string
 	GetManagementState(platform common.Platform, dsci *dsciv2.DSCInitialization) operatorv1.ManagementState
-	NewReconciler(ctx context.Context, mgr ctrl.Manager) error
+	NewReconciler(ctx context.Context, mgr ctrl.Manager, opts ...reconciler.ReconcilerOpt) error
 }
 
 // Registry is a struct that maintains a list of registered ServiceHandlers.

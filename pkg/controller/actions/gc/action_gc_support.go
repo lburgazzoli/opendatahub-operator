@@ -49,3 +49,8 @@ func DefaultObjectPredicate(rr *odhTypes.ReconciliationRequest, obj unstructured
 func DefaultTypePredicate(_ *odhTypes.ReconciliationRequest, _ schema.GroupVersionKind) (bool, error) {
 	return true, nil
 }
+
+// OwnedTypePredicate returns true if the controller owns the given GVK.
+func OwnedTypePredicate(rr *odhTypes.ReconciliationRequest, gvk schema.GroupVersionKind) (bool, error) {
+	return rr.Controller.Owns(gvk), nil
+}

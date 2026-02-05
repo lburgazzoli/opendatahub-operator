@@ -46,7 +46,7 @@ import (
 )
 
 // NewComponentReconciler creates a ComponentReconciler for the Dashboard API.
-func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager) error {
+func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager, opts ...reconciler.ReconcilerOpt) error {
 	componentName := computeComponentName()
 
 	_, err := reconciler.ReconcilerFor(mgr, &componentApi.Dashboard{}).
@@ -123,7 +123,7 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 		// declares the list of additional, controller specific conditions that are
 		// contributing to the controller readiness status
 		WithConditions(conditionTypes...).
-		Build(ctx)
+		Build(ctx, opts...)
 
 	if err != nil {
 		return fmt.Errorf("could not create the dashboard controller: %w", err)

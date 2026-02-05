@@ -53,7 +53,7 @@ import (
 )
 
 // NewComponentReconciler creates a ComponentReconciler for the Dashboard API.
-func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager) error {
+func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager, opts ...reconciler.ReconcilerOpt) error {
 	versionPrefix := strings.ReplaceAll("v"+cluster.GetRelease().Version.String(), ".", "-")
 
 	_, err := reconciler.ReconcilerFor(mgr, &componentApi.Kserve{}).
@@ -159,7 +159,7 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 		// declares the list of additional, controller specific conditions that are
 		// contributing to the controller readiness status
 		WithConditions(conditionTypes...).
-		Build(ctx)
+		Build(ctx, opts...)
 
 	return err
 }

@@ -284,7 +284,7 @@ func (tc *TestContext) EventuallyResourceCreated(opts ...ResourceOpts) *unstruct
 				tc.g.Expect(err).NotTo(HaveOccurred(), "failed to apply create mutation")
 			}
 		}
-		return tc.g.Create(obj, ro.NN)
+		return tc.g.Create(obj)
 	}
 
 	return eventuallyResourceApplied(ro, createFn)
@@ -833,7 +833,7 @@ func (tc *TestContext) EnsureResourceIsUnique(obj client.Object, args ...any) {
 	// Attempt to create the duplicate resource, expecting failure
 	tc.g.Eventually(func(g Gomega) {
 		// Try to create the resource
-		_, err := tc.g.Create(u, types.NamespacedName{Namespace: u.GetNamespace(), Name: u.GetName()}).Get()
+		_, err := tc.g.Create(u).Get()
 
 		// If there's no error, that means the duplicate creation succeeded, which is a failure
 		g.Expect(err).To(HaveOccurred(), defaultErrorMessageIfNone(
@@ -1475,7 +1475,7 @@ func (tc *TestContext) CheckOperatorExists(operatorNamePrefix string) (bool, err
 func (tc *TestContext) EnsureWebhookBlocksResourceCreation(opts ...ResourceOpts) {
 	tc.EnsureWebhookBlocksOperation(func() error {
 		ro := tc.NewResourceOptions(opts...)
-		_, err := tc.g.Create(ro.Obj, ro.NN).Get()
+		_, err := tc.g.Create(ro.Obj).Get()
 		return err
 	}, "creation", opts...)
 }

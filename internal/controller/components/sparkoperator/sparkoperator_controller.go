@@ -39,7 +39,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 )
 
-func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager) error {
+func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager, opts ...reconciler.ReconcilerOpt) error {
 	_, err := reconciler.ReconcilerFor(mgr, &componentApi.SparkOperator{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&rbacv1.RoleBinding{}).
@@ -70,7 +70,7 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 		WithAction(deployments.NewAction()).
 		WithAction(gc.NewAction()).
 		WithConditions(conditionTypes...).
-		Build(ctx)
+		Build(ctx, opts...)
 
 	if err != nil {
 		return err

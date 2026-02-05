@@ -110,9 +110,9 @@ func TestConditions(t *testing.T) {
 	cli, err := client.New(cfg, client.Options{Scheme: s})
 	g.Expect(err).NotTo(HaveOccurred())
 
-	dsci := resources.GvkToUnstructured(gvk.DSCInitialization)
-	dsci.SetName(xid.New().String())
-	dsci.SetGeneration(1)
+	dsci := &dsciv2.DSCInitialization{
+		ObjectMeta: metav1.ObjectMeta{Name: xid.New().String()},
+	}
 
 	err = cli.Create(ctx, dsci)
 	g.Expect(err).NotTo(HaveOccurred())

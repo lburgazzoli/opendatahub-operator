@@ -51,6 +51,7 @@ import (
 	infrav1 "github.com/opendatahub-io/opendatahub-operator/v2/api/infrastructure/v1"
 	serviceApi "github.com/opendatahub-io/opendatahub-operator/v2/api/services/v1alpha1"
 	dscictrl "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/dscinitialization"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/envt"
 	"github.com/opendatahub-io/opendatahub-operator/v2/tests/envtestutil"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -92,20 +93,21 @@ var _ = BeforeSuite(func() {
 	rootPath, pathErr := envtestutil.FindProjectRoot()
 	Expect(pathErr).ToNot(HaveOccurred(), pathErr)
 
+	crdPaths := []string{
+		filepath.Join(rootPath, "config", "crd", "bases"),
+		filepath.Join(rootPath, "config", "crd", "external"),
+	}
+	crds, err := envt.LoadCRDsFromPaths(crdPaths)
+	Expect(err).NotTo(HaveOccurred())
+
 	testEnv = &envtest.Environment{
 		CRDInstallOptions: envtest.CRDInstallOptions{
-			Scheme: testScheme,
-			Paths: []string{
-				filepath.Join(rootPath, "config", "crd", "bases"),
-				filepath.Join(rootPath, "config", "crd", "external"),
-			},
-			ErrorIfPathMissing: true,
-			CleanUpAfterUse:    false,
+			Scheme:          testScheme,
+			CRDs:            crds,
+			CleanUpAfterUse: false,
 		},
-		ErrorIfCRDPathMissing: true,
 	}
 
-	var err error
 	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())

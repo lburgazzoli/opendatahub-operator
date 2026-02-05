@@ -18,6 +18,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 )
 
@@ -41,8 +42,8 @@ func (m *MockComponentHandler) NewCRObject(dsc *dscv2.DataScienceCluster) common
 	return m.Called(dsc).Get(0).(common.PlatformObject)
 }
 
-func (m *MockComponentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager) error {
-	return m.Called(ctx, mgr).Error(0)
+func (m *MockComponentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager, opts ...reconciler.ReconcilerOpt) error {
+	return m.Called(ctx, mgr, opts).Error(0)
 }
 
 func (m *MockComponentHandler) UpdateDSCStatus(dsc *dscv2.DataScienceCluster, obj client.Object) error {
@@ -58,6 +59,10 @@ func (m *MockController) Owns(gvk schema.GroupVersionKind) bool {
 }
 
 func (m *MockController) GetClient() client.Client {
+	return m.Called().Get(0).(client.Client)
+}
+
+func (m *MockController) GetDirectClient() client.Client {
 	return m.Called().Get(0).(client.Client)
 }
 

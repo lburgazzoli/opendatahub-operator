@@ -42,7 +42,7 @@ import (
 )
 
 // NewComponentReconciler creates a new ModelsAsService controller.
-func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager) error {
+func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager, opts ...reconciler.ReconcilerOpt) error {
 	_, err := reconciler.ReconcilerFor(mgr, &componentApi.ModelsAsService{}).
 		// Core Kubernetes resources deployed by MaaS manifests
 		Owns(&corev1.ConfigMap{}).
@@ -94,7 +94,7 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 		// declares the list of additional, controller specific conditions that are
 		// contributing to the controller readiness status
 		WithConditions(conditionTypes...).
-		Build(ctx)
+		Build(ctx, opts...)
 	if err != nil {
 		return fmt.Errorf("could not create the ModelsAsService controller: %w", err)
 	}

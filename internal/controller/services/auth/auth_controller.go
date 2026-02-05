@@ -53,7 +53,7 @@ func (h *ServiceHandler) GetManagementState(platform common.Platform, _ *dsciv2.
 	return operatorv1.Managed
 }
 
-func (h *ServiceHandler) NewReconciler(ctx context.Context, mgr ctrl.Manager) error {
+func (h *ServiceHandler) NewReconciler(ctx context.Context, mgr ctrl.Manager, opts ...reconciler.ReconcilerOpt) error {
 	_, err := reconciler.ReconcilerFor(mgr, &serviceApi.Auth{}).
 		// operands - owned
 		Owns(&rbacv1.ClusterRoleBinding{}).
@@ -68,7 +68,7 @@ func (h *ServiceHandler) NewReconciler(ctx context.Context, mgr ctrl.Manager) er
 		WithAction(deploy.NewAction(
 			deploy.WithCache(),
 		)).
-		Build(ctx)
+		Build(ctx, opts...)
 
 	if err != nil {
 		return fmt.Errorf("could not create the auth controller: %w", err)

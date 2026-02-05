@@ -27,6 +27,10 @@ type Controller interface {
 	// GetClient returns a controller-runtime client used to interact with the Kubernetes API.
 	GetClient() client.Client
 
+	// GetDirectClient returns a non-caching client for direct API access.
+	// Use this for operations that need fresh data (upgrades, cleanup, etc.).
+	GetDirectClient() client.Client
+
 	// GetDiscoveryClient returns a client-go discovery client used to discover API resources on the cluster.
 	GetDiscoveryClient() discovery.DiscoveryInterface
 

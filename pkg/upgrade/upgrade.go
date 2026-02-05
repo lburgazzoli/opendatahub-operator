@@ -5,30 +5,18 @@ package upgrade
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"strings"
 
 	"github.com/hashicorp/go-multierror"
-	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
-	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
-	dsciv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v2"
 	infrav1 "github.com/opendatahub-io/opendatahub-operator/v2/api/infrastructure/v1"
-	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/gateway"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 )
 
 const (
@@ -59,153 +47,6 @@ var defaultResourceLimits = map[string]string{
 	"minMemory": "8Gi",
 	"maxCpu":    "30",
 	"minCpu":    "1",
-}
-
-// TODO: remove function once we have a generic solution across all components.
-func CleanupExistingResource(ctx context.Context,
-	cli client.Client,
-	platform common.Platform,
-	oldReleaseVersion common.Release,
-) error {
-	var multiErr *multierror.Error
-	// get DSCI CR to get application namespace
-	dsciList := &dsciv2.DSCInitializationList{}
-	if err := cli.List(ctx, dsciList); err != nil {
-		return err
-	}
-	if len(dsciList.Items) == 0 {
-		return nil
-	}
-	d := &dsciList.Items[0]
-
-	// Cleanup of deprecated default RoleBinding resources
-	deprecatedDefaultRoleBinding := []string{d.Spec.ApplicationsNamespace}
-	multiErr = multierror.Append(multiErr, deleteDeprecatedResources(ctx, cli, d.Spec.ApplicationsNamespace, deprecatedDefaultRoleBinding, &rbacv1.RoleBindingList{}))
-
-	// cleanup model controller legacy deployment
-	multiErr = multierror.Append(multiErr, cleanupModelControllerLegacyDeployment(ctx, cli, d.Spec.ApplicationsNamespace))
-	// cleanup deprecated kueue ValidatingAdmissionPolicyBinding
-	multiErr = multierror.Append(multiErr, cleanupDeprecatedKueueVAPB(ctx, cli))
-
-	// HardwareProfile migration as described in RHOAIENG-33158 and RHOAIENG-33159
-	// This includes creating HardwareProfile resources and updating annotations on Notebooks and InferenceServices
-	if cluster.GetRelease().Version.Major == 3 && oldReleaseVersion.Version.Major == 2 {
-		multiErr = multierror.Append(multiErr, MigrateToInfraHardwareProfiles(ctx, cli, d.Spec.ApplicationsNamespace))
-	}
-
-	// GatewayConfig ingressMode migration: preserve LoadBalancer mode for existing 3.x deployments
-	if oldReleaseVersion.Version.Major == 3 {
-		multiErr = multierror.Append(multiErr, MigrateGatewayConfigIngressMode(ctx, cli))
-	}
-
-	return multiErr.ErrorOrNil()
-}
-
-func deleteDeprecatedResources(ctx context.Context, cli client.Client, namespace string, resourceList []string, resourceType client.ObjectList) error {
-	log := logf.FromContext(ctx)
-	var multiErr *multierror.Error
-	listOpts := &client.ListOptions{Namespace: namespace}
-	if err := cli.List(ctx, resourceType, listOpts); err != nil {
-		multiErr = multierror.Append(multiErr, err)
-	}
-	items := reflect.ValueOf(resourceType).Elem().FieldByName("Items")
-	for i := range items.Len() {
-		item := items.Index(i).Addr().Interface().(client.Object) //nolint:errcheck,forcetypeassert
-		for _, name := range resourceList {
-			if name == item.GetName() {
-				log.Info("Attempting to delete", "name", item.GetName(), "namespace", namespace)
-				err := cli.Delete(ctx, item)
-				if err != nil {
-					if k8serr.IsNotFound(err) {
-						log.Info("Could not find", "name", item.GetName(), "namespace", namespace)
-					} else {
-						multiErr = multierror.Append(multiErr, err)
-					}
-				}
-				log.Info("Successfully deleted", "name", item.GetName())
-			}
-		}
-	}
-	return multiErr.ErrorOrNil()
-}
-
-// When upgrading from version 2.16 to 2.17, the odh-model-controller
-// fails to be provisioned due to the immutability of the deployment's
-// label selectors. In RHOAI ≤ 2.16, the model controller was deployed
-// independently by both kserve and modelmesh components, leading to variations
-// in label assignments depending on the deployment order. During a
-// redeployment or upgrade, this error was ignored, and the model
-// controller would eventually be reconciled by the appropriate component.
-//
-// However, in version 2.17, the model controller is now a defined
-// dependency with its own fixed labels and selectors. This change
-// causes issues during upgrades, as existing deployments cannot be
-// modified accordingly.
-//
-// This function as to stay as long as there is any long term support
-// release based on the old logic.
-func cleanupModelControllerLegacyDeployment(ctx context.Context, cli client.Client, applicationNS string) error {
-	l := logf.FromContext(ctx)
-
-	d := appsv1.Deployment{}
-	d.Name = "odh-model-controller"
-	d.Namespace = applicationNS
-
-	err := cli.Get(ctx, client.ObjectKeyFromObject(&d), &d)
-	switch {
-	case k8serr.IsNotFound(err):
-		return nil
-	case err != nil:
-		return fmt.Errorf("failure getting %s deployment in namespace %s: %w", d.Name, d.Namespace, err)
-	}
-
-	if d.Labels[labels.PlatformPartOf] == componentApi.ModelControllerComponentName {
-		return nil
-	}
-
-	l.Info("deleting legacy deployment", "name", d.Name, "namespace", d.Namespace)
-
-	err = cli.Delete(ctx, &d, client.PropagationPolicy(metav1.DeletePropagationForeground))
-	switch {
-	case k8serr.IsNotFound(err):
-		return nil
-	case err != nil:
-		return fmt.Errorf("failure deleting %s deployment in namespace %s: %w", d.Name, d.Namespace, err)
-	}
-
-	l.Info("legacy deployment deleted", "name", d.Name, "namespace", d.Namespace)
-
-	return nil
-}
-
-// cleanupDeprecatedKueueVAPB removes the deprecated ValidatingAdmissionPolicyBinding
-// that was used in previous versions of Kueue but is no longer needed.
-// TODO: Remove this cleanup function in a future release when upgrading from versions
-// that contained ValidatingAdmissionPolicyBinding resources (< v2.29.0) is no longer supported.
-// This cleanup is only needed for upgrade scenarios from versions that included VAP manifests
-// in config/kueue-configs/ocp-4.17-addons/ directory.
-func cleanupDeprecatedKueueVAPB(ctx context.Context, cli client.Client) error {
-	log := logf.FromContext(ctx)
-
-	// Use the proper ValidatingAdmissionPolicyBinding struct instead of unstructured
-	vapb := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "kueue-validating-admission-policy-binding",
-		},
-	}
-
-	// Attempt to delete the resource
-	err := cli.Delete(ctx, vapb)
-	// VAPB is not a CRD but a core type from k8s, we wanna ensure API version is correct
-	if client.IgnoreNotFound(err) != nil && !meta.IsNoMatchError(err) {
-		return fmt.Errorf("failed to delete deprecated ValidatingAdmissionPolicyBinding: %w", err)
-	}
-
-	if err == nil {
-		log.Info("Successfully deleted deprecated ValidatingAdmissionPolicyBinding")
-	}
-
-	return nil
 }
 
 // MigrateToInfraHardwareProfiles orchestrates all HardwareProfile migrations including resource creation and annotation updates.
@@ -531,59 +372,4 @@ func AttachHardwareProfileToInferenceServices(ctx context.Context, cli client.Cl
 	}
 
 	return multiErr.ErrorOrNil()
-}
-
-// MigrateGatewayConfigIngressMode preserves LoadBalancer mode for existing Gateway deployments.
-func MigrateGatewayConfigIngressMode(ctx context.Context, cli client.Client) error {
-	l := logf.FromContext(ctx)
-
-	gatewayConfig := &unstructured.Unstructured{}
-	gatewayConfig.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "services.platform.opendatahub.io",
-		Version: "v1alpha1",
-		Kind:    "GatewayConfig",
-	})
-
-	err := cli.Get(ctx, client.ObjectKey{Name: "default-gateway"}, gatewayConfig)
-	switch {
-	case k8serr.IsNotFound(err):
-		return nil
-	case err != nil:
-		return fmt.Errorf("failed to get GatewayConfig: %w", err)
-	}
-
-	ingressMode, _, _ := unstructured.NestedString(gatewayConfig.Object, "spec", "ingressMode")
-	if ingressMode != "" {
-		return nil
-	}
-
-	gatewayService := &corev1.Service{}
-	err = cli.Get(ctx, client.ObjectKey{
-		Name:      gateway.GatewayServiceFullName,
-		Namespace: gateway.GatewayNamespace,
-	}, gatewayService)
-	switch {
-	case k8serr.IsNotFound(err):
-		return nil
-	case err != nil:
-		return fmt.Errorf("failed to get Gateway service: %w", err)
-	}
-
-	if gatewayService.Spec.Type != corev1.ServiceTypeLoadBalancer {
-		return nil
-	}
-
-	l.Info("preserving LoadBalancer ingressMode for existing Gateway")
-
-	patch := client.MergeFrom(gatewayConfig.DeepCopy())
-	if err := unstructured.SetNestedField(gatewayConfig.Object, "LoadBalancer", "spec", "ingressMode"); err != nil {
-		return fmt.Errorf("failed to set ingressMode field: %w", err)
-	}
-	if err := cli.Patch(ctx, gatewayConfig, patch); err != nil {
-		return fmt.Errorf("failed to patch GatewayConfig: %w", err)
-	}
-
-	l.Info("GatewayConfig migrated to ingressMode=LoadBalancer")
-
-	return nil
 }

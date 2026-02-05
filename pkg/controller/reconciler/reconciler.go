@@ -45,11 +45,40 @@ func WithConditionsManagerFactory(happy string, dependents ...string) Reconciler
 	}
 }
 
+// WithClient overrides the client used by the reconciler.
+// This is useful for testing with a custom client that injects faults or intercepts operations.
+//
+// Example usage with interceptor for fault injection:
+//
+//	faultyClient := interceptor.NewClient(realClient, interceptor.Funcs{
+//	    Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+//	        if obj.GetName() == "target-resource" {
+//	            return errors.New("simulated failure")
+//	        }
+//	        return c.Delete(ctx, obj, opts...)
+//	    },
+//	})
+//	reconciler, err := NewReconciler(mgr, name, obj, WithClient(faultyClient))
+func WithClient(cli client.Client) ReconcilerOpt {
+	return func(reconciler *Reconciler) {
+		reconciler.Client = cli
+	}
+}
+
+// WithDirectClient overrides the direct (non-caching) client.
+// Useful for wrapping with audit logging, rate limiting, or test interceptors.
+func WithDirectClient(cli client.Client) ReconcilerOpt {
+	return func(reconciler *Reconciler) {
+		reconciler.DirectClient = cli
+	}
+}
+
 const platformFinalizer = "platform.opendatahub.io/finalizer"
 
 // Reconciler provides generic reconciliation functionality for ODH objects.
 type Reconciler struct {
 	Client          client.Client
+	DirectClient    client.Client // Non-caching client for fresh API reads
 	discoveryClient discovery.DiscoveryInterface
 	dynamicClient   dynamic.Interface
 
@@ -78,13 +107,22 @@ func NewReconciler[T common.PlatformObject](mgr manager.Manager, name string, ob
 		return nil, fmt.Errorf("unable to construct a Dynamic client: %w", err)
 	}
 
+	// Create non-caching client for direct API access (upgrades, cleanup, etc.)
+	directCli, err := client.New(mgr.GetConfig(), client.Options{
+		Scheme: mgr.GetScheme(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("unable to create direct client: %w", err)
+	}
+
 	cc := Reconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Log:      ctrl.Log.WithName("controllers").WithName(name),
-		Recorder: mgr.GetEventRecorderFor(name),
-		Release:  cluster.GetRelease(),
-		name:     name,
+		Client:       mgr.GetClient(),
+		DirectClient: directCli,
+		Scheme:       mgr.GetScheme(),
+		Log:          ctrl.Log.WithName("controllers").WithName(name),
+		Recorder:     mgr.GetEventRecorderFor(name),
+		Release:      cluster.GetRelease(),
+		name:         name,
 		instanceFactory: func() (common.PlatformObject, error) {
 			t := reflect.TypeOf(object).Elem()
 			res, ok := reflect.New(t).Interface().(T)
@@ -119,6 +157,10 @@ func (r *Reconciler) GetLogger() logr.Logger {
 
 func (r *Reconciler) GetClient() client.Client {
 	return r.Client
+}
+
+func (r *Reconciler) GetDirectClient() client.Client {
+	return r.DirectClient
 }
 
 func (r *Reconciler) GetDiscoveryClient() discovery.DiscoveryInterface {
@@ -284,7 +326,8 @@ func (r *Reconciler) apply(ctx context.Context, res common.PlatformObject) error
 
 	var provisionErr error
 
-	// Execute actions sequentially. Stop on first error and mark conditions accordingly.
+	// Execute actions sequentially. Only stop on StopError.
+	// Non-stop errors are tracked but don't break the loop.
 	for _, action := range r.Actions {
 		l.Info("Executing action", "action", action)
 
@@ -293,19 +336,35 @@ func (r *Reconciler) apply(ctx context.Context, res common.PlatformObject) error
 			l.WithName(actions.ActionGroup).WithName(action.String()),
 		)
 
-		provisionErr = action(actx, &rr)
-		if provisionErr != nil {
-			break
+		if err := action(actx, &rr); err != nil {
+			provisionErr = err
+
+			// Only break on StopError
+			var stopErr odherrors.StopError
+			if errors.As(err, &stopErr) {
+				break
+			}
 		}
 	}
 
 	// Set provisioning condition based on action execution result
 	if provisionErr != nil {
-		rr.Conditions.MarkFalse(
-			status.ConditionTypeProvisioningSucceeded,
-			conditions.WithError(provisionErr),
-			conditions.WithObservedGeneration(rr.Instance.GetGeneration()),
-		)
+		var stopErr odherrors.StopError
+		if errors.As(provisionErr, &stopErr) && stopErr.Reason != "" {
+			rr.Conditions.MarkFalse(
+				status.ConditionTypeProvisioningSucceeded,
+				conditions.WithReason(stopErr.Reason),
+				conditions.WithMessage("%s", provisionErr.Error()),
+				conditions.WithSeverity(common.ConditionSeverityError),
+				conditions.WithObservedGeneration(rr.Instance.GetGeneration()),
+			)
+		} else {
+			rr.Conditions.MarkFalse(
+				status.ConditionTypeProvisioningSucceeded,
+				conditions.WithError(provisionErr),
+				conditions.WithObservedGeneration(rr.Instance.GetGeneration()),
+			)
+		}
 	} else {
 		rr.Conditions.MarkTrue(
 			status.ConditionTypeProvisioningSucceeded,

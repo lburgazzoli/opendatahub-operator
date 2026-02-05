@@ -82,7 +82,6 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/initialinstall"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/logger"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/upgrade"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/flags"
 
 	_ "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/dashboard"
@@ -184,7 +183,7 @@ func LoadConfig() (*OperatorConfig, error) {
 	return &operatorConfig, nil
 }
 
-func main() { //nolint:funlen,maintidx,gocyclo
+func main() { //nolint:funlen,maintidx
 	// Viper settings
 	viper.SetEnvPrefix("ODH_MANAGER")
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
@@ -437,28 +436,6 @@ func main() { //nolint:funlen,maintidx,gocyclo
 			setupLog.Error(err, "error scheduling DSC creation")
 			os.Exit(1)
 		}
-	}
-
-	// Cleanup resources from previous v2 releases
-	cleanup := LeaderElectionRunnableFunc(func(ctx context.Context) error {
-		setupLog.Info("determine deployed release")
-		// get old release version before we create default DSCI CR
-		oldReleaseVersion, err := cluster.GetDeployedRelease(ctx, setupClient)
-		if err != nil {
-			setupLog.Error(err, "unable to get deployed release version")
-			os.Exit(1)
-		}
-
-		setupLog.Info("run upgrade task")
-		if err = upgrade.CleanupExistingResource(ctx, setupClient, platform, oldReleaseVersion); err != nil {
-			setupLog.Error(err, "unable to perform cleanup")
-		}
-		return err
-	})
-
-	err = mgr.Add(cleanup)
-	if err != nil {
-		setupLog.Error(err, "error remove deprecated resources from previous version")
 	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

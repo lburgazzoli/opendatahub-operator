@@ -177,7 +177,6 @@ func (t *WithT) Get(
 // Parameters:
 //   - obj (*unstructured.Unstructured): The resource to create. It must have the appropriate GroupVersionKind,
 //     name, and namespace set in its metadata.
-//   - nn (types.NamespacedName): The namespace and name of the resource. This should match the metadata in `obj`.
 //   - option (...client.CreateOption): Optional client options for the create operation.
 //
 // Returns:
@@ -185,7 +184,6 @@ func (t *WithT) Get(
 //     which can be used with Gomega assertions to test the created resource.
 func (t *WithT) Create(
 	obj *unstructured.Unstructured,
-	nn types.NamespacedName,
 	option ...client.CreateOption,
 ) *EventuallyValue[*unstructured.Unstructured] {
 	return &EventuallyValue[*unstructured.Unstructured]{
@@ -194,6 +192,7 @@ func (t *WithT) Create(
 		f: func(ctx context.Context) (*unstructured.Unstructured, error) {
 			err := t.Client().Create(ctx, obj, option...)
 			if err != nil {
+				nn := types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()}
 				return nil, StopErr(err, "failed to create resource: %s, nn: %s", obj.GetObjectKind().GroupVersionKind(), nn.String())
 			}
 

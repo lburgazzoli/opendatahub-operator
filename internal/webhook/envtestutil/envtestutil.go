@@ -18,7 +18,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -53,6 +56,138 @@ type ObjectOption func(client.Object)
 
 // CRDSetupOption is a functional option for configuring the test environment setup with CRDs.
 type CRDSetupOption func(ctx context.Context, t *testing.T, env *envt.EnvT) error
+
+// =============================================================================
+// Fault Injection Support
+// =============================================================================
+
+// NewClientFunc is a function signature for creating clients (matches manager.Options.NewClient).
+type NewClientFunc func(config *rest.Config, options client.Options) (client.Client, error)
+
+// NewInterceptingClientFunc creates a NewClientFunc that wraps the real client with interceptors.
+// This allows injecting faults into the controller's client operations during integration tests.
+//
+// The interceptor functions receive the underlying real client as a parameter, allowing you to:
+//   - Delegate to the real client: return c.Delete(ctx, obj, opts...)
+//   - Inject an error: return errors.New("simulated failure")
+//   - Conditionally fail: if obj.GetName() == "specific-name" { return err }
+//
+// Example usage:
+//
+//	faultyNewClient := envtestutil.NewInterceptingClientFunc(interceptor.Funcs{
+//	    Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+//	        if obj.GetName() == "target-resource" {
+//	            return errors.New("simulated delete failure")
+//	        }
+//	        return c.Delete(ctx, obj, opts...)
+//	    },
+//	})
+//
+//	// Use with manager options
+//	mgrOpts := manager.Options{NewClient: faultyNewClient}
+func NewInterceptingClientFunc(funcs interceptor.Funcs) NewClientFunc {
+	return func(config *rest.Config, options client.Options) (client.Client, error) {
+		realClient, err := client.NewWithWatch(config, options)
+		if err != nil {
+			return nil, err
+		}
+		return interceptor.NewClient(realClient, funcs), nil
+	}
+}
+
+// WrapClientWithInterceptor wraps an existing client with interceptor functions.
+// This is useful for wrapping the envtest client for fault injection in integration tests.
+//
+// Example usage:
+//
+//	faultyClient := envtestutil.WrapClientWithInterceptor(env.Client(), interceptor.Funcs{
+//	    Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+//	        if obj.GetName() == "target-resource" {
+//	            return errors.New("simulated delete failure")
+//	        }
+//	        return c.Delete(ctx, obj, opts...)
+//	    },
+//	})
+//
+//	// Use with reconciler.WithClient() for controller-level fault injection
+//	b := reconciler.ReconcilerFor(mgr, obj).WithReconcilerOpts(reconciler.WithClient(faultyClient))
+func WrapClientWithInterceptor(cli client.Client, funcs interceptor.Funcs) client.Client {
+	// Create a wrapper that implements WithWatch so interceptor functions can delegate.
+	wrapper := &clientWithWatchWrapper{Client: cli}
+	return &interceptingClient{
+		Client:  cli,
+		funcs:   funcs,
+		wrapper: wrapper,
+	}
+}
+
+// interceptingClient wraps a client.Client and applies interceptor functions.
+// The wrapped client is passed to interceptor functions so they can delegate.
+type interceptingClient struct {
+	client.Client
+
+	funcs   interceptor.Funcs
+	wrapper *clientWithWatchWrapper
+}
+
+// clientWithWatchWrapper wraps client.Client to implement client.WithWatch for interceptor delegation.
+type clientWithWatchWrapper struct {
+	client.Client
+}
+
+//nolint:ireturn // Required to satisfy client.WithWatch interface
+func (w *clientWithWatchWrapper) Watch(_ context.Context, _ client.ObjectList, _ ...client.ListOption) (watch.Interface, error) {
+	return nil, errors.New("watch not implemented in test wrapper")
+}
+
+func (c *interceptingClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if c.funcs.Get != nil {
+		return c.funcs.Get(ctx, c.wrapper, key, obj, opts...)
+	}
+	return c.Client.Get(ctx, key, obj, opts...)
+}
+
+func (c *interceptingClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	if c.funcs.List != nil {
+		return c.funcs.List(ctx, c.wrapper, list, opts...)
+	}
+	return c.Client.List(ctx, list, opts...)
+}
+
+func (c *interceptingClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	if c.funcs.Create != nil {
+		return c.funcs.Create(ctx, c.wrapper, obj, opts...)
+	}
+	return c.Client.Create(ctx, obj, opts...)
+}
+
+func (c *interceptingClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	if c.funcs.Delete != nil {
+		return c.funcs.Delete(ctx, c.wrapper, obj, opts...)
+	}
+	return c.Client.Delete(ctx, obj, opts...)
+}
+
+func (c *interceptingClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	if c.funcs.Update != nil {
+		return c.funcs.Update(ctx, c.wrapper, obj, opts...)
+	}
+	return c.Client.Update(ctx, obj, opts...)
+}
+
+func (c *interceptingClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	if c.funcs.Patch != nil {
+		return c.funcs.Patch(ctx, c.wrapper, obj, patch, opts...)
+	}
+	return c.Client.Patch(ctx, obj, patch, opts...)
+}
+
+func (c *interceptingClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
+	if c.funcs.DeleteAllOf != nil {
+		return c.funcs.DeleteAllOf(ctx, c.wrapper, obj, opts...)
+	}
+	return c.Client.DeleteAllOf(ctx, obj, opts...)
+}
 
 // =============================================================================
 // Helper Functions
@@ -131,19 +266,21 @@ func SetupEnvAndClient(
 			}
 		}()
 
-		// sync wait for the webhook server to be ready
-		if err := env.WaitForWebhookServer(mgrCtx); err != nil {
-			t.Logf("failed to wait for webhook server to be ready: %v", err)
-			mgrCancel()
+		// sync wait for the webhook server to be ready (only if webhooks are registered)
+		if len(registerWebhooks) > 0 {
+			if err := env.WaitForWebhookServer(mgrCtx); err != nil {
+				t.Logf("failed to wait for webhook server to be ready: %v", err)
+				mgrCancel()
 
-			if err := env.Stop(); err != nil {
-				t.Logf("debug: failed to stop envtest (will retry setup attempt anyway): %v", err)
+				if err := env.Stop(); err != nil {
+					t.Logf("debug: failed to stop envtest (will retry setup attempt anyway): %v", err)
+				}
+
+				backoff = min(2*backoff, 5*time.Second) // max backoff of 5 seconds
+				t.Logf("failed to setup test environment (attempt %d) with webhook server: %v. Retrying in %v...", attempt, err, backoff)
+				time.Sleep(backoff)
+				continue
 			}
-
-			backoff = min(2*backoff, 5*time.Second) // max backoff of 5 seconds
-			t.Logf("failed to setup test environment (attempt %d) with webhook server: %v. Retrying in %v...", attempt, err, backoff)
-			time.Sleep(backoff)
-			continue
 		}
 
 		// webhook server is ready

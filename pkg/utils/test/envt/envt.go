@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	ctrlwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -66,6 +67,13 @@ func (et *EnvT) createManager() error {
 	if mgrOpts.Metrics.BindAddress == "" {
 		mgrOpts.Metrics.BindAddress = "0"
 		mgrOpts.Metrics.CertDir = webhookInstallOptions.LocalServingCertDir
+	}
+
+	// Skip controller name validation for tests to allow reusing controller names across tests.
+	// Each test creates its own manager but controllers are registered in a global registry.
+	skipNameValidation := true
+	mgrOpts.Controller = config.Controller{
+		SkipNameValidation: &skipNameValidation,
 	}
 
 	// Now create the controller-runtime manager with the correct options.
@@ -161,16 +169,22 @@ func New(opts ...OptionFn) (*EnvT, error) {
 		result.root = root
 	}
 
+	// Load CRDs from paths and patch Gateway API CRDs with required annotation
+	crdPaths := []string{
+		filepath.Join(result.root, "config", "crd", "bases"),
+		filepath.Join(result.root, "config", "crd", "external"),
+	}
+	crds, err := LoadCRDsFromPaths(crdPaths)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load CRDs: %w", err)
+	}
+
 	result.Env = envtest.Environment{
 		CRDInstallOptions: envtest.CRDInstallOptions{
-			Scheme: result.s,
-			Paths: []string{
-				filepath.Join(result.root, "config", "crd", "bases"),
-			},
-			ErrorIfPathMissing: true,
-			CleanUpAfterUse:    false,
+			Scheme:          result.s,
+			CRDs:            crds,
+			CleanUpAfterUse: false,
 		},
-		ErrorIfCRDPathMissing: true,
 	}
 
 	// If webhooks are registered, configure the webhook server
@@ -346,3 +360,4 @@ func (h *BypassHandler) Handle(ctx context.Context, req admission.Request) admis
 	}
 	return h.Delegate.Handle(ctx, req)
 }
+
