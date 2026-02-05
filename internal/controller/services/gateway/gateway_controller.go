@@ -31,12 +31,15 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/deploy"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/gc"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/render/template"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/upgrade"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/handlers"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/resources"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
 )
 
-func (h *ServiceHandler) NewReconciler(ctx context.Context, mgr ctrl.Manager) error {
+func (h *ServiceHandler) NewReconciler(ctx context.Context, mgr ctrl.Manager, opts ...reconciler.ReconcilerOpt) error {
+	upgradeAction := upgrade.NewAction(mgr, upgrade.WithFn(migrateIngressMode))
+
 	gw := reconciler.ReconcilerFor(mgr, &serviceApi.GatewayConfig{})
 	// special for ROSA: auth is defined in day0 and OAuth not registered in apiserver
 	if ok, err := cluster.IsIntegratedOAuth(ctx, mgr.GetAPIReader()); err == nil && ok {
@@ -68,6 +71,7 @@ func (h *ServiceHandler) NewReconciler(ctx context.Context, mgr ctrl.Manager) er
 			reconciler.WithEventHandler(handlers.ToNamed(serviceApi.GatewayConfigName)),
 			reconciler.WithPredicates(resources.HTTPRouteReferencesGateway(DefaultGatewayName, GatewayNamespace)),
 		).
+		WithAction(upgradeAction.Run).
 		WithAction(createGatewayInfrastructure).
 		WithAction(createKubeAuthProxyInfrastructure). //  include destinationrule
 		WithAction(createEnvoyFilter).
@@ -83,7 +87,8 @@ func (h *ServiceHandler) NewReconciler(ctx context.Context, mgr ctrl.Manager) er
 		WithAction(gc.NewAction()).
 		WithConditions(ReadyConditionType)
 
-	if _, err := gw.Build(ctx); err != nil {
+	_, err := gw.Build(ctx, opts...)
+	if err != nil {
 		return fmt.Errorf("could not create the GatewayConfig controller: %w", err)
 	}
 	return nil
