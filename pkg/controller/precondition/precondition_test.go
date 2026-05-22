@@ -44,10 +44,10 @@ func newRR(conditionTypes ...string) *types.ReconciliationRequest {
 	}
 }
 
-func Test_newPreCondition_Defaults(t *testing.T) {
+func Test_NewPreCondition_Defaults(t *testing.T) {
 	g := NewWithT(t)
 
-	pc := newPreCondition(passingCheck)
+	pc := NewPreCondition(passingCheck)
 
 	g.Expect(pc.check).NotTo(BeNil())
 	g.Expect(pc.conditionType).To(Equal(status.ConditionDependenciesAvailable))
@@ -57,7 +57,7 @@ func Test_newPreCondition_Defaults(t *testing.T) {
 	g.Expect(pc.message).To(BeEmpty())
 }
 
-func Test_newPreCondition_Options(t *testing.T) {
+func Test_NewPreCondition_Options(t *testing.T) {
 	tests := []struct {
 		name   string
 		opt    Option
@@ -110,16 +110,16 @@ func Test_newPreCondition_Options(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			pc := newPreCondition(passingCheck, tt.opt)
+			pc := NewPreCondition(passingCheck, tt.opt)
 			tt.assert(g, pc)
 		})
 	}
 }
 
-func Test_newPreCondition_MultipleOptions(t *testing.T) {
+func Test_NewPreCondition_MultipleOptions(t *testing.T) {
 	g := NewWithT(t)
 
-	pc := newPreCondition(
+	pc := NewPreCondition(
 		passingCheck,
 		WithConditionType("Custom"),
 		WithSeverity(common.ConditionSeverityInfo),
@@ -149,13 +149,13 @@ func TestRunAll(t *testing.T) {
 	}{
 		{
 			name:               "all pass",
-			preConditions:      []PreCondition{newPreCondition(passingCheck), newPreCondition(passingCheck)},
+			preConditions:      []PreCondition{NewPreCondition(passingCheck), NewPreCondition(passingCheck)},
 			expectedShouldStop: false,
 			expectedStatus:     metav1.ConditionTrue,
 		},
 		{
 			name:                "one fails without stop",
-			preConditions:       []PreCondition{newPreCondition(passingCheck), newPreCondition(failingCheck("CRD missing"))},
+			preConditions:       []PreCondition{NewPreCondition(passingCheck), NewPreCondition(failingCheck("CRD missing"))},
 			generation:          5,
 			expectedShouldStop:  false,
 			expectedStatus:      metav1.ConditionFalse,
@@ -164,13 +164,13 @@ func TestRunAll(t *testing.T) {
 		},
 		{
 			name:               "one fails with stop",
-			preConditions:      []PreCondition{newPreCondition(passingCheck), newPreCondition(failingCheck("CRD missing"), WithStopReconciliation())},
+			preConditions:      []PreCondition{NewPreCondition(passingCheck), NewPreCondition(failingCheck("CRD missing"), WithStopReconciliation())},
 			expectedShouldStop: true,
 			expectedStatus:     metav1.ConditionFalse,
 		},
 		{
 			name:                "check error yields Unknown",
-			preConditions:       []PreCondition{newPreCondition(errorCheck)},
+			preConditions:       []PreCondition{NewPreCondition(errorCheck)},
 			expectedShouldStop:  false,
 			expectedStatus:      metav1.ConditionUnknown,
 			expectedReason:      PreConditionFailedReason,
@@ -179,19 +179,19 @@ func TestRunAll(t *testing.T) {
 		},
 		{
 			name:               "check error with stop",
-			preConditions:      []PreCondition{newPreCondition(errorCheck, WithStopReconciliation())},
+			preConditions:      []PreCondition{NewPreCondition(errorCheck, WithStopReconciliation())},
 			expectedShouldStop: true,
 			expectedStatus:     metav1.ConditionUnknown,
 		},
 		{
 			name:               "mixed Unknown and Failed, False wins",
-			preConditions:      []PreCondition{newPreCondition(failingCheck("CRD missing")), newPreCondition(errorCheck)},
+			preConditions:      []PreCondition{NewPreCondition(failingCheck("CRD missing")), NewPreCondition(errorCheck)},
 			expectedShouldStop: false,
 			expectedStatus:     metav1.ConditionFalse,
 		},
 		{
 			name:                "aggregates messages from multiple failures",
-			preConditions:       []PreCondition{newPreCondition(failingCheck("CRD A missing")), newPreCondition(failingCheck("CRD B missing"))},
+			preConditions:       []PreCondition{NewPreCondition(failingCheck("CRD A missing")), NewPreCondition(failingCheck("CRD B missing"))},
 			expectedShouldStop:  false,
 			expectedStatus:      metav1.ConditionFalse,
 			expectedMsgContains: []string{"CRD A missing", "CRD B missing"},
@@ -199,8 +199,8 @@ func TestRunAll(t *testing.T) {
 		{
 			name: "severity aggregation: Error if any Error",
 			preConditions: []PreCondition{
-				newPreCondition(failingCheck("info dep"), WithSeverity(common.ConditionSeverityInfo)),
-				newPreCondition(failingCheck("error dep")),
+				NewPreCondition(failingCheck("info dep"), WithSeverity(common.ConditionSeverityInfo)),
+				NewPreCondition(failingCheck("error dep")),
 			},
 			expectedShouldStop: false,
 			expectedStatus:     metav1.ConditionFalse,
@@ -209,8 +209,8 @@ func TestRunAll(t *testing.T) {
 		{
 			name: "severity aggregation: Info if all Info",
 			preConditions: []PreCondition{
-				newPreCondition(failingCheck("info dep 1"), WithSeverity(common.ConditionSeverityInfo)),
-				newPreCondition(failingCheck("info dep 2"), WithSeverity(common.ConditionSeverityInfo)),
+				NewPreCondition(failingCheck("info dep 1"), WithSeverity(common.ConditionSeverityInfo)),
+				NewPreCondition(failingCheck("info dep 2"), WithSeverity(common.ConditionSeverityInfo)),
 			},
 			expectedShouldStop: false,
 			expectedStatus:     metav1.ConditionFalse,
@@ -218,7 +218,7 @@ func TestRunAll(t *testing.T) {
 		},
 		{
 			name:                   "custom message overrides check result",
-			preConditions:          []PreCondition{newPreCondition(failingCheck("original msg"), WithMessage("custom guidance"))},
+			preConditions:          []PreCondition{NewPreCondition(failingCheck("original msg"), WithMessage("custom guidance"))},
 			expectedShouldStop:     false,
 			expectedStatus:         metav1.ConditionFalse,
 			expectedMsgContains:    []string{"custom guidance"},
@@ -227,7 +227,7 @@ func TestRunAll(t *testing.T) {
 		{
 			name: "nil check honors severity and stop",
 			preConditions: []PreCondition{
-				newPreCondition(nil, WithSeverity(common.ConditionSeverityError), WithStopReconciliation()),
+				NewPreCondition(nil, WithSeverity(common.ConditionSeverityError), WithStopReconciliation()),
 			},
 			expectedShouldStop:  true,
 			expectedStatus:      metav1.ConditionUnknown,
@@ -293,7 +293,7 @@ func TestRunAll_ClusterTypeFiltering(t *testing.T) {
 
 	rr := newRR(status.ConditionDependenciesAvailable)
 	pcs := []PreCondition{
-		newPreCondition(
+		NewPreCondition(
 			failingCheck("k8s only check"),
 			WithClusterTypes(cluster.ClusterTypeKubernetes),
 			WithStopReconciliation(),
@@ -315,8 +315,8 @@ func TestRunAll_MultipleConditionTypes(t *testing.T) {
 	rr := newRR(status.ConditionDependenciesAvailable, customCondition)
 
 	pcs := []PreCondition{
-		newPreCondition(passingCheck),
-		newPreCondition(failingCheck("custom failed"), WithConditionType(customCondition)),
+		NewPreCondition(passingCheck),
+		NewPreCondition(failingCheck("custom failed"), WithConditionType(customCondition)),
 	}
 
 	RunAll(t.Context(), rr, pcs)
@@ -342,9 +342,9 @@ func TestRunAll_AllPreconditionsRunEvenWhenSomeFail(t *testing.T) {
 
 	rr := newRR(status.ConditionDependenciesAvailable)
 	pcs := []PreCondition{
-		newPreCondition(countingCheck, WithStopReconciliation()),
-		newPreCondition(countingCheck, WithStopReconciliation()),
-		newPreCondition(countingCheck, WithStopReconciliation()),
+		NewPreCondition(countingCheck, WithStopReconciliation()),
+		NewPreCondition(countingCheck, WithStopReconciliation()),
+		NewPreCondition(countingCheck, WithStopReconciliation()),
 	}
 
 	RunAll(t.Context(), rr, pcs)

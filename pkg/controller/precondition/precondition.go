@@ -77,7 +77,7 @@ func WithMessage(msg string) Option {
 	}
 }
 
-func newPreCondition(check CheckFunc, opts ...Option) PreCondition {
+func NewPreCondition(check CheckFunc, opts ...Option) PreCondition {
 	pc := PreCondition{
 		check:         check,
 		conditionType: status.ConditionDependenciesAvailable,

@@ -23,7 +23,7 @@ func MonitorCRD(gvk schema.GroupVersionKind, opts ...Option) PreCondition {
 func MonitorCRDs(gvks []schema.GroupVersionKind, opts ...Option) PreCondition {
 	monitoredGVKs := slices.Clone(gvks)
 
-	return newPreCondition(func(ctx context.Context, rr *types.ReconciliationRequest) (CheckResult, error) {
+	return NewPreCondition(func(ctx context.Context, rr *types.ReconciliationRequest) (CheckResult, error) {
 		if len(monitoredGVKs) == 0 {
 			return CheckResult{}, errors.New("MonitorCRDs called with empty GVK list")
 		}

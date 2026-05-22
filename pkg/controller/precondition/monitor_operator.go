@@ -17,7 +17,7 @@ type OperatorConfig = monitor.OperatorConfig
 // by reading its CR's status conditions and applying the configured Filter.
 // See [monitor.OperatorConfig] for configuration details including missing CRD/CR behavior.
 func MonitorOperator(config OperatorConfig, opts ...Option) PreCondition {
-	return newPreCondition(func(ctx context.Context, rr *odhtypes.ReconciliationRequest) (CheckResult, error) {
+	return NewPreCondition(func(ctx context.Context, rr *odhtypes.ReconciliationRequest) (CheckResult, error) {
 		result, err := monitor.CheckOperatorHealth(ctx, rr.Client, config)
 
 		return CheckResult(result), err
