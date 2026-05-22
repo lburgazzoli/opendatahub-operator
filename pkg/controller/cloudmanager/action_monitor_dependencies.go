@@ -9,11 +9,10 @@ import (
 
 	ccmcommon "github.com/opendatahub-io/opendatahub-operator/v2/api/cloudmanager/common"
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
-	ccmcharts "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/cloudmanager/common"
-	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/status/deployments"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/conditions"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/monitor"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 )
@@ -31,7 +30,7 @@ func defaultDegradedConditionFilter(condType, condStatus string) bool {
 	return false
 }
 
-func monitorDependencies(ctx context.Context, rr *types.ReconciliationRequest, resourceID string, configs []ccmcharts.DependencyMonitorConfig) error {
+func monitorDependencies(ctx context.Context, rr *types.ReconciliationRequest, resourceID string, configs []DependencyMonitorConfig) error {
 	for _, cfg := range configs {
 		if cfg.Policy == ccmcommon.Unmanaged {
 			rr.Conditions.MarkTrue(
@@ -87,7 +86,7 @@ func monitorDependencies(ctx context.Context, rr *types.ReconciliationRequest, r
 	return nil
 }
 
-func summarizeDependencyStatus(rr *types.ReconciliationRequest, configs []ccmcharts.DependencyMonitorConfig) {
+func summarizeDependencyStatus(rr *types.ReconciliationRequest, configs []DependencyMonitorConfig) {
 	var notReady []string
 
 	for _, cfg := range configs {

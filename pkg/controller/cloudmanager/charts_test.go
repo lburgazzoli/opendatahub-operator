@@ -1,5 +1,5 @@
 //nolint:testpackage // testing unexported methods
-package common
+package cloudmanager
 
 import (
 	"path/filepath"

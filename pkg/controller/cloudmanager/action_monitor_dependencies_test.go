@@ -18,10 +18,9 @@ import (
 	ccmv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/cloudmanager/azure/v1alpha1"
 	ccmcommon "github.com/opendatahub-io/opendatahub-operator/v2/api/cloudmanager/common"
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
-	ccmcharts "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/cloudmanager/common"
-	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/conditions"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/envt"
@@ -251,7 +250,7 @@ func TestMonitorDependencies_OperatorCR(t *testing.T) {
 			}
 			rr.Conditions = conditions.NewManager(instance, status.ConditionTypeReady, ConditionsTypes...)
 
-			configs := []ccmcharts.DependencyMonitorConfig{
+			configs := []DependencyMonitorConfig{
 				{
 					ConditionType:  conditionType,
 					Policy:         ccmcommon.Managed,

@@ -1,4 +1,4 @@
-package common
+package cloudmanager
 
 // +kubebuilder:rbac:groups="apiextensions.k8s.io",resources=customresourcedefinitions,verbs=get;list;watch;create;patch;update
 

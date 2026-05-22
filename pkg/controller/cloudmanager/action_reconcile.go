@@ -6,11 +6,10 @@ import (
 	"fmt"
 
 	ccmcommon "github.com/opendatahub-io/opendatahub-operator/v2/api/cloudmanager/common"
-	ccmcharts "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/cloudmanager/common"
-	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/deploy"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/render/helm"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 )
@@ -103,7 +102,7 @@ func NewReconcileAction(resourceID string, opts ...ReconcileActionOpts) (actions
 
 		// Per-dependency health monitoring
 		if dp, ok := rr.Instance.(ccmcommon.KubernetesEngineInstance); ok {
-			configs := ccmcharts.AllDependencyMonitorConfigs(dp.GetDependencies(), rr.ChartsBasePath)
+			configs := AllDependencyMonitorConfigs(dp.GetDependencies(), rr.ChartsBasePath)
 			if err := monitorDependencies(ctx, rr, action.resourceID, configs); err != nil {
 				return err
 			}

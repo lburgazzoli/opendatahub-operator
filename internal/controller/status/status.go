@@ -23,6 +23,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	cond "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/conditions"
+	pkgstatus "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/status"
 )
 
 // conditionsWrapper implements common.ConditionsAccessor for a slice of conditions.
@@ -38,160 +39,130 @@ func (w *conditionsWrapper) SetConditions(conditions []common.Condition) {
 	*w.conditions = conditions
 }
 
-// These constants represent the overall Phase as used by .Status.Phase.
+// Re-exported constants from pkg/controller/status for backward compatibility.
 const (
-	// PhaseNotReady is used when waiting for system to be ready after reconcile is successful
-	// is an example of a constant that is not used anywhere in the code.
-	PhaseNotReady = "Not Ready"
-
-	// PhaseProgressing is used when SetProgressingCondition() is called.
-	PhaseProgressing = "Progressing"
-	// PhaseError is used when SetErrorCondition() is called.
-	PhaseError = "Error"
-	// PhaseReady is used when SetCompleteCondition is called.
-	PhaseReady = "Ready"
-)
-
-// List of constants to show different reconciliation messages and statuses.
-const (
-	// ReconcileFailed is used when multiple DSCI instance exists or DSC reconcile failed/removal failed.
-	ReconcileFailed           = "ReconcileFailed"
-	ReconcileInit             = "ReconcileInit"
-	ReconcileCompleted        = "ReconcileCompleted"
-	ReconcileCompletedMessage = "Reconcile completed successfully"
+	PhaseNotReady    = pkgstatus.PhaseNotReady
+	PhaseProgressing = pkgstatus.PhaseProgressing
+	PhaseError       = pkgstatus.PhaseError
+	PhaseReady       = pkgstatus.PhaseReady
 )
 
 const (
-	// ConditionTypeAvailable indicates whether the resource is available.
-	ConditionTypeAvailable = "Available"
-	// ConditionTypeProgressing indicates whether the resource is progressing.
-	ConditionTypeProgressing = "Progressing"
-	// ConditionTypeDegraded indicates whether the resource is degraded.
-	ConditionTypeDegraded = "Degraded"
-	// ConditionTypeUpgradeable indicates whether the resource is upgradeable.
-	ConditionTypeUpgradeable = "Upgradeable"
-	// ConditionTypeReady indicates whether the resource is ready.
-	ConditionTypeReady = "Ready"
-	// ConditionTypeReconcileComplete indicates whether reconciliation is complete.
-	ConditionTypeReconcileComplete = "ReconcileComplete"
-
-	// Component-specific condition types.
-	ConditionTypeProvisioningSucceeded           = "ProvisioningSucceeded"
-	ConditionDeploymentsNotAvailableReason       = "DeploymentsNotReady"
-	ConditionMaaSPrerequisitesAvailable          = "MaaSPrerequisitesAvailable"
-	ConditionDeploymentsAvailable                = "DeploymentsAvailable"
-	ConditionDependenciesAvailable               = "DependenciesAvailable"
-	ConditionArgoWorkflowAvailable               = "ArgoWorkflowAvailable"
-	ConditionTypeComponentsReady                 = "ComponentsReady"
-	ConditionMonitoringReady                     = "MonitoringReady"
-	ConditionMonitoringAvailable                 = "MonitoringAvailable"
-	ConditionMonitoringStackAvailable            = "MonitoringStackAvailable"
-	ConditionTempoAvailable                      = "TempoAvailable"
-	ConditionOpenTelemetryCollectorAvailable     = "OpenTelemetryCollectorAvailable"
-	ConditionInstrumentationAvailable            = "InstrumentationAvailable"
-	ConditionAlertingAvailable                   = "AlertingAvailable"
-	ConditionThanosQuerierAvailable              = "ThanosQuerierAvailable"
-	ConditionPersesAvailable                     = "PersesAvailable"
-	ConditionPersesTempoDataSourceAvailable      = "PersesTempoDataSourceAvailable"
-	ConditionPersesPrometheusDataSourceAvailable = "PersesPrometheusDataSourceAvailable"
-	ConditionNodeMetricsEndpointAvailable        = "NodeMetricsEndpointAvailable"
-	ConditionImageStreamsAvailable               = "ImageStreamsAvailable"
-	ConditionImageStreamsNotAvailableReason      = "ImageStreamsNotReady"
-
-	// Cloud controller manager conditions.
-	ConditionDependenciesReady = "DependenciesReady"
-	ConditionGatewayAPIReady   = "GatewayAPIReady"
-	ConditionCertManagerReady  = "CertManagerReady"
-	ConditionLWSReady          = "LWSReady"
-	ConditionSailOperatorReady = "SailOperatorReady"
+	ReconcileFailed           = pkgstatus.ReconcileFailed
+	ReconcileInit             = pkgstatus.ReconcileInit
+	ReconcileCompleted        = pkgstatus.ReconcileCompleted
+	ReconcileCompletedMessage = pkgstatus.ReconcileCompletedMessage
 )
 
 const (
-	MissingOperatorReason     string = "MissingOperator"
-	ConfiguredReason          string = "Configured"
-	RemovedReason             string = "Removed"
-	UnmanagedReason           string = "Unmanaged"
-	CapabilityFailed          string = "CapabilityFailed"
-	ArgoWorkflowExist         string = "ArgoWorkflowExist"
-	NoManagedComponentsReason        = "NoManagedComponents"
-
-	AvailableReason = "Available"
-	NotReadyReason  = "NotReady"
-	ReadyReason     = "Ready"
-	DeletingReason  = "Deleting"
-	DeletingMessage = "Component CR is being deleted"
+	ConditionTypeAvailable                       = pkgstatus.ConditionTypeAvailable
+	ConditionTypeProgressing                     = pkgstatus.ConditionTypeProgressing
+	ConditionTypeDegraded                        = pkgstatus.ConditionTypeDegraded
+	ConditionTypeUpgradeable                     = pkgstatus.ConditionTypeUpgradeable
+	ConditionTypeReady                           = pkgstatus.ConditionTypeReady
+	ConditionTypeReconcileComplete               = pkgstatus.ConditionTypeReconcileComplete
+	ConditionTypeProvisioningSucceeded           = pkgstatus.ConditionTypeProvisioningSucceeded
+	ConditionDeploymentsNotAvailableReason       = pkgstatus.ConditionDeploymentsNotAvailableReason
+	ConditionMaaSPrerequisitesAvailable          = pkgstatus.ConditionMaaSPrerequisitesAvailable
+	ConditionDeploymentsAvailable                = pkgstatus.ConditionDeploymentsAvailable
+	ConditionDependenciesAvailable               = pkgstatus.ConditionDependenciesAvailable
+	ConditionArgoWorkflowAvailable               = pkgstatus.ConditionArgoWorkflowAvailable
+	ConditionTypeComponentsReady                 = pkgstatus.ConditionTypeComponentsReady
+	ConditionMonitoringReady                     = pkgstatus.ConditionMonitoringReady
+	ConditionMonitoringAvailable                 = pkgstatus.ConditionMonitoringAvailable
+	ConditionMonitoringStackAvailable            = pkgstatus.ConditionMonitoringStackAvailable
+	ConditionTempoAvailable                      = pkgstatus.ConditionTempoAvailable
+	ConditionOpenTelemetryCollectorAvailable     = pkgstatus.ConditionOpenTelemetryCollectorAvailable
+	ConditionInstrumentationAvailable            = pkgstatus.ConditionInstrumentationAvailable
+	ConditionAlertingAvailable                   = pkgstatus.ConditionAlertingAvailable
+	ConditionThanosQuerierAvailable              = pkgstatus.ConditionThanosQuerierAvailable
+	ConditionPersesAvailable                     = pkgstatus.ConditionPersesAvailable
+	ConditionPersesTempoDataSourceAvailable      = pkgstatus.ConditionPersesTempoDataSourceAvailable
+	ConditionPersesPrometheusDataSourceAvailable = pkgstatus.ConditionPersesPrometheusDataSourceAvailable
+	ConditionNodeMetricsEndpointAvailable        = pkgstatus.ConditionNodeMetricsEndpointAvailable
+	ConditionImageStreamsAvailable               = pkgstatus.ConditionImageStreamsAvailable
+	ConditionImageStreamsNotAvailableReason      = pkgstatus.ConditionImageStreamsNotAvailableReason
+	ConditionDependenciesReady                   = pkgstatus.ConditionDependenciesReady
+	ConditionGatewayAPIReady                     = pkgstatus.ConditionGatewayAPIReady
+	ConditionCertManagerReady                    = pkgstatus.ConditionCertManagerReady
+	ConditionLWSReady                            = pkgstatus.ConditionLWSReady
+	ConditionSailOperatorReady                   = pkgstatus.ConditionSailOperatorReady
 )
 
 const (
-	ReadySuffix = "Ready"
+	MissingOperatorReason     = pkgstatus.MissingOperatorReason
+	ConfiguredReason          = pkgstatus.ConfiguredReason
+	RemovedReason             = pkgstatus.RemovedReason
+	UnmanagedReason           = pkgstatus.UnmanagedReason
+	CapabilityFailed          = pkgstatus.CapabilityFailed
+	ArgoWorkflowExist         = pkgstatus.ArgoWorkflowExist
+	NoManagedComponentsReason = pkgstatus.NoManagedComponentsReason
+	AvailableReason           = pkgstatus.AvailableReason
+	NotReadyReason            = pkgstatus.NotReadyReason
+	ReadyReason               = pkgstatus.ReadyReason
+	DeletingReason            = pkgstatus.DeletingReason
+	DeletingMessage           = pkgstatus.DeletingMessage
 )
 
 const (
-	DataSciencePipelinesDoesntOwnArgoCRDReason        = "DataSciencePipelinesDoesntOwnArgoCRD"
-	DataSciencePipelinesArgoWorkflowsNotManagedReason = "DataSciencePipelinesArgoWorkflowsNotManaged"
-	DataSciencePipelinesArgoWorkflowsCRDMissingReason = "DataSciencePipelinesArgoWorkflowsCRDMissing"
-
-	DataSciencePipelinesDoesntOwnArgoCRDMessage = "Failed upgrade: workflows.argoproj.io CRD already exists but not deployed by this operator " +
-		"remove existing Argo workflows or set `spec.components.aipipelines.managementState` to Removed to proceed"
-	DataSciencePipelinesArgoWorkflowsNotManagedMessage = "Argo Workflows controllers are not managed by this operator"
-	DataSciencePipelinesArgoWorkflowsCRDMissingMessage = "Argo Workflows controllers are not managed by this operator, but the CRD is missing"
+	ReadySuffix = pkgstatus.ReadySuffix
 )
 
 const (
-	KueueStateManagedNotSupported        = "KueueStateManagedNotSupported"
-	KueueStateManagedNotSupportedMessage = "Kueue managementState Managed is not supported, please use Removed or Unmanaged"
-	KueueOperatorNotInstalleReason       = "KueueOperatorNotInstalleReason"
-	KueueOperatorNotInstalledMessage     = "Kueue operator not installed, install it or change kueue component state to Removed"
+	DataSciencePipelinesDoesntOwnArgoCRDReason        = pkgstatus.DataSciencePipelinesDoesntOwnArgoCRDReason
+	DataSciencePipelinesArgoWorkflowsNotManagedReason = pkgstatus.DataSciencePipelinesArgoWorkflowsNotManagedReason
+	DataSciencePipelinesArgoWorkflowsCRDMissingReason = pkgstatus.DataSciencePipelinesArgoWorkflowsCRDMissingReason
+
+	DataSciencePipelinesDoesntOwnArgoCRDMessage        = pkgstatus.DataSciencePipelinesDoesntOwnArgoCRDMessage
+	DataSciencePipelinesArgoWorkflowsNotManagedMessage = pkgstatus.DataSciencePipelinesArgoWorkflowsNotManagedMessage
+	DataSciencePipelinesArgoWorkflowsCRDMissingMessage = pkgstatus.DataSciencePipelinesArgoWorkflowsCRDMissingMessage
 )
 
-// For TrustyAI require ISVC CRD.
 const (
-	ISVCMissingCRDReason  = "InferenceServiceCRDMissing"
-	ISVCMissingCRDMessage = "InferenceServices CRD does not exist, please enable serving component first"
+	KueueStateManagedNotSupported        = pkgstatus.KueueStateManagedNotSupported
+	KueueStateManagedNotSupportedMessage = pkgstatus.KueueStateManagedNotSupportedMessage
+	KueueOperatorNotInstalleReason       = pkgstatus.KueueOperatorNotInstalleReason
+	KueueOperatorNotInstalledMessage     = pkgstatus.KueueOperatorNotInstalledMessage
 )
 
-// For Monitoring service checks.
 const (
-	MetricsNotConfiguredReason  = "MetricsNotConfigured"
-	MetricsNotConfiguredMessage = "Metrics not configured in DSCI CR"
-	TracesNotConfiguredReason   = "TracesNotConfigured"
-	TracesNotConfiguredMessage  = "Traces not configured in DSCI CR"
-
-	AlertingNotConfiguredReason  = "AlertingNotConfigured"
-	AlertingNotConfiguredMessage = "Alerting not configured in DSCI CR"
-
-	TempoOperatorMissingMessage                  = "Tempo operator must be installed for traces configuration"
-	COOMissingMessage                            = "ClusterObservability operator must be installed for metrics configuration"
-	OpenTelemetryCollectorOperatorMissingMessage = "OpenTelemetryCollector operator must be installed for OpenTelemetry configuration"
-
-	GatewayNotFoundMessage = "Gateway resource not found"
-	GatewayNotReadyMessage = "Gateway is not ready"
-	GatewayReadyMessage    = "Gateway is ready"
-
-	// Gateway Authentication messages.
-	AuthProxyDeployedMessage                 = "Auth proxy deployed successfully"
-	AuthProxyFailedDeployMessage             = "Failed to deploy auth proxy"
-	AuthProxyFailedOAuthClientMessage        = "Failed to create OAuth client"
-	AuthProxyFailedCallbackRouteMessage      = "Failed to create auth callback route"
-	AuthProxyFailedGenerateSecretMessage     = "Failed to generate client secret"
-	AuthProxyOIDCModeWithoutConfigMessage    = "Cluster is in OIDC mode but GatewayConfig has no OIDC configuration"
-	AuthProxyOIDCClientIDEmptyMessage        = "OIDC clientID cannot be empty"
-	AuthProxyOIDCIssuerURLEmptyMessage       = "OIDC issuerURL cannot be empty"
-	AuthProxyOIDCSecretRefNameEmptyMessage   = "OIDC clientSecretRef.name cannot be empty" //nolint:gosec // This is an error message, not a credential
-	AuthProxyExternalAuthNoDeploymentMessage = "Cluster uses external authentication, no gateway auth proxy deployed"
+	ISVCMissingCRDReason  = pkgstatus.ISVCMissingCRDReason
+	ISVCMissingCRDMessage = pkgstatus.ISVCMissingCRDMessage
 )
 
-// For v3 upgrade sanity checks.
 const (
-	CodeFlarePresentMessage = `Failed upgrade: CodeFlare component is present in the cluster. It must be uninstalled to proceed with Ray component upgrade.
-To uninstall it, you should delete all RayClusters resources from the cluster, delete the CodeFlare component resource and recreate the RayClusters.`
+	MetricsNotConfiguredReason                   = pkgstatus.MetricsNotConfiguredReason
+	MetricsNotConfiguredMessage                  = pkgstatus.MetricsNotConfiguredMessage
+	TracesNotConfiguredReason                    = pkgstatus.TracesNotConfiguredReason
+	TracesNotConfiguredMessage                   = pkgstatus.TracesNotConfiguredMessage
+	AlertingNotConfiguredReason                  = pkgstatus.AlertingNotConfiguredReason
+	AlertingNotConfiguredMessage                 = pkgstatus.AlertingNotConfiguredMessage
+	TempoOperatorMissingMessage                  = pkgstatus.TempoOperatorMissingMessage
+	COOMissingMessage                            = pkgstatus.COOMissingMessage
+	OpenTelemetryCollectorOperatorMissingMessage = pkgstatus.OpenTelemetryCollectorOperatorMissingMessage
+	GatewayNotFoundMessage                       = pkgstatus.GatewayNotFoundMessage
+	GatewayNotReadyMessage                       = pkgstatus.GatewayNotReadyMessage
+	GatewayReadyMessage                          = pkgstatus.GatewayReadyMessage
+	AuthProxyDeployedMessage                     = pkgstatus.AuthProxyDeployedMessage
+	AuthProxyFailedDeployMessage                 = pkgstatus.AuthProxyFailedDeployMessage
+	AuthProxyFailedOAuthClientMessage            = pkgstatus.AuthProxyFailedOAuthClientMessage
+	AuthProxyFailedCallbackRouteMessage          = pkgstatus.AuthProxyFailedCallbackRouteMessage
+	AuthProxyFailedGenerateSecretMessage         = pkgstatus.AuthProxyFailedGenerateSecretMessage
+	AuthProxyOIDCModeWithoutConfigMessage        = pkgstatus.AuthProxyOIDCModeWithoutConfigMessage
+	AuthProxyOIDCClientIDEmptyMessage            = pkgstatus.AuthProxyOIDCClientIDEmptyMessage
+	AuthProxyOIDCIssuerURLEmptyMessage           = pkgstatus.AuthProxyOIDCIssuerURLEmptyMessage
+	AuthProxyOIDCSecretRefNameEmptyMessage       = pkgstatus.AuthProxyOIDCSecretRefNameEmptyMessage
+	AuthProxyExternalAuthNoDeploymentMessage     = pkgstatus.AuthProxyExternalAuthNoDeploymentMessage
 )
 
-// For JobSet operator checks.
 const (
-	JobSetOperatorNotInstalledMessage = "JobSet operator not installed, please install it first"
-	JobSetCRDMissingMessage           = "JobSet CRD does not exist, please inspect JobSetOperator CR status conditions or JobSet controller Pod logs for more details"
-	JobSetOperatorCRNotFoundMessage   = "JobSetOperator CR with name 'cluster' not found, please create it first"
+	CodeFlarePresentMessage = pkgstatus.CodeFlarePresentMessage
+)
+
+const (
+	JobSetOperatorNotInstalledMessage = pkgstatus.JobSetOperatorNotInstalledMessage
+	JobSetCRDMissingMessage           = pkgstatus.JobSetCRDMissingMessage
+	JobSetOperatorCRNotFoundMessage   = pkgstatus.JobSetOperatorCRNotFoundMessage
 )
 
 // setConditions is a helper function to set multiple conditions at once.

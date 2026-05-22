@@ -25,13 +25,14 @@ import (
 
 	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
 	infrav1 "github.com/opendatahub-io/opendatahub-operator/v2/api/infrastructure/v1"
-	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/gateway"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 )
 
 const (
+	gatewayServiceFullName                = "data-science-gateway-data-science-gateway-class"
+	gatewayNamespace                      = "openshift-ingress"
 	defaultMinMemory                      = "1Mi"
 	defaultMinCpu                         = "1"
 	odhDashboardConfigPath                = "/dashboard/rhoai/shared/odhdashboardconfig/odhdashboardconfig.yaml"
@@ -711,8 +712,8 @@ func MigrateGatewayConfigIngressMode(ctx context.Context, cli client.Client) err
 
 	gatewayService := &corev1.Service{}
 	err = cli.Get(ctx, client.ObjectKey{
-		Name:      gateway.GatewayServiceFullName,
-		Namespace: gateway.GatewayNamespace,
+		Name:      gatewayServiceFullName,
+		Namespace: gatewayNamespace,
 	}, gatewayService)
 	switch {
 	case k8serr.IsNotFound(err):

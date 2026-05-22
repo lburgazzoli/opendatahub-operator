@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	ccmv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/cloudmanager/coreweave/v1alpha1"
-	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/cloudmanager/common"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/cloudmanager"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 )
 
@@ -17,6 +17,6 @@ func initialize(ctx context.Context, rr *types.ReconciliationRequest) error {
 		return fmt.Errorf("resource instance is not a CoreWeaveKubernetesEngine (got %T)", rr.Instance)
 	}
 
-	rr.HelmCharts = common.BuildHelmCharts(instance.Spec.Dependencies, rr.ChartsBasePath)
+	rr.HelmCharts = cloudmanager.BuildHelmCharts(instance.Spec.Dependencies, rr.ChartsBasePath)
 	return nil
 }
