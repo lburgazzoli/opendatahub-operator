@@ -410,6 +410,7 @@ func (b *ReconcilerBuilder[T]) Build(_ context.Context) (*Reconciler, error) {
 	}
 
 	c = c.For(resources.GvkToUnstructured(b.input.gvk), forOpts...)
+	c = c.Named(name)
 
 	var staticOwnedGVKs []schema.GroupVersionKind
 
