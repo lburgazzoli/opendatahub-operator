@@ -109,6 +109,7 @@ type ReconcilerBuilder[T api.PlatformObject] struct {
 	mgr                      ctrl.Manager
 	input                    forInput
 	watches                  []watchInput
+	rawSources               []source.Source
 	predicates               []predicate.Predicate
 	instanceName             string
 	actions                  []actions.Fn
@@ -352,6 +353,14 @@ func (b *ReconcilerBuilder[T]) WithEventFilter(p predicate.Predicate) *Reconcile
 	return b
 }
 
+// WatchesRawSource registers a raw event source that triggers reconciliation.
+// Use with source.Channel to react to external signals (e.g., orchestration
+// state changes).
+func (b *ReconcilerBuilder[T]) WatchesRawSource(src source.Source) *ReconcilerBuilder[T] {
+	b.rawSources = append(b.rawSources, src)
+	return b
+}
+
 // ComposeWith composes the builder with the provided configuration function.
 // fn receives the builder and may call any builder method on it — actions,
 // watches, conditions, and finalizers registered inside fn are all applied.
@@ -437,6 +446,10 @@ func (b *ReconcilerBuilder[T]) Build(_ context.Context) (*Reconciler, error) {
 			b.watches[i].eventHandler,
 			builder.WithPredicates(b.watches[i].predicates...),
 		)
+	}
+
+	for i := range b.rawSources {
+		c = c.WatchesRawSource(b.rawSources[i])
 	}
 
 	for i := range b.predicates {

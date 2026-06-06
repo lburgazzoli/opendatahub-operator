@@ -274,6 +274,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 
 		if err := r.apply(ctx, res); err != nil {
+			pe := odherrors.PauseError{}
+			if errors.As(err, &pe) {
+				return ctrl.Result{RequeueAfter: pe.Delay()}, nil
+			}
+
 			return ctrl.Result{}, err
 		}
 	}
@@ -431,14 +436,26 @@ func (r *Reconciler) apply(ctx context.Context, res api.PlatformObject) error {
 	}
 
 	if provisionErr != nil {
-		r.Recorder.Eventf(
-			res,
-			nil,
-			corev1.EventTypeWarning,
-			"ProvisioningError",
-			"Provision",
-			provisionErr.Error(),
-		)
+		pe := odherrors.PauseError{}
+		if errors.As(provisionErr, &pe) {
+			r.Recorder.Eventf(
+				res,
+				nil,
+				corev1.EventTypeNormal,
+				"ProvisioningPaused",
+				"Provision",
+				provisionErr.Error(),
+			)
+		} else {
+			r.Recorder.Eventf(
+				res,
+				nil,
+				corev1.EventTypeWarning,
+				"ProvisioningError",
+				"Provision",
+				provisionErr.Error(),
+			)
+		}
 
 		return fmt.Errorf("provisioning failed: %w", provisionErr)
 	}
