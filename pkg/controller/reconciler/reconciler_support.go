@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/go-multierror"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -13,7 +14,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -125,6 +128,7 @@ type ReconcilerBuilder[T common.PlatformObject] struct {
 	dynamicOwnershipGVKPreds map[schema.GroupVersionKind][]predicate.Predicate
 	skipConditionCleanup     bool
 	skipStatusConditionsFn   func() bool
+	periodicSync             time.Duration
 }
 
 func ReconcilerFor[T common.PlatformObject](mgr ctrl.Manager, object T, opts ...builder.ForOption) *ReconcilerBuilder[T] {
@@ -389,6 +393,15 @@ func (b *ReconcilerBuilder[T]) Owns(object client.Object, opts ...WatchOpts) *Re
 	return b
 }
 
+// WithPeriodicSync configures the reconciler to re-queue all existing instances
+// of the watched resource at the given interval, independently of any watch
+// events. This is useful as a safety net to ensure the DAG eventually advances
+// even if a status-change event is missed.
+func (b *ReconcilerBuilder[T]) WithPeriodicSync(interval time.Duration) *ReconcilerBuilder[T] {
+	b.periodicSync = interval
+	return b
+}
+
 func (b *ReconcilerBuilder[T]) WithEventFilter(p predicate.Predicate) *ReconcilerBuilder[T] {
 	b.predicates = append(b.predicates, p)
 	return b
@@ -508,6 +521,40 @@ func (b *ReconcilerBuilder[T]) Build(_ context.Context) (*Reconciler, error) {
 	}
 
 	r.Controller = cc
+
+	// Periodic sync: re-queue all existing instances at the configured interval.
+	// Acts as a safety net for missed events and ensures the DAG eventually
+	// advances even under partial failures.
+	if b.periodicSync > 0 {
+		gvkCopy := b.input.gvk
+		ch := make(chan event.GenericEvent)
+
+		if err := b.mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+			ticker := time.NewTicker(b.periodicSync)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-ticker.C:
+					list := &unstructured.UnstructuredList{}
+					list.SetGroupVersionKind(gvkCopy)
+					if err := b.mgr.GetClient().List(ctx, list); err != nil {
+						continue
+					}
+					for i := range list.Items {
+						ch <- event.GenericEvent{Object: &list.Items[i]}
+					}
+				}
+			}
+		})); err != nil {
+			return nil, fmt.Errorf("failed to add periodic sync runnable: %w", err)
+		}
+
+		if err := cc.Watch(source.Channel(ch, &handler.EnqueueRequestForObject{})); err != nil {
+			return nil, fmt.Errorf("failed to add periodic sync watch: %w", err)
+		}
+	}
 
 	// internal action for existing dynamic watches (OwnsGVK with Dynamic())
 	r.AddAction(

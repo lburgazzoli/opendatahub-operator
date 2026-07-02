@@ -71,11 +71,11 @@ func injectPlatformConfig(ctx context.Context, rr *odhtype.ReconciliationRequest
 		if idx, ok := existingCMs[cmName]; ok {
 			log.V(1).Info("merging platform config into existing ConfigMap",
 				"module", name, "configmap", cmName)
-			mergePlatformKeys(&rr.Resources[idx], platformVersion)
+			MergePlatformKeys(&rr.Resources[idx], platformVersion)
 		} else {
 			log.V(1).Info("creating platform config ConfigMap",
 				"module", name, "configmap", cmName)
-			cm := buildPlatformConfigMap(cmName, ns, platformVersion)
+			cm := BuildPlatformConfigMap(cmName, ns, platformVersion)
 			u, err := toUnstructured(cm)
 			if err != nil {
 				return fmt.Errorf("converting platform config ConfigMap for %s: %w", name, err)
@@ -87,7 +87,7 @@ func injectPlatformConfig(ctx context.Context, rr *odhtype.ReconciliationRequest
 	})
 }
 
-func buildPlatformConfigMap(name, namespace, platformVersion string) *corev1.ConfigMap {
+func BuildPlatformConfigMap(name, namespace, platformVersion string) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -103,9 +103,9 @@ func buildPlatformConfigMap(name, namespace, platformVersion string) *corev1.Con
 	}
 }
 
-// mergePlatformKeys sets the platform-managed keys on an existing
+// MergePlatformKeys sets the platform-managed keys on an existing
 // unstructured ConfigMap. Existing module-owned keys are preserved.
-func mergePlatformKeys(u *unstructured.Unstructured, platformVersion string) {
+func MergePlatformKeys(u *unstructured.Unstructured, platformVersion string) {
 	data, _, _ := unstructured.NestedStringMap(u.Object, "data")
 	if data == nil {
 		data = make(map[string]string)

@@ -27,6 +27,12 @@ const applicationsNamespaceEnv = "APPLICATIONS_NAMESPACE"
 //
 // The injection data is read from rr.ModuleEnvInjection (set by provisionModules).
 // If nil, this action is a no-op.
+// InjectModuleEnv is the exported form of injectModuleEnv for use by the
+// platformmodule package which is separate from the modules package.
+func InjectModuleEnv(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
+	return injectModuleEnv(ctx, rr)
+}
+
 func injectModuleEnv(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
 	if rr.ModuleEnvInjection == nil {
 		return nil

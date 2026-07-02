@@ -21,7 +21,7 @@ func TestBuildPlatformConfigMap(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	cm := buildPlatformConfigMap("odh-testmod-config", "test-ns", "2.20.0")
+	cm := BuildPlatformConfigMap("odh-testmod-config", "test-ns", "2.20.0")
 
 	g.Expect(cm.Name).Should(Equal("odh-testmod-config"))
 	g.Expect(cm.Namespace).Should(Equal("test-ns"))
@@ -49,7 +49,7 @@ func TestMergePlatformKeys(t *testing.T) {
 		},
 	}
 
-	mergePlatformKeys(u, "2.20.0")
+	MergePlatformKeys(u, "2.20.0")
 
 	data, _, _ := unstructured.NestedStringMap(u.Object, "data")
 	g.Expect(data).Should(HaveKeyWithValue(PlatformVersionKey, "2.20.0"))
@@ -69,7 +69,7 @@ func TestMergePlatformKeys_NilData(t *testing.T) {
 		},
 	}
 
-	mergePlatformKeys(u, "2.20.0")
+	MergePlatformKeys(u, "2.20.0")
 
 	data, _, _ := unstructured.NestedStringMap(u.Object, "data")
 	g.Expect(data).Should(HaveKeyWithValue(PlatformVersionKey, "2.20.0"))
@@ -90,7 +90,7 @@ func TestMergePlatformKeys_OverwritesOldVersion(t *testing.T) {
 		},
 	}
 
-	mergePlatformKeys(u, "2.20.0")
+	MergePlatformKeys(u, "2.20.0")
 
 	data, _, _ := unstructured.NestedStringMap(u.Object, "data")
 	g.Expect(data).Should(HaveKeyWithValue(PlatformVersionKey, "2.20.0"))
@@ -112,7 +112,7 @@ func TestMergePlatformKeys_UserEditedPlatformVar_ReconciledBack(t *testing.T) {
 		},
 	}
 
-	mergePlatformKeys(u, "2.20.0")
+	MergePlatformKeys(u, "2.20.0")
 
 	data, _, _ := unstructured.NestedStringMap(u.Object, "data")
 	g.Expect(data).Should(HaveKeyWithValue(PlatformVersionKey, "2.20.0"),
@@ -138,7 +138,7 @@ func TestMergePlatformKeys_ModuleAddsNewKeys_Preserved(t *testing.T) {
 		},
 	}
 
-	mergePlatformKeys(u, "2.20.0")
+	MergePlatformKeys(u, "2.20.0")
 
 	data, _, _ := unstructured.NestedStringMap(u.Object, "data")
 	g.Expect(data).Should(HaveLen(3),
@@ -164,7 +164,7 @@ func TestMergePlatformKeys_ModuleChangesOwnKeys_NotReverted(t *testing.T) {
 		},
 	}
 
-	mergePlatformKeys(u, "2.20.0")
+	MergePlatformKeys(u, "2.20.0")
 
 	data, _, _ := unstructured.NestedStringMap(u.Object, "data")
 	g.Expect(data).Should(HaveKeyWithValue("LOG_LEVEL", "debug"),
@@ -201,7 +201,7 @@ func TestToUnstructured(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	cm := buildPlatformConfigMap("odh-test-config", "test-ns", "1.0.0")
+	cm := BuildPlatformConfigMap("odh-test-config", "test-ns", "1.0.0")
 	u, err := toUnstructured(cm)
 
 	g.Expect(err).ShouldNot(HaveOccurred())

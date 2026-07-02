@@ -385,9 +385,9 @@ func (b *BaseHandler) deleteRenderedResources(
 	return nil
 }
 
-// ParseConditions extracts []metav1.Condition from an unstructured object's
+// ParseConditions extracts []common.Condition from an unstructured object's
 // .status.conditions field.
-func ParseConditions(u *unstructured.Unstructured) ([]metav1.Condition, error) {
+func ParseConditions(u *unstructured.Unstructured) ([]common.Condition, error) {
 	rawConditions, found, err := unstructured.NestedSlice(u.Object, "status", "conditions")
 	if err != nil {
 		return nil, err
@@ -397,7 +397,7 @@ func ParseConditions(u *unstructured.Unstructured) ([]metav1.Condition, error) {
 		return nil, nil
 	}
 
-	conditions := make([]metav1.Condition, 0, len(rawConditions))
+	conds := make([]common.Condition, 0, len(rawConditions))
 
 	for _, raw := range rawConditions {
 		cm, ok := raw.(map[string]any)
@@ -405,7 +405,7 @@ func ParseConditions(u *unstructured.Unstructured) ([]metav1.Condition, error) {
 			continue
 		}
 
-		c := metav1.Condition{}
+		c := common.Condition{}
 
 		if v, ok := cm["type"].(string); ok {
 			c.Type = v
@@ -439,8 +439,8 @@ func ParseConditions(u *unstructured.Unstructured) ([]metav1.Condition, error) {
 			continue
 		}
 
-		conditions = append(conditions, c)
+		conds = append(conds, c)
 	}
 
-	return conditions, nil
+	return conds, nil
 }

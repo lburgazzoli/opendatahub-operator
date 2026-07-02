@@ -2372,6 +2372,7 @@ Package v1alpha1 contains API Schema definitions for the config v1alpha1 API gro
 
 ### Resource Types
 - [Platform](#platform)
+- [PlatformModule](#platformmodule)
 
 
 
@@ -2398,6 +2399,65 @@ DataScienceCluster is not installed (xKS / vanilla Kubernetes).
 | `status` _[PlatformStatus](#platformstatus)_ |  |  |  |
 
 
+#### PlatformModule
+
+
+
+PlatformModule is the tracker CR for a single module operator managed by
+the Platform controller. One PlatformModule CR exists per enabled module;
+its name matches the module handler name (e.g. "aigateway", "monitoring").
+The Platform controller creates and deletes PlatformModule CRs based on
+Platform.Spec.Modules; the PlatformModule reconciler deploys the operator.
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `config.opendatahub.io/v1alpha1` | | |
+| `kind` _string_ | `PlatformModule` | | |
+| `kind` _string_ | Kind is a string value representing the REST resource this object represents.<br />Servers may infer this from the endpoint the client submits requests to.<br />Cannot be updated.<br />In CamelCase.<br />More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds |  |  |
+| `apiVersion` _string_ | APIVersion defines the versioned schema of this representation of an object.<br />Servers should convert recognized schemas to the latest internal value, and<br />may reject unrecognized values.<br />More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources |  |  |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[PlatformModuleSpec](#platformmodulespec)_ |  |  |  |
+| `status` _[PlatformModuleStatus](#platformmodulestatus)_ |  |  |  |
+
+
+#### PlatformModuleSpec
+
+
+
+PlatformModuleSpec is intentionally empty. The CR name (metadata.name)
+is the module name — it matches the handler's GetName() and the
+PlatformModules struct field.
+
+
+
+_Appears in:_
+- [PlatformModule](#platformmodule)
+
+
+
+#### PlatformModuleStatus
+
+
+
+PlatformModuleStatus defines the observed state of a PlatformModule.
+
+
+
+_Appears in:_
+- [PlatformModule](#platformmodule)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `phase` _string_ |  |  |  |
+| `observedGeneration` _integer_ | The generation observed by the resource controller. |  |  |
+| `conditions` _[Condition](#condition) array_ |  |  |  |
+| `resources` _[ResourceRef](#resourceref) array_ | Resources lists every resource deployed by the PlatformModule reconciler.<br />Used for drift cleanup: resources present here but absent from the current<br />render are deleted on the next reconcile. |  |  |
+
+
 #### PlatformModules
 
 
@@ -2406,6 +2466,16 @@ PlatformModules declares per-module management state for Platform mode.
 Each field maps to a registered module handler by name. Add new module
 fields here when onboarding additional modules.
 
+On OpenShift, DSC and DSCI controllers own individual fields via SSA:
+  - DSCI controller owns .monitoring
+  - DSC controller owns .aigateway
+
+On xKS, the user owns all fields directly.
+
+The "module" struct tag on each field declares the canonical handler name.
+EnabledModules() uses reflection on this tag so new modules don't require
+updating EnabledModules() manually — only adding a new field here suffices.
+
 
 
 _Appears in:_
@@ -2413,7 +2483,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `monitoring` _[ManagementSpec](#managementspec)_ | Monitoring controls the monitoring module operator lifecycle. |  |  |
+| `monitoring` _[ManagementSpec](#managementspec)_ | Monitoring controls the monitoring module operator lifecycle.<br />On OpenShift this field is managed by the DSCI controller via SSA. |  |  |
+| `aigateway` _[ManagementSpec](#managementspec)_ | AIGateway controls the AI Gateway module operator lifecycle.<br />On OpenShift this field is managed by the DSC controller via SSA. |  |  |
 
 
 #### PlatformSpec
@@ -2448,6 +2519,29 @@ _Appears in:_
 | `phase` _string_ |  |  |  |
 | `observedGeneration` _integer_ | The generation observed by the resource controller. |  |  |
 | `conditions` _[Condition](#condition) array_ |  |  |  |
+
+
+#### ResourceRef
+
+
+
+ResourceRef identifies a Kubernetes resource deployed by the module operator.
+Used to track installed resources for per-reconcile drift cleanup.
+The Group/Version/Kind fields mirror schema.GroupVersionKind but carry
+explicit JSON tags required by controller-gen for CRD schema generation.
+
+
+
+_Appears in:_
+- [PlatformModuleStatus](#platformmodulestatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `group` _string_ |  |  |  |
+| `version` _string_ |  |  |  |
+| `kind` _string_ |  |  |  |
+| `namespace` _string_ |  |  |  |
+| `name` _string_ |  |  |  |
 
 
 

@@ -101,6 +101,7 @@ import (
 	dscictrl "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/dscinitialization"
 	mr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	aigatewayModule "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules/aigateway"
+	pmctrl "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/platformmodule"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/auth"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/certconfigmapgenerator"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/gateway"
@@ -547,6 +548,11 @@ func main() { //nolint:funlen,maintidx,gocyclo
 
 	if err = mr.NewModuleReconciler(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "modules")
+		os.Exit(1)
+	}
+
+	if err = pmctrl.New(ctx, mgr, mr.DefaultRegistry()); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PlatformModule")
 		os.Exit(1)
 	}
 

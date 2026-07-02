@@ -76,16 +76,20 @@ const (
 	ConditionTypeReconcileComplete = "ReconcileComplete"
 
 	// Component-specific condition types.
-	ConditionTypeProvisioningSucceeded           = "ProvisioningSucceeded"
-	ConditionDeploymentsNotAvailableReason       = "DeploymentsNotReady"
-	ConditionMaaSPrerequisitesAvailable          = "MaaSPrerequisitesAvailable"
-	ConditionDeploymentsAvailable                = "DeploymentsAvailable"
-	ConditionDependenciesAvailable               = "DependenciesAvailable"
-	ConditionArgoWorkflowAvailable               = "ArgoWorkflowAvailable"
-	ConditionTypeComponentsReady                 = "ComponentsReady"
-	ConditionTypeProvisioningProgress            = "ProvisioningProgress"
-	ConditionMonitoringReady                     = "MonitoringReady"
-	ConditionTypeModulesReady                    = "ModulesReady"
+	ConditionTypeProvisioningSucceeded     = "ProvisioningSucceeded"
+	ConditionDeploymentsNotAvailableReason = "DeploymentsNotReady"
+	ConditionMaaSPrerequisitesAvailable    = "MaaSPrerequisitesAvailable"
+	ConditionDeploymentsAvailable          = "DeploymentsAvailable"
+	ConditionDependenciesAvailable         = "DependenciesAvailable"
+	ConditionArgoWorkflowAvailable         = "ArgoWorkflowAvailable"
+	ConditionTypeComponentsReady           = "ComponentsReady"
+	ConditionTypeProvisioningProgress      = "ProvisioningProgress"
+	ConditionMonitoringReady               = "MonitoringReady"
+	ConditionTypeModulesReady              = "ModulesReady"
+	// ConditionTypeOperandAvailable reports whether the module operand CR (created by DSC/DSCI)
+	// is ready. True when the CR doesn't exist yet (fresh install) or when the CR's Ready
+	// condition is True and its release version matches the current platform version.
+	ConditionTypeOperandAvailable                = "OperandAvailable"
 	ConditionMonitoringAvailable                 = "MonitoringAvailable"
 	ConditionMonitoringStackAvailable            = "MonitoringStackAvailable"
 	ConditionTempoAvailable                      = "TempoAvailable"

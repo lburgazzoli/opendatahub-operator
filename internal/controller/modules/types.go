@@ -3,7 +3,6 @@ package modules
 import (
 	"context"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -128,19 +127,29 @@ type DeploymentNamer interface {
 // ModuleStatus holds the parsed status from a module CR. It includes the
 // standard conditions, generation metadata for staleness detection, and
 // the release version for the platform version handshake.
+// ModuleStatus implements common.ConditionsAccessor so callers can use the
+// standard conditions helpers (FindStatusCondition, etc.) directly on it.
 type ModuleStatus struct {
 	// Conditions from .status.conditions on the module CR.
-	Conditions []metav1.Condition
+	Conditions []common.Condition
 	// ObservedGeneration from .status.observedGeneration on the module CR.
 	ObservedGeneration int64
 	// Generation from .metadata.generation on the module CR.
 	Generation int64
 	// ReleaseVersion from .status.releases[name="platform"].version on
-	// the module CR. Used for the platform version handshake — the module
-	// is not considered ready for DAG progression unless this matches the
-	// current platform version.
+	// the module CR. Used for the platform version handshake.
 	ReleaseVersion string
 }
+
+func (m *ModuleStatus) GetConditions() []common.Condition {
+	return m.Conditions
+}
+
+func (m *ModuleStatus) SetConditions(conditions []common.Condition) {
+	m.Conditions = conditions
+}
+
+var _ common.ConditionsAccessor = (*ModuleStatus)(nil)
 
 // OperatorManifests holds the manifest descriptors returned by a module handler.
 // A handler typically populates either HelmCharts or Manifests depending on

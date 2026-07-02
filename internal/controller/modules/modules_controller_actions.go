@@ -286,10 +286,10 @@ func provisionModules(ctx context.Context, rr *odhtype.ReconciliationRequest) er
 				}
 
 				perModuleImages = append(perModuleImages, odhtype.ModuleImages{
-					DeploymentName:    deploymentNameFor(handler, operatorManifests),
-					ContainerName:     containerNameFor(handler),
-					ControllerImage:   controllerImageFor(handler),
-					InitContainerName: initContainerNameFor(handler),
+					DeploymentName:    DeploymentNameFor(handler, operatorManifests),
+					ContainerName:     ContainerNameFor(handler),
+					ControllerImage:   ControllerImageFor(handler),
+					InitContainerName: InitContainerNameFor(handler),
 					Images:            handler.GetRelatedImages(),
 				})
 				if len(operatorManifests.HelmCharts) > 0 {
@@ -340,19 +340,19 @@ var moduleStuckTracker = dag.NewStuckTracker()
 
 const defaultContainerName = "manager"
 
-func containerNameFor(h ModuleHandler) string {
+func ContainerNameFor(h ModuleHandler) string {
 	if cn, ok := h.(ContainerNamer); ok {
 		return cn.GetContainerName()
 	}
 	return defaultContainerName
 }
 
-// deploymentNameFor resolves the Deployment name targeted for RELATED_IMAGE_*
+// DeploymentNameFor resolves the Deployment name targeted for RELATED_IMAGE_*
 // env injection. An explicit Config.DeploymentName (via DeploymentNamer) wins;
 // otherwise it falls back to the manifest-derived name. This matters for
 // kustomize modules whose rendered Deployment name (after namePrefix) differs
 // from the module name.
-func deploymentNameFor(h ModuleHandler, manifests OperatorManifests) string {
+func DeploymentNameFor(h ModuleHandler, manifests OperatorManifests) string {
 	if dn, ok := h.(DeploymentNamer); ok {
 		if name := dn.GetDeploymentName(); name != "" {
 			return name
@@ -361,14 +361,14 @@ func deploymentNameFor(h ModuleHandler, manifests OperatorManifests) string {
 	return deploymentNameFromManifests(manifests, h.GetName())
 }
 
-func controllerImageFor(h ModuleHandler) string {
+func ControllerImageFor(h ModuleHandler) string {
 	if ci, ok := h.(ControllerImager); ok {
 		return ci.GetControllerImage()
 	}
 	return ""
 }
 
-func initContainerNameFor(h ModuleHandler) string {
+func InitContainerNameFor(h ModuleHandler) string {
 	if icn, ok := h.(InitContainerNamer); ok {
 		return icn.GetInitContainerName()
 	}

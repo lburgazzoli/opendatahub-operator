@@ -17,11 +17,19 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"reflect"
+	"strings"
+
 	operatorv1 "github.com/openshift/api/operator/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 )
+
+// moduleTagKey is the struct tag used on PlatformModules fields to declare
+// the canonical module handler name. EnabledModules() uses reflection on
+// this tag to avoid manual enumeration.
+const moduleTagKey = "module"
 
 const (
 	PlatformKind         = "Platform"
@@ -43,11 +51,27 @@ type PlatformSpec struct {
 // PlatformModules declares per-module management state for Platform mode.
 // Each field maps to a registered module handler by name. Add new module
 // fields here when onboarding additional modules.
+//
+// On OpenShift, DSC and DSCI controllers own individual fields via SSA:
+//   - DSCI controller owns .monitoring
+//   - DSC controller owns .aigateway
+//
+// On xKS, the user owns all fields directly.
+//
+// The "module" struct tag on each field declares the canonical handler name.
+// EnabledModules() uses reflection on this tag so new modules don't require
+// updating EnabledModules() manually — only adding a new field here suffices.
 // +kubebuilder:object:generate=true
 type PlatformModules struct {
 	// Monitoring controls the monitoring module operator lifecycle.
+	// On OpenShift this field is managed by the DSCI controller via SSA.
 	// +optional
-	Monitoring common.ManagementSpec `json:"monitoring,omitempty"`
+	Monitoring common.ManagementSpec `json:"monitoring,omitempty" module:"monitoring"`
+
+	// AIGateway controls the AI Gateway module operator lifecycle.
+	// On OpenShift this field is managed by the DSC controller via SSA.
+	// +optional
+	AIGateway common.ManagementSpec `json:"aigateway,omitempty" module:"aigateway"`
 }
 
 // PlatformStatus defines the observed state of Platform.
@@ -96,10 +120,27 @@ type PlatformList struct {
 }
 
 // EnabledModules returns the names of modules whose ManagementState is Managed.
+// It uses reflection over PlatformModules fields so new module fields are
+// automatically included without editing this function. The module name comes
+// from the "module" struct tag when set; otherwise the lowercased field name.
 func (m *PlatformModules) EnabledModules() []string {
+	v := reflect.ValueOf(*m)
+	t := reflect.TypeOf(*m)
+
 	var enabled []string
-	if m.Monitoring.ManagementState == operatorv1.Managed {
-		enabled = append(enabled, "monitoring")
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		name := field.Tag.Get(moduleTagKey)
+		if name == "" {
+			name = strings.ToLower(field.Name)
+		}
+		spec, ok := v.Field(i).Interface().(common.ManagementSpec)
+		if !ok {
+			continue
+		}
+		if spec.ManagementState == operatorv1.Managed {
+			enabled = append(enabled, name)
+		}
 	}
 	return enabled
 }

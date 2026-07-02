@@ -30,6 +30,12 @@ type Registry struct {
 	resolvedCache [][]registryEntry
 }
 
+// NewRegistry creates an empty module registry. Use DefaultRegistry() for
+// production; use NewRegistry() in tests to get an isolated registry.
+func NewRegistry() *Registry {
+	return &Registry{}
+}
+
 var r = &Registry{}
 
 // Add registers a new ModuleHandler to the registry.

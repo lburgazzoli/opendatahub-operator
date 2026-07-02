@@ -96,6 +96,12 @@ func GetRelease() common.Release {
 	return clusterConfig.Release
 }
 
+// SetRelease overrides the cached release. Intended for use in tests to inject
+// a specific platform name and version without initializing the full cluster config.
+func SetRelease(r common.Release) {
+	clusterConfig.Release = r
+}
+
 // GetDeployedRelease retrieves the currently deployed release version from the cluster.
 // It first attempts to get the release from the DSCInitialization (DSCI) instance,
 // and if not found, falls back to the DataScienceCluster (DSC) instance.
