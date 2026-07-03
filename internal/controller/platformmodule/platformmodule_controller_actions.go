@@ -8,7 +8,6 @@ import (
 	libversion "github.com/operator-framework/api/pkg/lib/version"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -22,7 +21,6 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/conditions"
 	odhtype "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
 )
 
 // provision sets up the reconcile request for a single module: it looks up
@@ -131,14 +129,14 @@ func (r *Reconciler) driftCleanup(ctx context.Context, rr *odhtype.Reconciliatio
 	savedRefs := sets.New(currentRefs...)
 	stale := sets.New(pm.Status.Resources...).Difference(savedRefs)
 
-	foreground := metav1.DeletePropagationForeground
+	policy := deletePropagationPolicy()
 	for ref := range stale {
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(ref.GroupVersionKind())
 		u.SetName(ref.Name)
 		u.SetNamespace(ref.Namespace)
 
-		switch err := rr.Client.Delete(ctx, u, &client.DeleteOptions{PropagationPolicy: &foreground}); {
+		switch err := rr.Client.Delete(ctx, u, &client.DeleteOptions{PropagationPolicy: &policy}); {
 		case err == nil:
 			log.Info("deleted stale module operator resource",
 				"module", pm.Name,
@@ -175,11 +173,13 @@ func (r *Reconciler) checkOperatorDeployments(ctx context.Context, rr *odhtype.R
 	}
 
 	var notReady []string
+	deployments := make([]string, 0, len(pm.Status.Resources))
 
 	for _, ref := range pm.Status.Resources {
 		if ref.GroupVersionKind() != gvk.Deployment {
 			continue
 		}
+		deployments = append(deployments, ref.Name)
 
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(gvk.Deployment)
@@ -203,15 +203,22 @@ func (r *Reconciler) checkOperatorDeployments(ctx context.Context, rr *odhtype.R
 		}
 	}
 
-	if len(notReady) > 0 {
+	switch {
+	case len(notReady) > 0:
 		rr.Conditions.MarkFalse(status.ConditionDeploymentsAvailable,
 			conditions.WithReason(status.ConditionDeploymentsNotAvailableReason),
-			conditions.WithMessage("%d/%d deployments ready", len(pm.Status.Resources)-len(notReady), len(pm.Status.Resources)),
+			conditions.WithMessage("%d/%d deployments ready", len(deployments)-len(notReady), len(deployments)),
 		)
-		return nil
+	case len(pm.Status.Resources) > 0 && len(deployments) == 0:
+		// Module has resources but no Deployments — informational, not blocking.
+		rr.Conditions.MarkFalse(status.ConditionDeploymentsAvailable,
+			conditions.WithReason("ModuleWithoutDeployments"),
+			conditions.WithSeverity(common.ConditionSeverityInfo),
+			conditions.WithMessage("module has no operator Deployments"),
+		)
+	default:
+		rr.Conditions.MarkTrue(status.ConditionDeploymentsAvailable)
 	}
-
-	rr.Conditions.MarkTrue(status.ConditionDeploymentsAvailable)
 
 	return nil
 }
@@ -311,43 +318,4 @@ func (r *Reconciler) syncModuleCRStatus(ctx context.Context, rr *odhtype.Reconci
 	}
 
 	return nil
-}
-
-// resourceRefsFrom converts a slice of unstructured resources to ResourceRefs
-// for tracking in PlatformModule.Status.Resources.
-func resourceRefsFrom(rs []unstructured.Unstructured) []configv1alpha1.ResourceRef {
-	if len(rs) == 0 {
-		return nil
-	}
-	refs := make([]configv1alpha1.ResourceRef, 0, len(rs))
-	for _, r := range rs {
-		k := r.GroupVersionKind()
-		refs = append(refs, configv1alpha1.ResourceRef{
-			Group:     k.Group,
-			Version:   k.Version,
-			Kind:      k.Kind,
-			Namespace: r.GetNamespace(),
-			Name:      r.GetName(),
-		})
-	}
-	return refs
-}
-
-// ensureConfigMap returns the index of the ConfigMap with the given name in
-// resources, or appends a new empty ConfigMap and returns its index.
-func ensureConfigMap(rs *[]unstructured.Unstructured, name string, namespace string) (int, error) {
-	configMapGVK := gvk.ConfigMap
-	for i, r := range *rs {
-		if r.GroupVersionKind() == configMapGVK && r.GetName() == name {
-			return i, nil
-		}
-	}
-
-	cm := modules.BuildPlatformConfigMap(name, namespace, "")
-	u, err := resources.ToUnstructured(cm)
-	if err != nil {
-		return 0, err
-	}
-	*rs = append(*rs, *u)
-	return len(*rs) - 1, nil
 }

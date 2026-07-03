@@ -1,7 +1,9 @@
+//nolint:ireturn
 package platformmodule
 
 import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
+	sr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 )
 
@@ -16,14 +18,18 @@ type Option interface {
 // the package-level singletons inside New(), so production callers can write
 // Options{} and tests override only what they need.
 type Options struct {
-	Registry     *modules.Registry
-	ProvisionReg *provision.UnifiedRegistry
-	Tracker      *provision.RunlevelTracker
+	Registry        *modules.Registry
+	ServiceRegistry *sr.Registry
+	ProvisionReg    *provision.UnifiedRegistry
+	Tracker         *provision.RunlevelTracker
 }
 
 func (o Options) applyOption(target *Options) {
 	if o.Registry != nil {
 		target.Registry = o.Registry
+	}
+	if o.ServiceRegistry != nil {
+		target.ServiceRegistry = o.ServiceRegistry
 	}
 	if o.ProvisionReg != nil {
 		target.ProvisionReg = o.ProvisionReg
@@ -44,11 +50,14 @@ func WithRegistry(r *modules.Registry) Option {
 	})
 }
 
+// WithServiceRegistry sets a custom service handler registry.
+func WithServiceRegistry(r *sr.Registry) Option {
+	return optionFunc(func(o *Options) { o.ServiceRegistry = r })
+}
+
 // WithProvisionRegistry sets a custom unified provision registry.
 func WithProvisionRegistry(r *provision.UnifiedRegistry) Option {
-	return optionFunc(func(o *Options) {
-		o.ProvisionReg = r
-	})
+	return optionFunc(func(o *Options) { o.ProvisionReg = r })
 }
 
 // WithTracker sets a custom RunlevelTracker.

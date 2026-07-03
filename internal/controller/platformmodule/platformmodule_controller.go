@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -13,12 +14,14 @@ import (
 
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
+	sr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/deploy"
 	helmrender "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/render/helm"
 	kustomizerender "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/render/kustomize"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/precondition"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/dependent"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
 )
@@ -55,9 +58,10 @@ type Reconciler struct {
 func New(ctx context.Context, mgr ctrl.Manager, fns ...Option) error {
 	r := &Reconciler{
 		Options: Options{
-			Registry:     modules.DefaultRegistry(),
-			ProvisionReg: provision.DefaultRegistry(),
-			Tracker:      provision.GetRunlevelTracker(),
+			Registry:        modules.DefaultRegistry(),
+			ServiceRegistry: sr.DefaultRegistry(),
+			ProvisionReg:    provision.DefaultRegistry(),
+			Tracker:         provision.GetRunlevelTracker(),
 		},
 	}
 
@@ -116,6 +120,28 @@ func New(ctx context.Context, mgr ctrl.Manager, fns ...Option) error {
 			return reqs
 		}),
 	)
+
+	// Service CR watches: a change to any enabled service CR (e.g. GatewayConfig
+	// domain update) may require all modules to refresh their platform config.
+	// Handlers with an empty GVK have no dedicated CR and are skipped.
+	_ = r.ServiceRegistry.ForEach(func(h sr.ServiceHandler) error {
+		if k := h.GroupVersionKind(); k != (schema.GroupVersionKind{}) {
+			b = b.WatchesGVK(
+				k,
+				reconciler.WithPredicates(dependent.New(dependent.WithWatchStatus(true))),
+				reconciler.WithEventMapper(func(_ context.Context, _ client.Object) []reconcile.Request {
+					var reqs []reconcile.Request
+					r.Registry.ForEachEnabled(func(m modules.ModuleHandler) {
+						reqs = append(reqs, reconcile.Request{
+							NamespacedName: types.NamespacedName{Name: m.GetName()},
+						})
+					})
+					return reqs
+				}),
+			)
+		}
+		return nil
+	})
 
 	// Per-module CR watch: activates only once the module CRD is installed.
 	// ResourceVersionChangedPredicate is required because module CR status updates
