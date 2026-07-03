@@ -17,6 +17,7 @@ import (
 	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/dag"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	rrtypes "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/matchers/jq"
@@ -157,6 +158,94 @@ func TestDSCDriven_StatusAggregation(t *testing.T) {
 	wt.Get(gvk.DataScienceCluster, dscKey).Eventually().Should(
 		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .status == "True"`),
 	)
+}
+
+func TestDSCDriven_DAG_Advancement(t *testing.T) {
+	moduleReg := modules.NewRegistry()
+	moduleReg.Add(newTestModuleHandler("aigateway", testModuleAGVK))
+
+	componentReg := &cr.Registry{}
+	componentReg.Add(&cr.BaseComponentHandler{
+		Name: "dashboard",
+		GVK:  gvk.Dashboard,
+	})
+
+	provisionReg := provision.NewRegistry()
+	provisionReg.Add("dashboard", provision.KindComponent, dag.RL(10))
+	provisionReg.Add("aigateway", provision.KindModule, dag.RL(20))
+	provisionReg.Enable("dashboard")
+	provisionReg.Enable("aigateway")
+
+	et, tc := startAllControllers(t, suiteOpts{
+		moduleReg:    moduleReg,
+		componentReg: componentReg,
+		provisionReg: provisionReg,
+	})
+
+	registerModuleCRD(t, et, testModuleAGVK)
+	createGatewayConfig(t, tc)
+	createDSCI(t, tc)
+
+	createDSC(t, tc, dscv2.DataScienceClusterSpec{
+		Components: dscv2.Components{
+			AIGateway: componentApi.DSCAIGateway{
+				ManagementSpec: common.ManagementSpec{
+					ManagementState: operatorv1.Managed,
+				},
+			},
+		},
+	})
+
+	wt := tc.NewWithT(t)
+	cli := tc.Client()
+	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
+
+	// Step 1: PlatformModule created but DAG blocked at RL10 — no Dashboard CR.
+	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
+		Eventually().Should(Succeed())
+
+	wt.Get(gvk.Platform, nn).Eventually().Should(And(
+		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .status == "False"`),
+		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .reason == "AwaitingReadiness"`),
+		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .message | contains("dashboard")`),
+	))
+
+	// Step 2: Create Dashboard CR and mark Ready=True → RL10 clears.
+	dashboard := &unstructured.Unstructured{}
+	dashboard.SetGroupVersionKind(gvk.Dashboard)
+	dashboard.SetName("default-dashboard")
+	NewWithT(t).Expect(cli.Create(context.Background(), dashboard)).Should(Succeed())
+	t.Cleanup(func() { _ = cli.Delete(context.Background(), dashboard) })
+
+	setUnstructuredReady(t, cli, dashboard, true)
+
+	// Step 3: ProvisioningProgress=True → RL10 cleared.
+	wt.Get(gvk.Platform, nn).Eventually().Should(
+		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .status == "True"`),
+	)
+
+	// Step 4: aigateway PlatformModule still not ready — DSC created the module
+	// operand CR with no conditions → OperandInitializing blocks.
+	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
+		Eventually().Should(And(
+			jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .status == "False"`),
+			jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "OperandInitializing"`),
+			jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .message == "module CR has no conditions yet"`),
+		))
+
+	// Step 5: Mark module operand CR Ready → PlatformModule Ready → ModulesReady=True.
+	moduleCR := &unstructured.Unstructured{}
+	moduleCR.SetGroupVersionKind(testModuleAGVK)
+	NewWithT(t).Eventually(func() error {
+		return cli.Get(context.Background(), types.NamespacedName{Name: "default-aigateway"}, moduleCR)
+	}).Should(Succeed())
+
+	setUnstructuredReady(t, cli, moduleCR, true)
+
+	wt.Get(gvk.Platform, nn).Eventually().Should(And(
+		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .status == "True"`),
+		jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
+	))
 }
 
 func TestDSCDriven_PlatformReflectsDSC(t *testing.T) {
