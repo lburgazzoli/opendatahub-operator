@@ -242,6 +242,59 @@ func TestRunlevelGateAction_ActionChain_BlocksResourceDeployment(t *testing.T) {
 	g.Expect(platReady2.Status).To(Equal(metav1.ConditionTrue))
 }
 
+func TestRunlevelGateAction_CustomOptions(t *testing.T) {
+	g := NewWithT(t)
+
+	// Fully isolated: custom registry and tracker — no global state touched.
+	reg := provision.NewRegistry()
+	reg.Add("mymodule", provision.KindComponent, dag.Runlevel{Order: 20})
+	tracker := provision.NewRunlevelTracker()
+
+	// Kind is deliberately different from the registry key to confirm that
+	// WithNameFunc overrides the default Kind-based lookup.
+	rr := newRunlevelRR("SomeOtherKind")
+	err := RunlevelGateAction(
+		WithNameFunc(func(_ *types.ReconciliationRequest) string { return "mymodule" }),
+		WithRegistry(reg),
+		WithTracker(tracker),
+	)(t.Context(), rr)
+
+	var requeueErr odherrors.RequeueAfterError
+	g.Expect(errors.As(err, &requeueErr)).To(BeTrue())
+	g.Expect(rr.SkipDeploy).To(BeTrue())
+
+	got := rr.Conditions.GetCondition(PlatformReadyConditionType)
+	g.Expect(got).NotTo(BeNil())
+	g.Expect(got.Status).To(Equal(metav1.ConditionFalse))
+}
+
+func TestRunlevelGateAction_InstanceNameFunc(t *testing.T) {
+	g := NewWithT(t)
+
+	// Fully isolated: custom registry and tracker — no global state touched.
+	reg := provision.NewRegistry()
+	reg.Add("mymodule", provision.KindComponent, dag.Runlevel{Order: 20})
+	tracker := provision.NewRunlevelTracker()
+	tracker.MarkCleared("3.5.0", 20)
+
+	// Instance name is "mymodule"; kind would not match the registry key.
+	rr := newRunlevelRR("SomeOtherKind")
+	rr.Instance.(*scheme.TestPlatformObject).Name = "mymodule"
+
+	err := RunlevelGateAction(
+		WithNameFunc(InstanceName),
+		WithRegistry(reg),
+		WithTracker(tracker),
+	)(t.Context(), rr)
+
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(rr.SkipDeploy).To(BeFalse())
+
+	got := rr.Conditions.GetCondition(PlatformReadyConditionType)
+	g.Expect(got).NotTo(BeNil())
+	g.Expect(got.Status).To(Equal(metav1.ConditionTrue))
+}
+
 // runActionChain executes actions in order, mirroring the reconciler's
 // handling of RequeueAfterError (continue to next action).
 func runActionChain(t *testing.T, g Gomega, chain []actions.Fn, rr *types.ReconciliationRequest) {

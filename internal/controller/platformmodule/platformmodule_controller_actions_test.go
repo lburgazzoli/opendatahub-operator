@@ -228,7 +228,7 @@ func TestSyncModuleCRStatus_NoHandler_SetsOperandReady(t *testing.T) {
 	g := NewWithT(t)
 
 	// Empty registry — no handler for "unknown-module".
-	r := &Reconciler{registry: modules.NewRegistry()}
+	r := &Reconciler{Options: Options{Registry: modules.NewRegistry()}}
 	pm := &configv1alpha1.PlatformModule{ObjectMeta: metav1.ObjectMeta{Name: "unknown-module"}}
 	conds := newTestConditions()
 	rr := &odhtype.ReconciliationRequest{Instance: pm, Conditions: conds}
@@ -253,7 +253,7 @@ func TestSyncModuleCRStatus_CRAbsent_MovesForward(t *testing.T) {
 	reg.Add(&h)
 
 	release := testRelease(2, 20, 0)
-	r := &Reconciler{registry: reg}
+	r := &Reconciler{Options: Options{Registry: reg}}
 	pm := &configv1alpha1.PlatformModule{ObjectMeta: metav1.ObjectMeta{Name: "mymodule"}}
 	conds := newTestConditions()
 	rr := &odhtype.ReconciliationRequest{Instance: pm, Client: cl, Conditions: conds, Release: release}

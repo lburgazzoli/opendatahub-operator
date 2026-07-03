@@ -15,7 +15,12 @@ type RunlevelTracker struct {
 	clearedUpTo int
 }
 
-var defaultRunlevelTracker = &RunlevelTracker{}
+var defaultRunlevelTracker = NewRunlevelTracker()
+
+// NewRunlevelTracker creates a fresh, empty RunlevelTracker.
+// Use GetRunlevelTracker() for the package-level singleton; use NewRunlevelTracker()
+// in tests to obtain an isolated instance that does not touch global state.
+func NewRunlevelTracker() *RunlevelTracker { return &RunlevelTracker{} }
 
 // GetRunlevelTracker returns the package-level singleton.
 func GetRunlevelTracker() *RunlevelTracker { return defaultRunlevelTracker }

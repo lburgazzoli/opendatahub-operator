@@ -19,21 +19,30 @@ import (
 	helmrender "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/render/helm"
 	kustomizerender "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/render/kustomize"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/precondition"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
 )
 
-// Reconciler reconciles PlatformModule CRs. Holding the registry as a field
-// (rather than accessing the global modules.DefaultRegistry()) allows tests to
-// inject a custom registry with controlled handlers without touching global state.
+// Reconciler reconciles PlatformModule CRs.
 type Reconciler struct {
-	registry *modules.Registry
+	Options
 }
 
-// New creates and registers the PlatformModule controller.
-// reg is the module handler registry; pass modules.DefaultRegistry() for
-// production use or a custom registry in tests. The reconciler uses dynamic
-// ownership so all deployed operator resources carry owner references to their
-// PlatformModule CR, enabling Kubernetes GC cascade deletion without a finalizer.
+// New creates and registers the PlatformModule controller. mgr is required.
+// Pass any Option values — either an Options{} struct literal, named
+// constructors (WithRegistry, WithProvisionRegistry, WithTracker), or a mix.
+// Nil/unset fields default to the package-level singletons.
+//
+// Examples:
+//
+//	New(ctx, mgr)                             // all singletons
+//	New(ctx, mgr, Options{Registry: reg})     // struct style
+//	New(ctx, mgr, WithRegistry(reg))          // functional style
+//	New(ctx, mgr, Options{Registry: reg}, WithTracker(t)) // mixed
+//
+// The reconciler uses dynamic ownership so all deployed operator resources carry
+// owner references to their PlatformModule CR, enabling Kubernetes GC cascade
+// deletion without a finalizer.
 //
 // For each registered module handler, a dynamic watch is added for the module CR
 // GVK using reconciler.Dynamic(reconciler.CrdExists(gvk)). This means:
@@ -43,9 +52,17 @@ type Reconciler struct {
 //   - ResourceVersionChangedPredicate is used instead of DefaultPredicate because
 //     module CR status updates do not bump generation (only spec changes do), so
 //     GenerationChangedPredicate would silently miss all status-only changes.
-func New(ctx context.Context, mgr ctrl.Manager, reg *modules.Registry) error {
+func New(ctx context.Context, mgr ctrl.Manager, fns ...Option) error {
 	r := &Reconciler{
-		registry: reg,
+		Options: Options{
+			Registry:     modules.DefaultRegistry(),
+			ProvisionReg: provision.DefaultRegistry(),
+			Tracker:      provision.GetRunlevelTracker(),
+		},
+	}
+
+	for _, fn := range fns {
+		fn.applyOption(&r.Options)
 	}
 
 	b := reconciler.ReconcilerFor(mgr, &configv1alpha1.PlatformModule{}).
@@ -55,10 +72,18 @@ func New(ctx context.Context, mgr ctrl.Manager, reg *modules.Registry) error {
 		// type cluster-wide). Dynamic ownership watches CRDs but does not set
 		// owner references on them.
 		WithDynamicOwnership(reconciler.ExcludeGVKs(gvk.CustomResourceDefinition)).
-		WithConditions(status.ConditionDeploymentsAvailable, status.ConditionTypeOperandAvailable).
+		WithConditions(
+			status.ConditionDeploymentsAvailable,
+			status.ConditionTypeOperandAvailable,
+			precondition.PlatformReadyConditionType,
+		).
 		WithPeriodicSync(1 * time.Minute).
 		// Actions
-		WithAction(precondition.RunlevelGateAction()).
+		WithAction(precondition.RunlevelGateAction(
+			precondition.WithNameFunc(precondition.InstanceName),
+			precondition.WithRegistry(r.ProvisionReg),
+			precondition.WithTracker(r.Tracker),
+		)).
 		WithAction(r.provision).
 		WithAction(helmrender.NewAction()).
 		WithAction(kustomizerender.NewAction()).
@@ -83,7 +108,7 @@ func New(ctx context.Context, mgr ctrl.Manager, reg *modules.Registry) error {
 		reconciler.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		reconciler.WithEventMapper(func(_ context.Context, _ client.Object) []reconcile.Request {
 			var reqs []reconcile.Request
-			reg.ForEachEnabled(func(h modules.ModuleHandler) {
+			r.Registry.ForEachEnabled(func(h modules.ModuleHandler) {
 				reqs = append(reqs, reconcile.Request{
 					NamespacedName: types.NamespacedName{Name: h.GetName()},
 				})
@@ -95,8 +120,8 @@ func New(ctx context.Context, mgr ctrl.Manager, reg *modules.Registry) error {
 	// Per-module CR watch: activates only once the module CRD is installed.
 	// ResourceVersionChangedPredicate is required because module CR status updates
 	// do not bump generation (only spec changes do).
-	_ = reg.ForAll(func(h modules.ModuleHandler, _ bool) error {
-		moduleGVK := h.GetGVK()
+	_ = r.Registry.ForAll(func(h modules.ModuleHandler, _ bool) error {
+		moduleGVK := h.GetGroupVersionKind()
 		moduleName := h.GetName()
 
 		b = b.WatchesGVK(

@@ -551,7 +551,7 @@ func main() { //nolint:funlen,maintidx,gocyclo
 		os.Exit(1)
 	}
 
-	if err = pmctrl.New(ctx, mgr, mr.DefaultRegistry()); err != nil {
+	if err = pmctrl.New(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PlatformModule")
 		os.Exit(1)
 	}

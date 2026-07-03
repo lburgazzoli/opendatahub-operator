@@ -8,6 +8,7 @@ import (
 	libversion "github.com/operator-framework/api/pkg/lib/version"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,7 +35,7 @@ func (r *Reconciler) provision(ctx context.Context, rr *odhtype.ReconciliationRe
 		return fmt.Errorf("expected *PlatformModule, got %T", rr.Instance)
 	}
 
-	handler := r.registry.Lookup(pm.Name)
+	handler := r.Registry.Lookup(pm.Name)
 	if handler == nil {
 		// No handler registered — module may have been unregistered after CR was
 		// created. Nothing to do; drift cleanup will eventually remove the CR.
@@ -130,13 +131,14 @@ func (r *Reconciler) driftCleanup(ctx context.Context, rr *odhtype.Reconciliatio
 	savedRefs := sets.New(currentRefs...)
 	stale := sets.New(pm.Status.Resources...).Difference(savedRefs)
 
+	foreground := metav1.DeletePropagationForeground
 	for ref := range stale {
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(ref.GroupVersionKind())
 		u.SetName(ref.Name)
 		u.SetNamespace(ref.Namespace)
 
-		switch err := rr.Client.Delete(ctx, u); {
+		switch err := rr.Client.Delete(ctx, u, &client.DeleteOptions{PropagationPolicy: &foreground}); {
 		case err == nil:
 			log.Info("deleted stale module operator resource",
 				"module", pm.Name,
@@ -228,7 +230,7 @@ func (r *Reconciler) syncModuleCRStatus(ctx context.Context, rr *odhtype.Reconci
 		return fmt.Errorf("expected *PlatformModule, got %T", rr.Instance)
 	}
 
-	handler := r.registry.Lookup(pm.Name)
+	handler := r.Registry.Lookup(pm.Name)
 	if handler == nil {
 		// No handler — unknown module, nothing to reflect. Info severity so the
 		// DAG is not blocked.

@@ -24,6 +24,9 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/dag"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/precondition"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	opmanager "github.com/opendatahub-io/opendatahub-operator/v2/pkg/manager"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/envt"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/matchers/jq"
@@ -39,9 +42,21 @@ var testModuleGVK = schema.GroupVersionKind{
 	Kind:    "TestModule",
 }
 
+var testModule1GVK = schema.GroupVersionKind{
+	Group:   "components.platform.opendatahub.io",
+	Version: "v1alpha1",
+	Kind:    "TestModule1",
+}
+
+var testModule2GVK = schema.GroupVersionKind{
+	Group:   "components.platform.opendatahub.io",
+	Version: "v1alpha1",
+	Kind:    "TestModule2",
+}
+
 const testModuleCRName = "default-testmodule"
 
-func startPlatformModuleControllerWith(t *testing.T, reg *modules.Registry) (*envt.EnvT, *testf.WithT) {
+func startPlatformModuleControllerWith(t *testing.T, opts ...Option) (*envt.EnvT, *testf.WithT) {
 	t.Helper()
 	g := NewWithT(t)
 
@@ -69,7 +84,7 @@ func startPlatformModuleControllerWith(t *testing.T, reg *modules.Registry) (*en
 			Controller: ctrlconfig.Controller{SkipNameValidation: ptr.To(true)},
 		}),
 		envt.WithRegisterControllers(func(mgr ctrl.Manager) error {
-			return New(ctx, mgr, reg)
+			return New(ctx, mgr, opts...)
 		}),
 	)
 
@@ -147,7 +162,7 @@ func setTestModuleRelease(wt *testf.WithT, releaseVersion string) {
 }
 
 func TestPlatformModuleReconciler_UnknownHandler(t *testing.T) {
-	_, wt := startPlatformModuleControllerWith(t, modules.NewRegistry())
+	_, wt := startPlatformModuleControllerWith(t)
 
 	createPlatformModuleCR(t, wt, "unregistered-module")
 
@@ -167,7 +182,7 @@ func TestPlatformModuleReconciler_OperandAvailableWhenCRAbsent(t *testing.T) {
 	reg := modules.NewRegistry()
 	reg.Add(&h)
 
-	_, wt := startPlatformModuleControllerWith(t, reg)
+	_, wt := startPlatformModuleControllerWith(t, WithRegistry(reg))
 	createPlatformModuleCR(t, wt, "testmodule")
 
 	nn := types.NamespacedName{Name: "testmodule"}
@@ -193,7 +208,7 @@ func TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRReady(t *testing.
 	reg := modules.NewRegistry()
 	reg.Add(&h)
 
-	_, wt := startPlatformModuleControllerWith(t, reg)
+	_, wt := startPlatformModuleControllerWith(t, WithRegistry(reg))
 	createPlatformModuleCR(t, wt, "testmodule")
 	createTestModuleCR(t, wt, metav1.Condition{
 		Type:   status.ConditionTypeReady,
@@ -219,7 +234,7 @@ func TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRNotReady(t *testi
 	reg := modules.NewRegistry()
 	reg.Add(&h)
 
-	_, wt := startPlatformModuleControllerWith(t, reg)
+	_, wt := startPlatformModuleControllerWith(t, WithRegistry(reg))
 	createPlatformModuleCR(t, wt, "testmodule")
 	createTestModuleCR(t, wt, metav1.Condition{
 		Type:   status.ConditionTypeReady,
@@ -249,7 +264,7 @@ func TestPlatformModuleReconciler_ReleaseReflectsModuleCRVersion(t *testing.T) {
 	reg := modules.NewRegistry()
 	reg.Add(&h)
 
-	_, wt := startPlatformModuleControllerWith(t, reg)
+	_, wt := startPlatformModuleControllerWith(t, WithRegistry(reg))
 	createPlatformModuleCR(t, wt, "testmodule")
 
 	nn := types.NamespacedName{Name: "testmodule"}
@@ -276,7 +291,7 @@ func TestPlatformModuleReconciler_ReleaseReflectsModuleCRVersion(t *testing.T) {
 }
 
 func TestPlatformModuleReconciler_DriftCleanup(t *testing.T) {
-	_, wt := startPlatformModuleControllerWith(t, modules.NewRegistry())
+	_, wt := startPlatformModuleControllerWith(t)
 
 	createPlatformModuleCR(t, wt, "drift-test-module")
 
@@ -313,7 +328,7 @@ func TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRHasNoConditions(t
 	reg := modules.NewRegistry()
 	reg.Add(&h)
 
-	_, wt := startPlatformModuleControllerWith(t, reg)
+	_, wt := startPlatformModuleControllerWith(t, WithRegistry(reg))
 	createPlatformModuleCR(t, wt, "testmodule")
 	createTestModuleCR(t, wt) // no conditions
 
@@ -350,7 +365,7 @@ func TestPlatformModuleReconciler_DynamicWatchActivatesOnCRDCreation(t *testing.
 	reg := modules.NewRegistry()
 	reg.Add(&h)
 
-	et, wt := startPlatformModuleControllerWith(t, reg)
+	et, wt := startPlatformModuleControllerWith(t, WithRegistry(reg))
 
 	createPlatformModuleCR(t, wt, "dynamictestmodule")
 	nn := types.NamespacedName{Name: "dynamictestmodule"}
@@ -420,4 +435,123 @@ func TestPlatformModuleReconciler_DynamicWatchActivatesOnCRDCreation(t *testing.
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
 			status.ConditionTypeReady, metav1.ConditionTrue),
 	))
+}
+
+// TestPlatformModuleReconciler_RunlevelGate_BlocksDeployment: when a module's
+// runlevel is not yet cleared, no resources are deployed and PlatformReady=False.
+// Once the runlevel is cleared, resources appear and PlatformReady=True.
+func TestPlatformModuleReconciler_RunlevelGate_BlocksDeployment(t *testing.T) {
+	// Fully isolated: custom provision registry and tracker — no global state touched.
+	provReg := provision.NewRegistry()
+	provReg.Add("testmodule", provision.KindModule, dag.RL(31))
+
+	tracker := provision.NewRunlevelTracker()
+	tracker.MarkCleared("2.20.0", 20)
+
+	h := newManifestHandler("testmodule", testModuleGVK, "testmodule")
+	reg := modules.NewRegistry()
+	reg.Add(&h)
+
+	_, wt := startPlatformModuleControllerWith(t, WithRegistry(reg), WithProvisionRegistry(provReg), WithTracker(tracker))
+	createPlatformModuleCR(t, wt, "testmodule")
+
+	nn := types.NamespacedName{Name: "testmodule"}
+
+	operatorSvc := types.NamespacedName{Name: "testmodule-operator", Namespace: "default"}
+
+	// Gate fires: PlatformReady=False, no resources recorded, operator Service absent.
+	wt.Get(gvk.PlatformModule, nn).Eventually().Should(And(
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "False"`,
+			precondition.PlatformReadyConditionType),
+		jq.Match(`.status.resources == null or (.status.resources | length == 0)`),
+	))
+	wt.Get(gvk.Service, operatorSvc).Eventually().Should(BeNil())
+
+	// Advance tracker — gate should clear on next reconcile.
+	tracker.MarkCleared("2.20.0", 31)
+
+	pm := &configv1alpha1.PlatformModule{}
+	wt.Expect(wt.Client().Get(wt.Context(), nn, pm)).Should(Succeed())
+	pm.Annotations = map[string]string{"trigger": "reconcile"}
+	wt.Expect(wt.Client().Update(wt.Context(), pm)).Should(Succeed())
+
+	// Gate lifted: PlatformReady=True, operator Service deployed, tracked in status.
+	wt.Get(gvk.PlatformModule, nn).Eventually().Should(And(
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "True"`,
+			precondition.PlatformReadyConditionType),
+		jq.Match(`[.status.resources[] | select(.kind == "Service" and .name == "testmodule-operator")] | length > 0`),
+	))
+	wt.Get(gvk.Service, operatorSvc).Eventually().Should(Not(BeNil()))
+}
+
+// TestPlatformModuleReconciler_RunlevelGate_ProgressesByRunlevel: two modules at
+// different runlevels deploy in order. Module-a (runlevel 20) deploys after 20 is
+// cleared while module-b (runlevel 31) stays gated. Module-b deploys only after 31
+// is cleared.
+func TestPlatformModuleReconciler_RunlevelGate_ProgressesByRunlevel(t *testing.T) {
+	// Fully isolated: custom provision registry and tracker — no global state touched.
+	provReg := provision.NewRegistry()
+	provReg.Add("testmodule1", provision.KindModule, dag.RL(20))
+	provReg.Add("testmodule2", provision.KindModule, dag.RL(31))
+
+	tracker := provision.NewRunlevelTracker()
+
+	h1 := newNoopHandlerWithGVK("testmodule1", testModule1GVK)
+	h2 := newNoopHandlerWithGVK("testmodule2", testModule2GVK)
+
+	reg := modules.NewRegistry()
+	reg.Add(&h1)
+	reg.Add(&h2)
+
+	_, wt := startPlatformModuleControllerWith(t, WithRegistry(reg), WithProvisionRegistry(provReg), WithTracker(tracker))
+	createPlatformModuleCR(t, wt, "testmodule1")
+	createPlatformModuleCR(t, wt, "testmodule2")
+
+	nn1 := types.NamespacedName{Name: "testmodule1"}
+	nn2 := types.NamespacedName{Name: "testmodule2"}
+
+	// Phase 1: no runlevel cleared — both modules gated.
+	wt.Get(gvk.PlatformModule, nn1).Eventually().Should(
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "False"`,
+			precondition.PlatformReadyConditionType),
+	)
+	wt.Get(gvk.PlatformModule, nn2).Eventually().Should(
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "False"`,
+			precondition.PlatformReadyConditionType),
+	)
+
+	// Phase 2: clear runlevel 20 — testmodule1 deploys, testmodule2 stays gated.
+	tracker.MarkCleared("2.20.0", 20)
+
+	pm1 := &configv1alpha1.PlatformModule{}
+	wt.Expect(wt.Client().Get(wt.Context(), nn1, pm1)).Should(Succeed())
+	pm1.Annotations = map[string]string{"trigger": "phase2"}
+	wt.Expect(wt.Client().Update(wt.Context(), pm1)).Should(Succeed())
+
+	pm2 := &configv1alpha1.PlatformModule{}
+	wt.Expect(wt.Client().Get(wt.Context(), nn2, pm2)).Should(Succeed())
+	pm2.Annotations = map[string]string{"trigger": "phase2"}
+	wt.Expect(wt.Client().Update(wt.Context(), pm2)).Should(Succeed())
+
+	wt.Get(gvk.PlatformModule, nn1).Eventually().Should(And(
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "True"`,
+			precondition.PlatformReadyConditionType),
+		jq.Match(`.status.resources | length > 0`),
+	))
+	wt.Get(gvk.PlatformModule, nn2).Eventually().Should(
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "False"`,
+			precondition.PlatformReadyConditionType),
+	)
+
+	// Phase 3: clear runlevel 31 — testmodule2 deploys.
+	tracker.MarkCleared("2.20.0", 31)
+
+	wt.Expect(wt.Client().Get(wt.Context(), nn2, pm2)).Should(Succeed())
+	pm2.Annotations = map[string]string{"trigger": "phase3"}
+	wt.Expect(wt.Client().Update(wt.Context(), pm2)).Should(Succeed())
+
+	wt.Get(gvk.PlatformModule, nn2).Eventually().Should(
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "True"`,
+			precondition.PlatformReadyConditionType),
+	)
 }
