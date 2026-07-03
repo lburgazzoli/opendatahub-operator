@@ -308,6 +308,7 @@ func TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRHasNoConditions(t
 	nn := types.NamespacedName{Name: "testmodule"}
 
 	wt.Get(gvk.PlatformModule, nn).Eventually().Should(And(
+		// OperandAvailable
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
 			status.ConditionTypeOperandAvailable, metav1.ConditionFalse),
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .reason == "OperandInitializing"`,
@@ -342,23 +343,44 @@ func TestPlatformModuleReconciler_DynamicWatchActivatesOnCRDCreation(t *testing.
 	createPlatformModuleCR(t, wt, "dynamictestmodule")
 	nn := types.NamespacedName{Name: "dynamictestmodule"}
 
-	// Step 1: CRD does not exist → OperandAbsent+Info, Ready=True (Info is non-blocking).
+	// Step 1: CRD does not exist → OperandAbsent+Info, message says CRD not installed.
 	wt.Get(gvk.PlatformModule, nn).Eventually().Should(And(
+		// OperandAvailable
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .reason == "OperandAbsent"`,
 			status.ConditionTypeOperandAvailable),
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .severity == "Info"`,
 			status.ConditionTypeOperandAvailable),
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .message == "module CRD not installed"`,
+			status.ConditionTypeOperandAvailable),
+		// Ready
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
 			status.ConditionTypeReady, metav1.ConditionTrue),
 	))
 
-	// Step 2: Install the CRD dynamically.
+	// Step 2: Install the CRD dynamically. After the CRD watch fires and the
+	// reconciler re-evaluates, the state should remain OperandAbsent+Info
+	// (CRD now exists but CR still doesn't).
 	crd, err := et.RegisterCRD(wt.Context(), dynamicGVK,
 		"dynamictestmodules", "dynamictestmodule",
 		apiextensionsv1.ClusterScoped,
 		envt.WithPermissiveSchema())
-	NewWithT(t).Expect(err).NotTo(HaveOccurred())
+
+	wt.Expect(err).NotTo(HaveOccurred())
 	envt.CleanupDelete(t, NewWithT(t), context.Background(), wt.Client(), crd)
+
+	// Still OperandAbsent+Info — CRD installed but no CR yet. Message changes.
+	wt.Get(gvk.PlatformModule, nn).Eventually().Should(And(
+		// OperandAvailable
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .reason == "OperandAbsent"`,
+			status.ConditionTypeOperandAvailable),
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .severity == "Info"`,
+			status.ConditionTypeOperandAvailable),
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .message == "module CR not yet created"`,
+			status.ConditionTypeOperandAvailable),
+		// Ready
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
+			status.ConditionTypeReady, metav1.ConditionTrue),
+	))
 
 	// Step 3: Create the module CR with Ready=True.
 	u := &unstructured.Unstructured{}
@@ -380,8 +402,10 @@ func TestPlatformModuleReconciler_DynamicWatchActivatesOnCRDCreation(t *testing.
 
 	// OperandAvailable=True, Ready=True — dynamic watch activated.
 	wt.Get(gvk.PlatformModule, nn).Eventually().Should(And(
+		// OperandAvailable
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
 			status.ConditionTypeOperandAvailable, metav1.ConditionTrue),
+		// Ready
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
 			status.ConditionTypeReady, metav1.ConditionTrue),
 	))
