@@ -1,0 +1,46 @@
+package platform_test
+
+import (
+	"testing"
+
+	operatorv1 "github.com/openshift/api/operator/v1"
+	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
+	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
+	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/matchers/jq"
+)
+
+func TestPlatformOnly_TwoModules_Created(t *testing.T) {
+	_, tc := startAllControllers(t, suiteOpts{
+		moduleReg:    modules.NewRegistry(),
+		componentReg: &cr.Registry{},
+		provisionReg: provision.NewRegistry(),
+	})
+
+	createGatewayConfig(t, tc)
+
+	createPlatform(t, tc, configv1alpha1.PlatformSpec{
+		Modules: configv1alpha1.PlatformModules{
+			Monitoring: common.ManagementSpec{ManagementState: operatorv1.Managed},
+			AIGateway:  common.ManagementSpec{ManagementState: operatorv1.Managed},
+		},
+	})
+
+	wt := tc.NewWithT(t)
+	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
+
+	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).
+		Eventually().Should(jq.Match(`.metadata.name == "monitoring"`))
+
+	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
+		Eventually().Should(jq.Match(`.metadata.name == "aigateway"`))
+
+	wt.Get(gvk.Platform, nn).Eventually().Should(
+		jq.Match(`.status.modules | sort == ["aigateway","monitoring"]`),
+	)
+}
