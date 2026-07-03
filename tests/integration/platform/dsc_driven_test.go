@@ -248,6 +248,65 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 	))
 }
 
+func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
+	moduleReg := modules.NewRegistry()
+	moduleReg.Add(newTestModuleHandler("monitoring", testModuleAGVK))
+	moduleReg.Add(newTestModuleHandler("aigateway", testModuleBGVK))
+
+	provisionReg := provision.NewRegistry()
+	provisionReg.Add("monitoring", provision.KindModule, dag.RL(10))
+	provisionReg.Add("aigateway", provision.KindModule, dag.RL(20))
+	provisionReg.Enable("monitoring")
+	provisionReg.Enable("aigateway")
+
+	et, tc := startAllControllers(t, suiteOpts{
+		moduleReg:    moduleReg,
+		componentReg: &cr.Registry{},
+		provisionReg: provisionReg,
+	})
+
+	registerModuleCRD(t, et, testModuleAGVK)
+	registerModuleCRD(t, et, testModuleBGVK)
+	createGatewayConfig(t, tc)
+
+	createPlatform(t, tc, configv1alpha1.PlatformSpec{
+		Modules: configv1alpha1.PlatformModules{
+			Monitoring: common.ManagementSpec{ManagementState: operatorv1.Managed},
+			AIGateway:  common.ManagementSpec{ManagementState: operatorv1.Managed},
+		},
+	})
+
+	wt := tc.NewWithT(t)
+	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
+
+	// Phase 1: Both PlatformModule CRs created.
+	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).
+		Eventually().Should(Succeed())
+	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
+		Eventually().Should(Succeed())
+
+	// Phase 2: monitoring at RL10 becomes Ready=True (no manifests, module CR
+	// absent → OperandAbsent+Info → Ready=True).
+	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).
+		Eventually().Should(And(
+			jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
+			jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "OperandAbsent"`),
+		))
+
+	// Phase 3: aigateway at RL20 unblocked, also becomes Ready=True.
+	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
+		Eventually().Should(And(
+			jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
+			jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "OperandAbsent"`),
+		))
+
+	// Phase 4: Platform ModulesReady=True, Ready=True.
+	wt.Get(gvk.Platform, nn).Eventually().Should(And(
+		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .status == "True"`),
+		jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
+	))
+}
+
 func TestDSCDriven_PlatformReflectsDSC(t *testing.T) {
 	_, tc := startAllControllers(t, suiteOpts{
 		moduleReg:    modules.NewRegistry(),
