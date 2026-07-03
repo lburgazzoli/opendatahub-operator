@@ -145,8 +145,8 @@ component GVKs).
 
 | # | Task | Status |
 |---|------|--------|
-| 01-1 | [Core Types, Constants, startAllControllers](task-01-1-core.md) | pending |
-| 01-2 | [Helper Functions](task-01-2-helpers.md) | pending |
+| 01-1 | [Core Types, Constants, startAllControllers](task-01-1-core.md) | done |
+| 01-2 | [Helper Functions](task-01-2-helpers.md) | done |
 
 ### Group 02: Platform-Only Scenario (`platform_only_test.go`)
 
