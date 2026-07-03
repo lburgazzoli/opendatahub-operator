@@ -51,45 +51,67 @@ func TestPlatformOnly_TwoModules_Created(t *testing.T) {
 }
 
 func TestPlatformOnly_DAG_Advancement(t *testing.T) {
+	// Use a component at RL10 as a gate so we can observe the DAG blocked,
+	// then manually advance it and verify the module at RL20 proceeds.
 	moduleReg := modules.NewRegistry()
 	moduleReg.Add(newTestModuleHandler("monitoring", testModuleAGVK))
-	moduleReg.Add(newTestModuleHandler("aigateway", testModuleBGVK))
+
+	componentReg := &cr.Registry{}
+	componentReg.Add(&cr.BaseComponentHandler{
+		Name: "dashboard",
+		GVK:  gvk.Dashboard,
+	})
 
 	provisionReg := provision.NewRegistry()
-	provisionReg.Add("monitoring", provision.KindModule, dag.RL(10))
-	provisionReg.Add("aigateway", provision.KindModule, dag.RL(20))
+	provisionReg.Add("dashboard", provision.KindComponent, dag.RL(10))
+	provisionReg.Add("monitoring", provision.KindModule, dag.RL(20))
+	provisionReg.Enable("dashboard")
 	provisionReg.Enable("monitoring")
-	provisionReg.Enable("aigateway")
 
 	et, tc := startAllControllers(t, suiteOpts{
 		moduleReg:    moduleReg,
-		componentReg: &cr.Registry{},
+		componentReg: componentReg,
 		provisionReg: provisionReg,
 	})
 
 	registerModuleCRD(t, et, testModuleAGVK)
-	registerModuleCRD(t, et, testModuleBGVK)
 	createGatewayConfig(t, tc)
 
 	createPlatform(t, tc, configv1alpha1.PlatformSpec{
 		Modules: configv1alpha1.PlatformModules{
 			Monitoring: common.ManagementSpec{ManagementState: operatorv1.Managed},
-			AIGateway:  common.ManagementSpec{ManagementState: operatorv1.Managed},
 		},
 	})
 
 	wt := tc.NewWithT(t)
+	cli := tc.Client()
 	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
 
-	// Both PlatformModule CRs should be created.
+	// Step 1: PlatformModule created, but DAG blocked at RL10 (no Dashboard CR).
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).
 		Eventually().Should(Succeed())
-	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
-		Eventually().Should(Succeed())
 
-	// monitoring (RL10) becomes Ready=True first (no manifests, Info-severity
-	// conditions only). Then walkModuleDAG clears RL10 and aigateway (RL20)
-	// becomes Ready=True as well. Final state: ModulesReady=True, Ready=True.
+	wt.Get(gvk.Platform, nn).Eventually().Should(And(
+		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .status == "False"`),
+		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .message | contains("dashboard")`),
+	))
+
+	// Step 2: Create Dashboard CR and mark it Ready → RL10 clears → RL20 unblocked.
+	dashboard := &unstructured.Unstructured{}
+	dashboard.SetGroupVersionKind(gvk.Dashboard)
+	dashboard.SetName("default-dashboard")
+	NewWithT(t).Expect(cli.Create(context.Background(), dashboard)).Should(Succeed())
+	t.Cleanup(func() { _ = cli.Delete(context.Background(), dashboard) })
+
+	setUnstructuredReady(t, cli, dashboard, true)
+
+	// Step 3: ProvisioningProgress advances to True.
+	wt.Get(gvk.Platform, nn).Eventually().Should(
+		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .status == "True"`),
+	)
+
+	// Step 4: monitoring PlatformModule becomes Ready (auto — no manifests),
+	// Platform reaches ModulesReady=True.
 	wt.Get(gvk.Platform, nn).Eventually().Should(And(
 		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .status == "True"`),
 		jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
