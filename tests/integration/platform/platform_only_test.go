@@ -51,71 +51,143 @@ func TestPlatformOnly_TwoModules_Created(t *testing.T) {
 }
 
 func TestPlatformOnly_DAG_Advancement(t *testing.T) {
-	// Use a component at RL10 as a gate so we can observe the DAG blocked,
-	// then manually advance it and verify the module at RL20 proceeds.
+	// Two modules at different runlevels. Each module's operand CR is created
+	// upfront with no conditions, which triggers OperandInitializing (blocking).
+	// This lets us manually control when each module becomes Ready and verify
+	// that the DAG advances level by level.
 	moduleReg := modules.NewRegistry()
 	moduleReg.Add(newTestModuleHandler("monitoring", testModuleAGVK))
-
-	componentReg := &cr.Registry{}
-	componentReg.Add(&cr.BaseComponentHandler{
-		Name: "dashboard",
-		GVK:  gvk.Dashboard,
-	})
+	moduleReg.Add(newTestModuleHandler("aigateway", testModuleBGVK))
 
 	provisionReg := provision.NewRegistry()
-	provisionReg.Add("dashboard", provision.KindComponent, dag.RL(10))
-	provisionReg.Add("monitoring", provision.KindModule, dag.RL(20))
-	provisionReg.Enable("dashboard")
+	provisionReg.Add("monitoring", provision.KindModule, dag.RL(10))
+	provisionReg.Add("aigateway", provision.KindModule, dag.RL(20))
 	provisionReg.Enable("monitoring")
+	provisionReg.Enable("aigateway")
 
 	et, tc := startAllControllers(t, suiteOpts{
 		moduleReg:    moduleReg,
-		componentReg: componentReg,
+		componentReg: &cr.Registry{},
 		provisionReg: provisionReg,
 	})
 
 	registerModuleCRD(t, et, testModuleAGVK)
+	registerModuleCRD(t, et, testModuleBGVK)
+	createGatewayConfig(t, tc)
+
+	cli := tc.Client()
+
+	// Pre-create module operand CRs with no conditions. syncModuleCRStatus
+	// sees "CR exists, zero conditions" → OperandInitializing → blocks Ready.
+	monitoringCR := &unstructured.Unstructured{}
+	monitoringCR.SetGroupVersionKind(testModuleAGVK)
+	monitoringCR.SetName("default-monitoring")
+	NewWithT(t).Expect(cli.Create(context.Background(), monitoringCR)).Should(Succeed())
+	t.Cleanup(func() { _ = cli.Delete(context.Background(), monitoringCR) })
+
+	aigateCR := &unstructured.Unstructured{}
+	aigateCR.SetGroupVersionKind(testModuleBGVK)
+	aigateCR.SetName("default-aigateway")
+	NewWithT(t).Expect(cli.Create(context.Background(), aigateCR)).Should(Succeed())
+	t.Cleanup(func() { _ = cli.Delete(context.Background(), aigateCR) })
+
+	createPlatform(t, tc, configv1alpha1.PlatformSpec{
+		Modules: configv1alpha1.PlatformModules{
+			Monitoring: common.ManagementSpec{ManagementState: operatorv1.Managed},
+			AIGateway:  common.ManagementSpec{ManagementState: operatorv1.Managed},
+		},
+	})
+
+	wt := tc.NewWithT(t)
+	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
+
+	// Step 1: Both PlatformModule CRs created; neither is Ready yet
+	// (OperandInitializing blocks). ModulesReady=False listing both.
+	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).
+		Eventually().Should(Succeed())
+	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
+		Eventually().Should(Succeed())
+
+	wt.Get(gvk.Platform, nn).Eventually().Should(And(
+		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .status == "False"`),
+		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .reason == "NotReady"`),
+		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .message | contains("monitoring")`),
+	))
+
+	// Step 2: Mark monitoring operand CR Ready → monitoring PlatformModule
+	// becomes Ready → walkModuleDAG clears RL10.
+	setUnstructuredReady(t, cli, monitoringCR, true)
+
+	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).
+		Eventually().Should(
+			jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
+		)
+
+	// aigateway PlatformModule should still NOT be Ready: its operand CR
+	// has no conditions → OperandInitializing blocks Ready.
+	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
+		Eventually().Should(And(
+			jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .status == "False"`),
+			jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "OperandInitializing"`),
+			jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .message == "module CR has no conditions yet"`),
+		))
+
+	// Step 3: Mark aigateway operand CR Ready → aigateway PlatformModule
+	// becomes Ready → ModulesReady=True.
+	setUnstructuredReady(t, cli, aigateCR, true)
+
+	wt.Get(gvk.Platform, nn).Eventually().Should(And(
+		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .status == "True"`),
+		jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
+	))
+}
+
+func TestPlatformOnly_DisableModule_Cleanup(t *testing.T) {
+	_, tc := startAllControllers(t, suiteOpts{
+		moduleReg:    modules.NewRegistry(),
+		componentReg: &cr.Registry{},
+		provisionReg: provision.NewRegistry(),
+	})
+
 	createGatewayConfig(t, tc)
 
 	createPlatform(t, tc, configv1alpha1.PlatformSpec{
 		Modules: configv1alpha1.PlatformModules{
 			Monitoring: common.ManagementSpec{ManagementState: operatorv1.Managed},
+			AIGateway:  common.ManagementSpec{ManagementState: operatorv1.Managed},
 		},
 	})
 
 	wt := tc.NewWithT(t)
 	cli := tc.Client()
-	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
 
-	// Step 1: PlatformModule created, but DAG blocked at RL10 (no Dashboard CR).
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).
 		Eventually().Should(Succeed())
+	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
+		Eventually().Should(Succeed())
 
-	wt.Get(gvk.Platform, nn).Eventually().Should(And(
-		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .status == "False"`),
-		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .message | contains("dashboard")`),
-	))
+	// Disable monitoring by updating Platform spec.
+	p := &configv1alpha1.Platform{}
+	NewWithT(t).Expect(cli.Get(context.Background(),
+		types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}, p)).Should(Succeed())
+	p.Spec.Modules.Monitoring = common.ManagementSpec{ManagementState: operatorv1.Removed}
+	NewWithT(t).Expect(cli.Update(context.Background(), p)).Should(Succeed())
 
-	// Step 2: Create Dashboard CR and mark it Ready → RL10 clears → RL20 unblocked.
-	dashboard := &unstructured.Unstructured{}
-	dashboard.SetGroupVersionKind(gvk.Dashboard)
-	dashboard.SetName("default-dashboard")
-	NewWithT(t).Expect(cli.Create(context.Background(), dashboard)).Should(Succeed())
-	t.Cleanup(func() { _ = cli.Delete(context.Background(), dashboard) })
+	// monitoring PlatformModule should be deleted.
+	NewWithT(t).Eventually(func() error {
+		return cli.Get(context.Background(),
+			types.NamespacedName{Name: "monitoring"}, &configv1alpha1.PlatformModule{})
+	}).Should(MatchError(ContainSubstring("not found")))
 
-	setUnstructuredReady(t, cli, dashboard, true)
+	// aigateway PlatformModule should still exist.
+	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
+		Eventually().Should(Succeed())
 
-	// Step 3: ProvisioningProgress advances to True.
-	wt.Get(gvk.Platform, nn).Eventually().Should(
-		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .status == "True"`),
-	)
-
-	// Step 4: monitoring PlatformModule becomes Ready (auto — no manifests),
-	// Platform reaches ModulesReady=True.
-	wt.Get(gvk.Platform, nn).Eventually().Should(And(
-		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .status == "True"`),
-		jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
-	))
+	// Platform status.modules should only contain aigateway.
+	wt.Get(gvk.Platform, types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}).
+		Eventually().Should(
+			jq.Match(`.status.modules == ["aigateway"]`),
+		)
 }
 
 func TestPlatformOnly_DAG_Gating_ComponentBlocksModule(t *testing.T) {
@@ -153,13 +225,18 @@ func TestPlatformOnly_DAG_Gating_ComponentBlocksModule(t *testing.T) {
 	cli := tc.Client()
 	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
 
-	// Step 1: PlatformModule created but DAG blocked — no Dashboard CR.
+	// Step 1: PlatformModule created but DAG blocked at RL10 — no Dashboard CR.
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).
 		Eventually().Should(Succeed())
 
 	wt.Get(gvk.Platform, nn).Eventually().Should(And(
 		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .status == "False"`),
+		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .reason == "AwaitingReadiness"`),
 		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .message | contains("dashboard")`),
+		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .status == "False"`),
+		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .reason == "NotReady"`),
+		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .message | contains("monitoring")`),
+		jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "False"`),
 	))
 
 	// Step 2: Create Dashboard CR (no Ready condition) — still blocked.
