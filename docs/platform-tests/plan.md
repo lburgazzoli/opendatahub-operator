@@ -155,13 +155,13 @@ component GVKs).
 | 02-1 | [TestPlatformOnly_TwoModules_Created](task-02-1-two-modules-created.md) | done |
 | 02-2 | [TestPlatformOnly_DAG_Advancement](task-02-2-dag-advancement.md) | done |
 | 02-3 | [TestPlatformOnly_DAG_Gating_ComponentBlocksModule](task-02-3-dag-gating.md) | done |
-| 02-4 | [TestPlatformOnly_DisableModule_Cleanup](task-02-4-disable-cleanup.md) | pending |
+| 02-4 | [TestPlatformOnly_DisableModule_Cleanup](task-02-4-disable-cleanup.md) | done |
 
 ### Group 03: DSC-Driven Scenario (`dsc_driven_test.go`)
 
 | # | Task | Status |
 |---|------|--------|
-| 03-1 | [TestDSCDriven_PlatformReflectsDSC](task-03-1-platform-reflects-dsc.md) | pending |
+| 03-1 | [TestDSCDriven_PlatformReflectsDSC](task-03-1-platform-reflects-dsc.md) | done |
 | 03-2 | [TestDSCDriven_ComponentsAndModules_Installed](task-03-2-components-modules-installed.md) | pending |
 | 03-3 | [TestDSCDriven_StatusAggregation](task-03-3-status-aggregation.md) | pending |
 | 03-4 | [TestDSCDriven_DAG_Advancement](task-03-4-dag-advancement.md) | pending |
