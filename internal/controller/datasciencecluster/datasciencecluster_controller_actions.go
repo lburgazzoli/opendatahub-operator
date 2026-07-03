@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"reflect"
 
-	operatorv1 "github.com/openshift/api/operator/v1"
+	k8serr "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -20,7 +21,6 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	odhtype "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
 )
 
 const (
@@ -39,7 +39,11 @@ func isNilInterface(v any) bool {
 	return v == nil || (reflect.ValueOf(v).Kind() == reflect.Ptr && reflect.ValueOf(v).IsNil())
 }
 
-func initialize(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
+func watchDataScienceClusters(ctx context.Context, cli client.Client) []reconcile.Request {
+	return cluster.WatchDataScienceClusters(ctx, cli)
+}
+
+func (r *Reconciler) initialize(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
 	instance, ok := rr.Instance.(*dscv2.DataScienceCluster)
 	if !ok {
 		return fmt.Errorf("resource instance %v is not a dscv2.DataScienceCluster)", rr.Instance)
@@ -55,11 +59,7 @@ func initialize(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
 	return nil
 }
 
-func checkPreConditions(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
-	// This case should not happen, since there is a webhook that blocks the creation
-	// of more than one instance of the DataScienceCluster, however one can create a
-	// DataScienceCluster instance while the operator is stopped, hence this extra check
-
+func (r *Reconciler) checkPreConditions(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
 	if _, err := cluster.GetDSCI(ctx, rr.Client); err != nil {
 		return fmt.Errorf("failed to get a valid DataScienceCluster instance, %w", err)
 	}
@@ -71,14 +71,81 @@ func checkPreConditions(ctx context.Context, rr *odhtype.ReconciliationRequest) 
 	return nil
 }
 
-func watchDataScienceClusters(ctx context.Context, cli client.Client) []reconcile.Request {
-	return cluster.WatchDataScienceClusters(ctx, cli)
+// cleanupDisabledComponents deletes component CRs for disabled in-tree components.
+// Single-phase: components have no finalizer-based operator keepalive pattern.
+func (r *Reconciler) cleanupDisabledComponents(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
+	instance, ok := rr.Instance.(*dscv2.DataScienceCluster)
+	if !ok {
+		return fmt.Errorf("resource instance %v is not a dscv2.DataScienceCluster)", rr.Instance)
+	}
+
+	log := logf.FromContext(ctx)
+
+	_ = r.ComponentRegistry.ForEach(func(h cr.ComponentHandler) error {
+		if h.IsEnabled(instance) {
+			return nil
+		}
+
+		ci, err := h.NewCRObject(ctx, rr.Client, instance)
+		if err != nil {
+			return nil //nolint:nilerr
+		}
+		if isNilInterface(ci) {
+			return nil
+		}
+
+		obj, ok := ci.(client.Object)
+		if !ok {
+			return nil
+		}
+
+		if err := rr.Client.Delete(ctx, obj, client.PropagationPolicy(r.DeletePropagation)); client.IgnoreNotFound(err) != nil {
+			log.Error(err, "failed to delete disabled component CR", "component", h.GetName())
+		}
+
+		return nil
+	})
+
+	return nil
 }
 
-// provisionComponents creates CRs for all enabled in-tree components. The
-// Platform controller now owns the DAG orchestration; DSC just creates the CRs
-// directly without runlevel gating or readiness checking.
-func provisionComponents(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
+// cleanupDisabledModules deletes module operand CRs for disabled modules.
+// handler.DeleteModuleCR() is idempotent and handles NotFound/IsNoMatchError.
+func (r *Reconciler) cleanupDisabledModules(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
+	instance, ok := rr.Instance.(*dscv2.DataScienceCluster)
+	if !ok {
+		return fmt.Errorf("resource instance %v is not a dscv2.DataScienceCluster)", rr.Instance)
+	}
+
+	if !r.ModuleRegistry.HasEntries() {
+		return nil
+	}
+
+	dsci, err := cluster.GetDSCI(ctx, rr.Client)
+	if err != nil {
+		if k8serr.IsNotFound(err) || meta.IsNoMatchError(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to get DSCI for module cleanup: %w", err)
+	}
+
+	platformCtx := &modules.PlatformContext{DSC: instance, DSCI: dsci}
+
+	_ = r.ModuleRegistry.ForAll(func(h modules.ModuleHandler, _ bool) error {
+		if h.IsEnabled(platformCtx) {
+			return nil
+		}
+		// DeleteModuleCR handles NotFound and IsNoMatchError internally.
+		_ = h.DeleteModuleCR(ctx, rr.Client)
+		return nil
+	})
+
+	return nil
+}
+
+// provisionComponents creates CRs for all enabled in-tree components.
+// The Platform controller owns DAG orchestration; DSC creates CRs directly.
+func (r *Reconciler) provisionComponents(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
 	instance, ok := rr.Instance.(*dscv2.DataScienceCluster)
 	if !ok {
 		return fmt.Errorf("resource instance %v is not a dscv2.DataScienceCluster)", rr.Instance)
@@ -90,7 +157,7 @@ func provisionComponents(ctx context.Context, rr *odhtype.ReconciliationRequest)
 
 	var failedComponents []string
 
-	_ = cr.DefaultRegistry().ForEach(func(handler cr.ComponentHandler) error {
+	_ = r.ComponentRegistry.ForEach(func(handler cr.ComponentHandler) error {
 		if !handler.IsEnabled(instance) {
 			return nil
 		}
@@ -131,7 +198,7 @@ func provisionComponents(ctx context.Context, rr *odhtype.ReconciliationRequest)
 			Type:    status.ConditionTypeComponentsReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  status.ProvisioningFailedReason,
-			Message: fmt.Sprintf("Provisioning failed for: %s", fmt.Sprintf("%v", failedComponents)),
+			Message: fmt.Sprintf("Provisioning failed for: %v", failedComponents),
 		})
 
 		return fmt.Errorf("provisioning failed for components: %v", failedComponents)
@@ -140,19 +207,15 @@ func provisionComponents(ctx context.Context, rr *odhtype.ReconciliationRequest)
 	return nil
 }
 
-// provisionModuleCRs creates module operand CRs (e.g. AIGateway) for all
-// enabled modules. It does NOT deploy module operator manifests — that is
-// handled by the PlatformModule controller. Module CRD may not exist yet if
-// the module operator hasn't been deployed; deploy.WithContinueOnError() handles
-// the transient failure gracefully.
-func provisionModuleCRs(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
+// provisionModuleCRs creates module operand CRs (e.g. AIGateway) for enabled modules.
+// Does NOT deploy module operator manifests — that is the PlatformModule controller's job.
+func (r *Reconciler) provisionModuleCRs(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
 	instance, ok := rr.Instance.(*dscv2.DataScienceCluster)
 	if !ok {
 		return fmt.Errorf("resource instance %v is not a dscv2.DataScienceCluster)", rr.Instance)
 	}
 
-	reg := modules.DefaultRegistry()
-	if !reg.HasEntries() {
+	if !r.ModuleRegistry.HasEntries() {
 		return nil
 	}
 
@@ -161,10 +224,7 @@ func provisionModuleCRs(ctx context.Context, rr *odhtype.ReconciliationRequest) 
 		return fmt.Errorf("failed to get DSCI for module provisioning: %w", err)
 	}
 
-	platformCtx := &modules.PlatformContext{
-		DSC:  instance,
-		DSCI: dsci,
-	}
+	platformCtx := &modules.PlatformContext{DSC: instance, DSCI: dsci}
 	platformCtx.ApplicationsNamespace, err = cluster.ApplicationNamespace(ctx, rr.Client)
 	if err != nil {
 		return fmt.Errorf("failed to resolve application namespace: %w", err)
@@ -173,7 +233,7 @@ func provisionModuleCRs(ctx context.Context, rr *odhtype.ReconciliationRequest) 
 	log := logf.FromContext(ctx)
 	var failedModules []string
 
-	_ = reg.ForAll(func(handler modules.ModuleHandler, _ bool) error {
+	_ = r.ModuleRegistry.ForAll(func(handler modules.ModuleHandler, _ bool) error {
 		if !handler.IsEnabled(platformCtx) {
 			return nil
 		}
@@ -203,12 +263,9 @@ func provisionModuleCRs(ctx context.Context, rr *odhtype.ReconciliationRequest) 
 	return nil
 }
 
-// syncPlatformModules SSA-patches Platform.Spec.Modules with the modules that
-// DSC controls (currently AIGateway). The Platform controller reads this field
-// to create PlatformModule CRs, which in turn deploy the module operators.
-// DSC uses its own field manager so DSCI can independently own other module fields
-// (e.g. Monitoring) via SSA without conflict.
-func syncPlatformModules(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
+// syncPlatformModules adds a Platform CR patch to rr.Resources so the deploy
+// action SSA-applies Platform.Spec.Modules with the modules DSC controls.
+func (r *Reconciler) syncPlatformModules(_ context.Context, rr *odhtype.ReconciliationRequest) error {
 	instance, ok := rr.Instance.(*dscv2.DataScienceCluster)
 	if !ok {
 		return fmt.Errorf("resource instance %v is not a dscv2.DataScienceCluster)", rr.Instance)
@@ -220,25 +277,14 @@ func syncPlatformModules(ctx context.Context, rr *odhtype.ReconciliationRequest)
 		APIVersion: configv1alpha1.GroupVersion.String(),
 		Kind:       configv1alpha1.PlatformKind,
 	}
-
-	aiGatewayState := operatorv1.Removed
-	if instance.Spec.Components.AIGateway.ManagementState == operatorv1.Managed {
-		aiGatewayState = operatorv1.Managed
+	platform.Spec.Modules.AIGateway = common.ManagementSpec{
+		ManagementState: instance.Spec.Components.AIGateway.ManagementState,
 	}
 
-	platform.Spec.Modules.AIGateway = common.ManagementSpec{ManagementState: aiGatewayState}
-
-	if err := resources.Apply(ctx, rr.Client, platform,
-		client.FieldOwner("datasciencecluster"),
-		client.ForceOwnership,
-	); err != nil {
-		return fmt.Errorf("failed to patch Platform modules from DSC: %w", err)
-	}
-
-	return nil
+	return rr.AddResources(platform)
 }
 
-func updateStatus(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
+func (r *Reconciler) updateStatus(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
 	instance, ok := rr.Instance.(*dscv2.DataScienceCluster)
 	if !ok {
 		return fmt.Errorf("resource instance %v is not a dscv2.DataScienceCluster)", rr.Instance)
@@ -246,14 +292,12 @@ func updateStatus(ctx context.Context, rr *odhtype.ReconciliationRequest) error 
 
 	instance.Status.Release = rr.Release
 
-	if err := computeComponentsStatus(ctx, rr, cr.DefaultRegistry()); err != nil {
+	if err := computeComponentsStatus(ctx, rr, r.ComponentRegistry); err != nil {
 		return err
 	}
 
-	if cr.HasEntries() {
-		if err := modules.ComputeModulesStatus(ctx, rr); err != nil {
-			return err
-		}
+	if err := modules.ComputeModulesStatus(ctx, rr, r.ModuleRegistry); err != nil {
+		return err
 	}
 
 	return nil

@@ -21,46 +21,59 @@ import (
 	"context"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
 	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
 	dsciv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v2"
 	serviceApi "github.com/opendatahub-io/opendatahub-operator/v2/api/services/v1alpha1"
+	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/deploy"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/gc"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/gates"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/dependent"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/resources"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 )
 
-func NewDataScienceClusterReconciler(ctx context.Context, mgr ctrl.Manager) error {
+// Reconciler reconciles DataScienceCluster CRs.
+type Reconciler struct {
+	Options
+}
+
+// NewDataScienceClusterReconciler creates and registers the DSC reconciler.
+// Registries default to the package-level singletons; override via options in tests.
+func NewDataScienceClusterReconciler(ctx context.Context, mgr ctrl.Manager, opts ...Option) error {
+	r := &Reconciler{
+		Options: Options{
+			ComponentRegistry: cr.DefaultRegistry(),
+			ModuleRegistry:    modules.DefaultRegistry(),
+			DeletePropagation: metav1.DeletePropagationForeground,
+		},
+	}
+	for _, opt := range opts {
+		opt.applyOption(&r.Options)
+	}
+
 	componentsPredicate := dependent.New(dependent.WithWatchStatus(true))
 
-	_, err := reconciler.ReconcilerFor(mgr, &dscv2.DataScienceCluster{}).
-		Owns(&componentApi.Dashboard{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.Workbenches{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.Ray{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.ModelRegistry{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.TrustyAI{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.Kueue{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.TrainingOperator{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.Trainer{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.DataSciencePipelines{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.Kserve{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.ModelController{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.ModelsAsService{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.FeastOperator{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.OGX{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.MLflowOperator{}, reconciler.WithPredicates(componentsPredicate)).
-		Owns(&componentApi.SparkOperator{}, reconciler.WithPredicates(componentsPredicate)).
+	b := reconciler.ReconcilerFor(mgr, &dscv2.DataScienceCluster{}).
+		WithDynamicOwnership().
+		// Watch CRDs: when a module CRD is installed by the PlatformModule controller,
+		// the Dynamic(CrdExists) guards on module OwnsGVK calls activate.
+		WatchesGVK(
+			gvk.CustomResourceDefinition,
+			reconciler.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+			reconciler.WithEventMapper(func(ctx context.Context, _ client.Object) []reconcile.Request {
+				return watchDataScienceClusters(ctx, mgr.GetClient())
+			}),
+		).
+		// Static watches — DSC, GatewayConfig, ConfigMap.
 		WatchesGVK(gvk.Tenant,
 			reconciler.Dynamic(reconciler.CrdExists(gvk.Tenant)),
 			reconciler.WithEventMapper(func(ctx context.Context, _ client.Object) []reconcile.Request {
@@ -86,24 +99,49 @@ func NewDataScienceClusterReconciler(ctx context.Context, mgr ctrl.Manager) erro
 			}),
 			reconciler.WithPredicates(
 				resources.CreatedOrUpdatedOrDeletedNamed(gates.AcksConfigMap),
-			)).
-		WithAction(initialize).
-		WithAction(checkPreConditions).
-		WithAction(updateStatus).
-		WithAction(provisionComponents).
-		WithAction(provisionModuleCRs).
-		WithAction(syncPlatformModules).
+			))
+
+	// Dynamic Owns for in-tree component CRs.
+	_ = r.ComponentRegistry.ForEach(func(h cr.ComponentHandler) error {
+		b = b.OwnsGVK(
+			h.GroupVersionKind(),
+			reconciler.Dynamic(reconciler.CrdExists(h.GroupVersionKind())),
+			reconciler.WithPredicates(componentsPredicate),
+		)
+
+		return nil
+	})
+
+	_ = r.ModuleRegistry.ForAll(func(h modules.ModuleHandler, _ bool) error {
+		switch h.GetGroupVersionKind() {
+		// Monitoring is DSCI-owned — DSC must not handle it.
+		case gvk.Monitoring:
+			return nil
+		default:
+			b = b.OwnsGVK(
+				h.GetGroupVersionKind(),
+				reconciler.Dynamic(reconciler.CrdExists(h.GetGroupVersionKind())),
+				reconciler.WithPredicates(componentsPredicate),
+			)
+		}
+
+		return nil
+	})
+
+	_, err := b.
+		WithAction(r.initialize).
+		WithAction(r.checkPreConditions).
+		WithAction(r.updateStatus).
+		WithAction(r.provisionComponents).
+		WithAction(r.provisionModuleCRs).
+		WithAction(r.syncPlatformModules).
 		WithAction(deploy.NewAction(
 			deploy.WithCache(),
+			deploy.WithApplyOrder(),
 			deploy.WithContinueOnError(),
 		)).
-		WithAction(gc.NewAction(
-			gc.WithTypePredicate(
-				func(rr *types.ReconciliationRequest, objGVK schema.GroupVersionKind) (bool, error) {
-					return rr.Controller.Owns(objGVK), nil
-				},
-			),
-		)).
+		WithAction(r.cleanupDisabledComponents).
+		WithAction(r.cleanupDisabledModules).
 		WithConditions(status.ConditionTypeComponentsReady, status.ConditionTypeModulesReady).
 		Build(ctx)
 

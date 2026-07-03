@@ -396,10 +396,9 @@ func deploymentNameFromManifests(manifests OperatorManifests, fallbackName strin
 // applied. Post-migration (no in-tree components), the modules
 // controller calls this via updateModuleStatus and becomes the sole
 // status writer.
-func ComputeModulesStatus(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
+func ComputeModulesStatus(ctx context.Context, rr *odhtype.ReconciliationRequest, reg *Registry) error {
 	log := logf.FromContext(ctx)
 
-	reg := DefaultRegistry()
 	if !reg.HasEntries() {
 		return nil
 	}
@@ -506,5 +505,5 @@ func updateModuleStatus(ctx context.Context, rr *odhtype.ReconciliationRequest) 
 	if cr.HasEntries() {
 		return nil
 	}
-	return ComputeModulesStatus(ctx, rr)
+	return ComputeModulesStatus(ctx, rr, DefaultRegistry())
 }

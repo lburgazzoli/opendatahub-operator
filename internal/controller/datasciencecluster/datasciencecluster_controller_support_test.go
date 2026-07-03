@@ -2,48 +2,32 @@
 package datasciencecluster
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 
+	"github.com/stretchr/testify/mock"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
 	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/conditions"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/operatorconfig"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/matchers/jq"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/mocks"
 
 	. "github.com/onsi/gomega"
 )
 
-// mockHandler is a minimal ComponentHandler for testing computeComponentsStatus.
-type mockHandler struct {
-	name    string
-	enabled bool
-	status  metav1.ConditionStatus
-	err     error
-}
-
-func (m *mockHandler) Init(_ common.Platform, _ operatorconfig.OperatorSettings) error { return nil }
-func (m *mockHandler) GetName() string                                                 { return m.name }
-func (m *mockHandler) GroupVersionKind() schema.GroupVersionKind                       { return schema.GroupVersionKind{} }
-func (m *mockHandler) NewCRObject(_ context.Context, _ client.Client, _ *dscv2.DataScienceCluster) (common.PlatformObject, error) {
-	return nil, nil
-}
-func (m *mockHandler) NewComponentReconciler(_ context.Context, _ ctrl.Manager) error {
-	return nil
-}
-func (m *mockHandler) IsEnabled(_ *dscv2.DataScienceCluster) bool { return m.enabled }
-func (m *mockHandler) UpdateDSCStatus(_ context.Context, _ *types.ReconciliationRequest) (metav1.ConditionStatus, error) {
-	return m.status, m.err
+// newMock creates a MockComponentHandler with only the methods exercised by
+// computeComponentsStatus: GetName, IsEnabled, UpdateDSCStatus.
+func newMock(name string, enabled bool, cs metav1.ConditionStatus) *mocks.MockComponentHandler {
+	return mocks.NewMockComponentHandler(func(m *mocks.MockComponentHandler) {
+		m.On("GetName").Return(name)
+		m.On("IsEnabled", mock.Anything).Return(enabled)
+		m.On("UpdateDSCStatus", mock.Anything, mock.Anything).Return(cs, nil)
+	})
 }
 
 func newRegistry(handlers ...cr.ComponentHandler) *cr.Registry {
@@ -66,8 +50,8 @@ func TestComputeComponentsStatus(t *testing.T) {
 		g := NewWithT(t)
 		dsc := newDSC()
 		reg := newRegistry(
-			&mockHandler{name: "comp-a", enabled: true, status: metav1.ConditionTrue},
-			&mockHandler{name: "comp-b", enabled: true, status: metav1.ConditionTrue},
+			newMock("comp-a", true, metav1.ConditionTrue),
+			newMock("comp-b", true, metav1.ConditionTrue),
 		)
 
 		rr := &types.ReconciliationRequest{
@@ -88,8 +72,8 @@ func TestComputeComponentsStatus(t *testing.T) {
 		g := NewWithT(t)
 		dsc := newDSC()
 		reg := newRegistry(
-			&mockHandler{name: "comp-a", enabled: true, status: metav1.ConditionTrue},
-			&mockHandler{name: "comp-b", enabled: true, status: metav1.ConditionUnknown},
+			newMock("comp-a", true, metav1.ConditionTrue),
+			newMock("comp-b", true, metav1.ConditionUnknown),
 		)
 
 		rr := &types.ReconciliationRequest{
@@ -112,8 +96,8 @@ func TestComputeComponentsStatus(t *testing.T) {
 		g := NewWithT(t)
 		dsc := newDSC()
 		reg := newRegistry(
-			&mockHandler{name: "comp-a", enabled: true, status: metav1.ConditionTrue},
-			&mockHandler{name: "comp-b", enabled: true, status: metav1.ConditionFalse},
+			newMock("comp-a", true, metav1.ConditionTrue),
+			newMock("comp-b", true, metav1.ConditionFalse),
 		)
 
 		rr := &types.ReconciliationRequest{
@@ -136,8 +120,8 @@ func TestComputeComponentsStatus(t *testing.T) {
 		g := NewWithT(t)
 		dsc := newDSC()
 		reg := newRegistry(
-			&mockHandler{name: "comp-a", enabled: true, status: metav1.ConditionTrue},
-			&mockHandler{name: "comp-stuck", enabled: false, status: metav1.ConditionFalse},
+			newMock("comp-a", true, metav1.ConditionTrue),
+			newMock("comp-stuck", false, metav1.ConditionFalse),
 		)
 
 		rr := &types.ReconciliationRequest{
@@ -160,8 +144,8 @@ func TestComputeComponentsStatus(t *testing.T) {
 		g := NewWithT(t)
 		dsc := newDSC()
 		reg := newRegistry(
-			&mockHandler{name: "comp-a", enabled: true, status: metav1.ConditionTrue},
-			&mockHandler{name: "comp-disabled", enabled: false, status: metav1.ConditionUnknown},
+			newMock("comp-a", true, metav1.ConditionTrue),
+			newMock("comp-disabled", false, metav1.ConditionUnknown),
 		)
 
 		rr := &types.ReconciliationRequest{
@@ -182,7 +166,7 @@ func TestComputeComponentsStatus(t *testing.T) {
 		g := NewWithT(t)
 		dsc := newDSC()
 		reg := newRegistry(
-			&mockHandler{name: "comp-a", enabled: false, status: metav1.ConditionUnknown},
+			newMock("comp-a", false, metav1.ConditionUnknown),
 		)
 
 		rr := &types.ReconciliationRequest{

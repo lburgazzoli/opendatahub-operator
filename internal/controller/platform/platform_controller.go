@@ -6,17 +6,22 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
 	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	sr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/deploy"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/dag"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/handlers"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/dependent"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
 )
@@ -50,6 +55,8 @@ func New(ctx context.Context, mgr ctrl.Manager, opts ...Option) error {
 		opt.applyOption(&r.Options)
 	}
 
+	componentsPredicate := dependent.New(dependent.WithWatchStatus(true))
+
 	b := reconciler.ReconcilerFor(mgr, &configv1alpha1.Platform{}).
 		WithConditions(status.ConditionTypeModulesReady).
 		// deploy.NewAction sets owner references on PlatformModule CRs so
@@ -58,19 +65,28 @@ func New(ctx context.Context, mgr ctrl.Manager, opts ...Option) error {
 		WithPeriodicSync(1*time.Minute).
 		Owns(
 			&configv1alpha1.PlatformModule{},
-			reconciler.WithPredicates(predicate.ResourceVersionChangedPredicate{}))
-
-	// Watch all in-tree component CRs via the component registry. Component
-	// creation and status changes may unblock a DAG runlevel that depends on
-	// components being Ready first. We use ResourceVersionChangedPredicate
-	// (not dependent.WithWatchStatus) because Create events must also fire —
-	// a component CR being created after the controller starts means the DAG
-	// should re-evaluate immediately.
-	_ = r.ComponentRegistry.ForEach(func(h cr.ComponentHandler) error {
-		b = b.WatchesGVK(
-			h.GroupVersionKind(),
-			reconciler.WithEventHandler(handlers.ToNamed(configv1alpha1.PlatformInstanceName)),
+			reconciler.WithPredicates(predicate.ResourceVersionChangedPredicate{})).
+		// Watch CRDs: when a component or service CRD is installed the Dynamic
+		// guards on the watches below activate and Platform re-evaluates.
+		WatchesGVK(
+			gvk.CustomResourceDefinition,
 			reconciler.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+			reconciler.WithEventMapper(func(_ context.Context, _ client.Object) []reconcile.Request {
+				return []reconcile.Request{{
+					NamespacedName: types.NamespacedName{Name: configv1alpha1.PlatformInstanceName},
+				}}
+			}),
+		)
+
+	// Watch in-tree component CRs. Dynamic(CrdExists) guards against missing CRDs
+	// on xKS; dependent.WithWatchStatus triggers on status-only changes.
+	_ = r.ComponentRegistry.ForEach(func(h cr.ComponentHandler) error {
+		k := h.GroupVersionKind()
+		b = b.WatchesGVK(
+			k,
+			reconciler.Dynamic(reconciler.CrdExists(k)),
+			reconciler.WithEventHandler(handlers.ToNamed(configv1alpha1.PlatformInstanceName)),
+			reconciler.WithPredicates(componentsPredicate),
 		)
 		return nil
 	})
@@ -81,8 +97,9 @@ func New(ctx context.Context, mgr ctrl.Manager, opts ...Option) error {
 		if k := h.GroupVersionKind(); k.Kind != "" {
 			b = b.WatchesGVK(
 				k,
+				reconciler.Dynamic(reconciler.CrdExists(k)),
 				reconciler.WithEventHandler(handlers.ToNamed(configv1alpha1.PlatformInstanceName)),
-				reconciler.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+				reconciler.WithPredicates(componentsPredicate),
 			)
 		}
 		return nil

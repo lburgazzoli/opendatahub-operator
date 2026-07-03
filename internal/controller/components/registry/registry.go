@@ -74,6 +74,18 @@ type Registry struct {
 	entries       map[string]HandlerEntry
 	order         []string
 	resolvedCache [][]HandlerEntry
+
+	// ProvisionRegistry is the unified DAG registry used for cache invalidation.
+	// If nil, the package-level provision.DefaultRegistry() is used.
+	ProvisionRegistry *provision.UnifiedRegistry
+}
+
+// provisionReg returns the configured provision registry, falling back to the global default.
+func (r *Registry) provisionReg() *provision.UnifiedRegistry {
+	if r.ProvisionRegistry != nil {
+		return r.ProvisionRegistry
+	}
+	return provision.DefaultRegistry()
 }
 
 var r = &Registry{}
@@ -99,7 +111,7 @@ func (r *Registry) Add(ch ComponentHandler, opts ...RegistrationOption) {
 	}
 	r.entries[name] = e
 	r.resolvedCache = nil
-	provision.InvalidateCache()
+	r.provisionReg().InvalidateCache()
 }
 
 // Enable sets the enabled state for the named handler to true.

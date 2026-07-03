@@ -69,6 +69,14 @@ func (m *MockComponentHandler) IsEnabled(dsc *dscv2.DataScienceCluster) bool {
 	return m.Called(dsc).Bool(0)
 }
 
+// NewMockComponentHandler creates a MockComponentHandler and passes it to f
+// for configuration. Only the expectations set in f are registered.
+func NewMockComponentHandler(f func(*MockComponentHandler)) *MockComponentHandler {
+	m := new(MockComponentHandler)
+	f(m)
+	return m
+}
+
 // NewDefaultMockComponentHandler creates a MockComponentHandler with sensible defaults.
 // name and gvk are used for the most common method expectations.
 func NewDefaultMockComponentHandler(name string, gvk schema.GroupVersionKind) *MockComponentHandler {
@@ -144,6 +152,14 @@ func (m *MockModuleHandler) DeleteModuleCR(ctx context.Context, cli client.Clien
 
 func (m *MockModuleHandler) DeleteOperatorResources(ctx context.Context, cli client.Client, platform *modules.PlatformContext) error {
 	return m.Called(ctx, cli, platform).Error(0)
+}
+
+// NewMockModuleHandler creates a MockModuleHandler and passes it to f
+// for configuration. Only the expectations set in f are registered.
+func NewMockModuleHandler(f func(*MockModuleHandler)) *MockModuleHandler {
+	m := new(MockModuleHandler)
+	f(m)
+	return m
 }
 
 // NewDefaultMockModuleHandler creates a MockModuleHandler with sensible defaults.

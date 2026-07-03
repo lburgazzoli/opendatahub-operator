@@ -28,6 +28,18 @@ type Registry struct {
 	order []string
 	// resolvedCache caches the DAG-resolved batches; invalidated on mutation.
 	resolvedCache [][]registryEntry
+
+	// ProvisionRegistry is the unified DAG registry used for cache invalidation
+	// and enable/disable signalling. If nil, provision.DefaultRegistry() is used.
+	ProvisionRegistry *provision.UnifiedRegistry
+}
+
+// provisionReg returns the configured provision registry, falling back to the global default.
+func (r *Registry) provisionReg() *provision.UnifiedRegistry {
+	if r.ProvisionRegistry != nil {
+		return r.ProvisionRegistry
+	}
+	return provision.DefaultRegistry()
 }
 
 // NewRegistry creates an empty module registry. Use DefaultRegistry() for
@@ -59,7 +71,7 @@ func (r *Registry) Add(handler ModuleHandler, opts ...RegistrationOption) {
 	}
 	r.entries[name] = e
 	r.resolvedCache = nil
-	provision.InvalidateCache()
+	r.provisionReg().InvalidateCache()
 }
 
 // Enable sets the enabled state for the named module to true.
@@ -112,9 +124,9 @@ func (r *Registry) EnableFromList(names []string) {
 		r.entries[name] = e
 
 		if want[name] {
-			provision.Enable(name)
+			r.provisionReg().Enable(name)
 		} else {
-			provision.Disable(name)
+			r.provisionReg().Disable(name)
 		}
 	}
 	r.resolvedCache = nil
