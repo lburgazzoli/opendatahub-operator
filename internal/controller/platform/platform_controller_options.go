@@ -8,6 +8,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	sr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/dag"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 )
 
 // Option is satisfied by both the Options struct literal and the named
@@ -25,6 +26,7 @@ type Options struct {
 	ServiceRegistry   *sr.Registry
 	StuckTracker      *dag.StuckTracker
 	DeletePropagation metav1.DeletionPropagation
+	ProvisionReg      *provision.UnifiedRegistry
 }
 
 func (o Options) applyOption(target *Options) {
@@ -42,6 +44,9 @@ func (o Options) applyOption(target *Options) {
 	}
 	if o.DeletePropagation != "" {
 		target.DeletePropagation = o.DeletePropagation
+	}
+	if o.ProvisionReg != nil {
+		target.ProvisionReg = o.ProvisionReg
 	}
 }
 
@@ -76,6 +81,13 @@ func WithStuckTracker(t *dag.StuckTracker) Option {
 	return optionFunc(func(o *Options) {
 		o.StuckTracker = t
 	})
+}
+
+// WithProvisionRegistry sets a custom unified provision registry for DAG
+// ordering. Defaults to provision.DefaultRegistry(). Override in tests to
+// inject isolated runlevel entries.
+func WithProvisionRegistry(r *provision.UnifiedRegistry) Option {
+	return optionFunc(func(o *Options) { o.ProvisionReg = r })
 }
 
 // WithDeletePropagationPolicy sets the propagation policy used when deleting

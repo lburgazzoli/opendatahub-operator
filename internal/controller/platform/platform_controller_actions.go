@@ -4,19 +4,14 @@ import (
 	"context"
 	"fmt"
 
-	k8serr "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
-	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	odherrors "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/errors"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/conditions"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/dag"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	odhtype "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 )
@@ -30,7 +25,7 @@ func (r *Reconciler) enableModules(_ context.Context, rr *odhtype.Reconciliation
 		return fmt.Errorf("expected *Platform, got %T", rr.Instance)
 	}
 
-	r.moduleRegistry.EnableFromList(platform.Spec.Modules.EnabledModules())
+	r.ModuleRegistry.EnableFromList(platform.Spec.Modules.EnabledModules())
 
 	return nil
 }
@@ -81,7 +76,7 @@ func (r *Reconciler) cleanupDisabledModules(ctx context.Context, rr *odhtype.Rec
 		if desired.Has(pm.Name) {
 			continue
 		}
-		if err := rr.Client.Delete(ctx, pm, client.PropagationPolicy(r.deletePolicy)); client.IgnoreNotFound(err) != nil {
+		if err := rr.Client.Delete(ctx, pm, client.PropagationPolicy(r.DeletePropagation)); client.IgnoreNotFound(err) != nil {
 			return fmt.Errorf("deleting PlatformModule %s: %w", pm.Name, err)
 		}
 	}
@@ -102,37 +97,21 @@ func (r *Reconciler) cleanupDisabledModules(ctx context.Context, rr *odhtype.Rec
 // When a batch is not yet ready, the action schedules a requeue after the
 // remaining gating timeout so the check fires even without external events.
 func (r *Reconciler) walkModuleDAG(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
-	if !r.moduleRegistry.HasEntries() {
+	if !r.ModuleRegistry.HasEntries() {
 		return nil
 	}
 
-	var checker dag.ReadinessChecker = &platformModuleReadinessChecker{
-		cli:             rr.Client,
-		platformVersion: rr.Release.Version.String(),
-	}
-
-	// When DSC exists (OpenShift), include in-tree component readiness in
-	// DAG gating. On xKS (no DSC CRD), only modules participate.
-	dsc, err := cluster.GetDSC(ctx, rr.Client)
-
-	switch {
-	case err == nil:
-		checker = provision.NewCompositeChecker(
-			cr.NewReadinessChecker(r.componentRegistry, rr.Client, dsc),
-			checker,
-		)
-	case k8serr.IsNotFound(err):
-		// xKS: no DSC CRD or instance — modules-only DAG.
-	case meta.IsNoMatchError(err):
-		// xKS: no DSC CRD or instance — modules-only DAG.
-	default:
-		return fmt.Errorf("failed to get DSC for DAG gating: %w", err)
-	}
+	// CompositeChecker spans in-tree components and module operators.
+	// Both use unstructured CR lookups — no DSC dependency.
+	checker := provision.NewCompositeChecker(
+		componentReadinessChecker(rr.Client, r.ComponentRegistry),
+		moduleReadinessChecker(rr.Client, rr.Release.Version.String()),
+	)
 
 	requeueAfter, walkErr := provision.WalkBatches(
 		ctx,
 		checker,
-		r.stuckTracker,
+		r.StuckTracker,
 		string(rr.Instance.GetUID()),
 		rr.Conditions,
 		func(batch []provision.UnifiedNode) error {
@@ -142,6 +121,7 @@ func (r *Reconciler) walkModuleDAG(ctx context.Context, rr *odhtype.Reconciliati
 			)
 			return nil
 		},
+		r.ProvisionReg,
 	)
 
 	if walkErr != nil {

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
@@ -18,29 +19,36 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
+	rrtypes "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/operatorconfig"
 )
 
+// MockComponentHandler is a testify/mock implementation of cr.ComponentHandler.
 type MockComponentHandler struct {
 	mock.Mock
 }
 
-func (m *MockComponentHandler) Init(platform common.Platform) error {
-	return m.Called(platform).Error(0)
+func (m *MockComponentHandler) Init(platform common.Platform, cfg operatorconfig.OperatorSettings) error {
+	return m.Called(platform, cfg).Error(0)
 }
 
 func (m *MockComponentHandler) GetName() string {
 	return m.Called().String(0)
 }
 
-func (m *MockComponentHandler) GetManagementState(dsc *dscv2.DataScienceCluster) operatorv1.ManagementState {
-	return m.Called(dsc).Get(0).(operatorv1.ManagementState)
+func (m *MockComponentHandler) GroupVersionKind() schema.GroupVersionKind {
+	return m.Called().Get(0).(schema.GroupVersionKind)
 }
 
-func (m *MockComponentHandler) NewCRObject(_ context.Context, _ client.Client, dsc *dscv2.DataScienceCluster) (common.PlatformObject, error) {
-	args := m.Called(dsc)
+func (m *MockComponentHandler) NewCRObject(ctx context.Context, cli client.Client, dsc *dscv2.DataScienceCluster) (common.PlatformObject, error) {
+	args := m.Called(ctx, cli, dsc)
 	if args.Get(1) != nil {
 		return nil, args.Get(1).(error)
+	}
+	if args.Get(0) == nil {
+		return nil, nil
 	}
 	return args.Get(0).(common.PlatformObject), nil
 }
@@ -49,8 +57,110 @@ func (m *MockComponentHandler) NewComponentReconciler(ctx context.Context, mgr c
 	return m.Called(ctx, mgr).Error(0)
 }
 
-func (m *MockComponentHandler) UpdateDSCStatus(dsc *dscv2.DataScienceCluster, obj client.Object) error {
-	return m.Called(dsc, obj).Error(0)
+func (m *MockComponentHandler) UpdateDSCStatus(ctx context.Context, rr *rrtypes.ReconciliationRequest) (metav1.ConditionStatus, error) {
+	args := m.Called(ctx, rr)
+	if args.Get(1) != nil {
+		return "", args.Get(1).(error)
+	}
+	return args.Get(0).(metav1.ConditionStatus), nil
+}
+
+func (m *MockComponentHandler) IsEnabled(dsc *dscv2.DataScienceCluster) bool {
+	return m.Called(dsc).Bool(0)
+}
+
+// NewDefaultMockComponentHandler creates a MockComponentHandler with sensible defaults.
+// name and gvk are used for the most common method expectations.
+func NewDefaultMockComponentHandler(name string, gvk schema.GroupVersionKind) *MockComponentHandler {
+	m := new(MockComponentHandler)
+	m.On("GetName").Return(name).Maybe()
+	m.On("GroupVersionKind").Return(gvk).Maybe()
+	m.On("Init", mock.Anything, mock.Anything).Return(nil).Maybe()
+	m.On("IsEnabled", mock.Anything).Return(true).Maybe()
+	m.On("NewCRObject", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	m.On("NewComponentReconciler", mock.Anything, mock.Anything).Return(nil).Maybe()
+	m.On("UpdateDSCStatus", mock.Anything, mock.Anything).Return(metav1.ConditionTrue, nil).Maybe()
+	return m
+}
+
+// MockModuleHandler is a testify/mock implementation of modules.ModuleHandler.
+type MockModuleHandler struct {
+	mock.Mock
+}
+
+func (m *MockModuleHandler) GetName() string {
+	return m.Called().String(0)
+}
+
+func (m *MockModuleHandler) IsEnabled(platform *modules.PlatformContext) bool {
+	return m.Called(platform).Bool(0)
+}
+
+func (m *MockModuleHandler) GetGroupVersionKind() schema.GroupVersionKind {
+	return m.Called().Get(0).(schema.GroupVersionKind)
+}
+
+func (m *MockModuleHandler) GetOperatorManifests(platform *modules.PlatformContext) modules.OperatorManifests {
+	return m.Called(platform).Get(0).(modules.OperatorManifests)
+}
+
+func (m *MockModuleHandler) BuildModuleCR(ctx context.Context, cli client.Client, platform *modules.PlatformContext) (*unstructured.Unstructured, error) {
+	args := m.Called(ctx, cli, platform)
+	if args.Get(1) != nil {
+		return nil, args.Get(1).(error)
+	}
+	if args.Get(0) == nil {
+		return nil, nil
+	}
+	return args.Get(0).(*unstructured.Unstructured), nil
+}
+
+func (m *MockModuleHandler) GetRelatedImages() []string {
+	return m.Called().Get(0).([]string)
+}
+
+func (m *MockModuleHandler) GetModuleStatus(ctx context.Context, cli client.Client) (*modules.ModuleStatus, error) {
+	args := m.Called(ctx, cli)
+	if args.Get(1) != nil {
+		return nil, args.Get(1).(error)
+	}
+	if args.Get(0) == nil {
+		return nil, nil
+	}
+	return args.Get(0).(*modules.ModuleStatus), nil
+}
+
+func (m *MockModuleHandler) GetModuleCRState(ctx context.Context, cli client.Client) (modules.CRState, error) {
+	args := m.Called(ctx, cli)
+	if args.Get(1) != nil {
+		return 0, args.Get(1).(error)
+	}
+	return args.Get(0).(modules.CRState), nil
+}
+
+func (m *MockModuleHandler) DeleteModuleCR(ctx context.Context, cli client.Client) error {
+	return m.Called(ctx, cli).Error(0)
+}
+
+func (m *MockModuleHandler) DeleteOperatorResources(ctx context.Context, cli client.Client, platform *modules.PlatformContext) error {
+	return m.Called(ctx, cli, platform).Error(0)
+}
+
+// NewDefaultMockModuleHandler creates a MockModuleHandler with sensible defaults.
+// name and gvk are used for the most common method expectations.
+func NewDefaultMockModuleHandler(name string, gvk schema.GroupVersionKind) *MockModuleHandler {
+	m := new(MockModuleHandler)
+	m.On("GetName").Return(name).Maybe()
+	m.On("GetGroupVersionKind").Return(gvk).Maybe()
+	m.On("IsEnabled", mock.Anything).Return(true).Maybe()
+	m.On("GetOperatorManifests", mock.Anything).Return(modules.OperatorManifests{}).Maybe()
+	m.On("BuildModuleCR", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	m.On("GetRelatedImages").Return([]string{}).Maybe()
+	m.On("GetModuleStatus", mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	m.On("GetModuleCRState", mock.Anything, mock.Anything).Return(modules.CRStateAbsent, nil).Maybe()
+	m.On("DeleteModuleCR", mock.Anything, mock.Anything).Return(nil).Maybe()
+	m.On("DeleteOperatorResources", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	return m
 }
 
 type MockController struct {
@@ -97,8 +207,6 @@ func NewMockController(f func(m *MockController)) *MockController {
 	m := new(MockController)
 	f(m)
 
-	// Set default expectations for commonly used methods if not already set by the callback.
-	// This allows tests to override with specific expectations before these defaults.
 	m.On("Owns", mock.Anything).Return(false).Maybe()
 	m.On("IsExcludedFromDynamicOwnership", mock.Anything).Return(false).Maybe()
 	m.On("IsDynamicOwnershipEnabled").Return(false).Maybe()
@@ -138,3 +246,8 @@ func NewMockCRD(group, version, kind, componentName string) *apiextv1.CustomReso
 		},
 	}
 }
+
+// Ensure interfaces are satisfied at compile time.
+var (
+	_ operatorv1.ManagementState = "" // keep import
+)

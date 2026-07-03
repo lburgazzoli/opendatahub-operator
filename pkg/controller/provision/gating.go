@@ -41,6 +41,9 @@ type BatchProcessor func(batch []UnifiedNode) error
 // expires (zero when not blocked or already timed out) and any error.
 // Callers should schedule a requeue for the returned duration so the
 // timeout check fires even without external events.
+// WalkBatches resolves the unified DAG and iterates batches in runlevel
+// order, enforcing readiness gating between runlevels. When reg is nil,
+// DefaultRegistry() is used.
 func WalkBatches(
 	ctx context.Context,
 	checker dag.ReadinessChecker,
@@ -48,10 +51,16 @@ func WalkBatches(
 	instanceID string,
 	conditions ConditionWriter,
 	processBatch BatchProcessor,
+	reg ...*UnifiedRegistry,
 ) (time.Duration, error) {
 	log := logf.FromContext(ctx)
 
-	batches, err := DefaultRegistry().ResolvedBatches()
+	r := DefaultRegistry()
+	if len(reg) > 0 && reg[0] != nil {
+		r = reg[0]
+	}
+
+	batches, err := r.ResolvedBatches()
 	if err != nil {
 		conditions.SetCondition(common.Condition{
 			Type:    status.ConditionTypeProvisioningProgress,
