@@ -163,7 +163,7 @@ component GVKs).
 |---|------|--------|
 | 03-1 | [TestDSCDriven_PlatformReflectsDSC](task-03-1-platform-reflects-dsc.md) | done |
 | 03-2 | [TestDSCDriven_ComponentsAndModules_Installed](task-03-2-components-modules-installed.md) | done |
-| 03-3 | [TestDSCDriven_StatusAggregation](task-03-3-status-aggregation.md) | pending |
+| 03-3 | [TestDSCDriven_StatusAggregation](task-03-3-status-aggregation.md) | done |
 | 03-4 | [TestDSCDriven_DAG_Advancement](task-03-4-dag-advancement.md) | pending |
 | 03-5 | [TestDSCDriven_DAG_Gating_ModuleBlocksModule](task-03-5-dag-gating.md) | pending |
 | 03-6 | [TestDSCDriven_DisableComponent_Cleanup](task-03-6-disable-cleanup.md) | pending |

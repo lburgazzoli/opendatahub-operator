@@ -6,6 +6,7 @@ import (
 
 	operatorv1 "github.com/openshift/api/operator/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -81,6 +82,81 @@ func TestDSCDriven_ComponentsAndModules_Installed(t *testing.T) {
 	// PlatformModule CR created by Platform controller.
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
 		Eventually().Should(Succeed())
+}
+
+func TestDSCDriven_StatusAggregation(t *testing.T) {
+	moduleReg := modules.NewRegistry()
+	moduleReg.Add(newTestModuleHandler("aigateway", testModuleAGVK))
+
+	componentReg := &cr.Registry{}
+	componentReg.Add(&cr.BaseComponentHandler{
+		Name: "dashboard",
+		GVK:  gvk.Dashboard,
+		IsEnabledFn: func(_ *dscv2.DataScienceCluster) bool { return true },
+		NewCRObjectFn: func(_ context.Context, _ client.Client, _ *dscv2.DataScienceCluster) (common.PlatformObject, error) {
+			return &componentApi.Dashboard{
+				ObjectMeta: metav1.ObjectMeta{Name: "default-dashboard"},
+			}, nil
+		},
+		UpdateDSCStatusFn: func(_ context.Context, _ *rrtypes.ReconciliationRequest) (metav1.ConditionStatus, error) {
+			return metav1.ConditionTrue, nil
+		},
+	})
+
+	et, tc := startAllControllers(t, suiteOpts{
+		moduleReg:    moduleReg,
+		componentReg: componentReg,
+		provisionReg: provision.NewRegistry(),
+	})
+
+	registerModuleCRD(t, et, testModuleAGVK)
+	createGatewayConfig(t, tc)
+	createDSCI(t, tc)
+
+	createDSC(t, tc, dscv2.DataScienceClusterSpec{
+		Components: dscv2.Components{
+			AIGateway: componentApi.DSCAIGateway{
+				ManagementSpec: common.ManagementSpec{
+					ManagementState: operatorv1.Managed,
+				},
+			},
+		},
+	})
+
+	wt := tc.NewWithT(t)
+	cli := tc.Client()
+	dscKey := types.NamespacedName{Name: "default-dsc"}
+
+	// Phase 1: ComponentsReady=True (dashboard returns ConditionTrue),
+	// ModulesReady=False (module CR has no Ready condition yet).
+	wt.Get(gvk.DataScienceCluster, dscKey).Eventually().Should(And(
+		jq.Match(`.status.conditions[] | select(.type == "ComponentsReady") | .status == "True"`),
+		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .status == "False"`),
+		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .reason == "NotReady"`),
+		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .message | contains("aigateway")`),
+	))
+
+	// Phase 2: Patch module operand CR with Ready=True.
+	moduleCR := &unstructured.Unstructured{}
+	moduleCR.SetGroupVersionKind(testModuleAGVK)
+	NewWithT(t).Eventually(func() error {
+		return cli.Get(context.Background(), types.NamespacedName{Name: "default-aigateway"}, moduleCR)
+	}).Should(Succeed())
+
+	setUnstructuredReady(t, cli, moduleCR, true)
+
+	// Trigger DSC re-reconcile so updateStatus picks up the new CR status.
+	latestDSC := &dscv2.DataScienceCluster{}
+	NewWithT(t).Expect(cli.Get(context.Background(), dscKey, latestDSC)).Should(Succeed())
+	if latestDSC.Annotations == nil {
+		latestDSC.Annotations = map[string]string{}
+	}
+	latestDSC.Annotations["test/trigger"] = "ready"
+	NewWithT(t).Expect(cli.Update(context.Background(), latestDSC)).Should(Succeed())
+
+	wt.Get(gvk.DataScienceCluster, dscKey).Eventually().Should(
+		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .status == "True"`),
+	)
 }
 
 func TestDSCDriven_PlatformReflectsDSC(t *testing.T) {
