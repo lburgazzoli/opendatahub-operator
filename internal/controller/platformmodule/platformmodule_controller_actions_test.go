@@ -339,3 +339,18 @@ func newNoopHandlerWithGVK(name string, k schema.GroupVersionKind) noopHandlerWi
 		},
 	}
 }
+
+// newManifestHandler creates a handler that returns Kustomize manifests from the
+// given ManifestDir. BaseHandler.GetOperatorManifests joins ManifestsBasePath + ManifestDir.
+func newManifestHandler(name string, k schema.GroupVersionKind, manifestDir string) noopHandlerWithGVK { //nolint:unparam
+	return noopHandlerWithGVK{
+		BaseHandler: modules.BaseHandler{
+			Config: modules.ModuleConfig{
+				Name:        name,
+				GVK:         k,
+				CRName:      "default-" + name,
+				ManifestDir: manifestDir,
+			},
+		},
+	}
+}

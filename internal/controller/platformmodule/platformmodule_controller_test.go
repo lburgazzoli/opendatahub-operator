@@ -24,6 +24,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
+	opmanager "github.com/opendatahub-io/opendatahub-operator/v2/pkg/manager"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/envt"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/matchers/jq"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/testf"
@@ -58,7 +59,11 @@ func startPlatformModuleControllerWith(t *testing.T, reg *modules.Registry) (*en
 	et, err := envt.New(
 		envt.WithCRDPaths(
 			filepath.Join(root, "config", "crd", "bases"),
-			filepath.Join(root, "internal", "controller", "platformmodule", "testdata"),
+		),
+		envt.WithOpManagerOptions(
+			opmanager.WithManifestsBasePath(
+				filepath.Join(root, "internal", "controller", "platformmodule", "testdata", "manifests"),
+			),
 		),
 		envt.WithManager(ctrl.Options{
 			Controller: ctrlconfig.Controller{SkipNameValidation: ptr.To(true)},
@@ -99,13 +104,20 @@ func createPlatformModuleCR(t *testing.T, wt *testf.WithT, name string) {
 	envt.CleanupDelete(t, NewWithT(t), context.Background(), wt.Client(), pm)
 }
 
+// createTestModuleCR creates an unstructured TestModule CR. Uses wt.Create()
+// which retries via Eventually — the CRD may be deployed by the reconciler
+// (not pre-loaded) and take a moment to become available.
 func createTestModuleCR(t *testing.T, wt *testf.WithT, conditions ...metav1.Condition) {
 	t.Helper()
 
 	u := &unstructured.Unstructured{}
 	u.SetGroupVersionKind(testModuleGVK)
 	u.SetName(testModuleCRName)
-	wt.Expect(wt.Client().Create(wt.Context(), u)).Should(Succeed())
+
+	// Retry: the CRD may be deployed by the reconciler and not yet available.
+	NewWithT(t).Eventually(func() error {
+		return wt.Client().Create(wt.Context(), u)
+	}).Should(Succeed())
 	envt.CleanupDelete(t, NewWithT(t), context.Background(), wt.Client(), u)
 
 	if len(conditions) > 0 {
@@ -150,7 +162,7 @@ func TestPlatformModuleReconciler_UnknownHandler(t *testing.T) {
 // no module CR exists (fresh install — not yet created by DSC/DSCI).
 // OperandAvailable=False+Info (non-blocking), Ready=True (Info conditions don't block).
 func TestPlatformModuleReconciler_OperandAvailableWhenCRAbsent(t *testing.T) {
-	h := newNoopHandlerWithGVK("testmodule", testModuleGVK)
+	h := newManifestHandler("testmodule", testModuleGVK, "testmodule")
 
 	reg := modules.NewRegistry()
 	reg.Add(&h)
@@ -176,7 +188,7 @@ func TestPlatformModuleReconciler_OperandAvailableWhenCRAbsent(t *testing.T) {
 // TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRReady: module CR Ready=True.
 // OperandAvailable=True (no severity), Ready=True.
 func TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRReady(t *testing.T) {
-	h := newNoopHandlerWithGVK("testmodule", testModuleGVK)
+	h := newManifestHandler("testmodule", testModuleGVK, "testmodule")
 
 	reg := modules.NewRegistry()
 	reg.Add(&h)
@@ -202,7 +214,7 @@ func TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRReady(t *testing.
 // TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRNotReady: module CR Ready=False.
 // OperandAvailable=False (no Info — blocks DAG), Ready=False.
 func TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRNotReady(t *testing.T) {
-	h := newNoopHandlerWithGVK("testmodule", testModuleGVK)
+	h := newManifestHandler("testmodule", testModuleGVK, "testmodule")
 
 	reg := modules.NewRegistry()
 	reg.Add(&h)
@@ -232,7 +244,7 @@ func TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRNotReady(t *testi
 }
 
 func TestPlatformModuleReconciler_ReleaseReflectsModuleCRVersion(t *testing.T) {
-	h := newNoopHandlerWithGVK("testmodule", testModuleGVK)
+	h := newManifestHandler("testmodule", testModuleGVK, "testmodule")
 
 	reg := modules.NewRegistry()
 	reg.Add(&h)
@@ -296,7 +308,7 @@ func TestPlatformModuleReconciler_DriftCleanup(t *testing.T) {
 // TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRHasNoConditions: CR exists,
 // no conditions. OperandAvailable=False (no Info — blocks DAG), Ready=False.
 func TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRHasNoConditions(t *testing.T) {
-	h := newNoopHandlerWithGVK("testmodule", testModuleGVK)
+	h := newManifestHandler("testmodule", testModuleGVK, "testmodule")
 
 	reg := modules.NewRegistry()
 	reg.Add(&h)
@@ -389,13 +401,12 @@ func TestPlatformModuleReconciler_DynamicWatchActivatesOnCRDCreation(t *testing.
 	wt.Expect(wt.Client().Create(wt.Context(), u)).Should(Succeed())
 	envt.CleanupDelete(t, NewWithT(t), context.Background(), wt.Client(), u)
 
-	now := metav1.Now().UTC().Format(time.RFC3339)
 	_ = unstructured.SetNestedSlice(u.Object, []any{
 		map[string]any{
 			"type":               status.ConditionTypeReady,
 			"status":             string(metav1.ConditionTrue),
 			"reason":             "Ready",
-			"lastTransitionTime": now,
+			"lastTransitionTime": metav1.Now().UTC().Format(time.RFC3339),
 		},
 	}, "status", "conditions")
 	wt.Expect(wt.Client().Status().Update(wt.Context(), u)).Should(Succeed())
