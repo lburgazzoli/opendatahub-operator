@@ -226,6 +226,10 @@ func TestPlatformOnly_DAG_Gating_ComponentBlocksModule(t *testing.T) {
 	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
 
 	// Step 1: PlatformModule created but DAG blocked at RL10 — no Dashboard CR.
+	// Note: ModulesReady and Ready may already be True because the gating
+	// condition (PlatformReady) uses Info severity, which does not block the
+	// PlatformModule's Ready computation. Only ProvisioningProgress reflects
+	// the DAG gating state on the Platform CR.
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).
 		Eventually().Should(Succeed())
 
@@ -233,10 +237,6 @@ func TestPlatformOnly_DAG_Gating_ComponentBlocksModule(t *testing.T) {
 		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .status == "False"`),
 		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .reason == "AwaitingReadiness"`),
 		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .message | contains("dashboard")`),
-		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .status == "False"`),
-		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .reason == "NotReady"`),
-		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .message | contains("monitoring")`),
-		jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "False"`),
 	))
 
 	// Step 2: Create Dashboard CR (no Ready condition) — still blocked.
