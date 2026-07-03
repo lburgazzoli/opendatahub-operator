@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -33,6 +34,7 @@ type mockHandler struct {
 
 func (m *mockHandler) Init(_ common.Platform, _ operatorconfig.OperatorSettings) error { return nil }
 func (m *mockHandler) GetName() string                                                 { return m.name }
+func (m *mockHandler) GroupVersionKind() schema.GroupVersionKind                       { return schema.GroupVersionKind{} }
 func (m *mockHandler) NewCRObject(_ context.Context, _ client.Client, _ *dscv2.DataScienceCluster) (common.PlatformObject, error) {
 	return nil, nil
 }

@@ -166,7 +166,7 @@ func TestBaseHandlerDefaultsHelmOnly(t *testing.T) {
 	}
 
 	g.Expect(h.GetName()).Should(Equal("helm-mod"))
-	g.Expect(h.GetGVK()).Should(Equal(schema.GroupVersionKind{Group: "test.io", Version: "v1", Kind: "Mock"}))
+	g.Expect(h.GetGroupVersionKind()).Should(Equal(schema.GroupVersionKind{Group: "test.io", Version: "v1", Kind: "Mock"}))
 
 	platform := &modules.PlatformContext{ApplicationsNamespace: "test-ns"}
 	manifests := h.GetOperatorManifests(platform)

@@ -128,7 +128,7 @@ func (b *BaseHandler) GetName() string {
 	return b.Config.Name
 }
 
-func (b *BaseHandler) GetGVK() schema.GroupVersionKind {
+func (b *BaseHandler) GetGroupVersionKind() schema.GroupVersionKind {
 	return b.Config.GVK
 }
 

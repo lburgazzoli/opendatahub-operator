@@ -129,7 +129,7 @@ func (r *Reconciler) driftCleanup(ctx context.Context, rr *odhtype.Reconciliatio
 	savedRefs := sets.New(currentRefs...)
 	stale := sets.New(pm.Status.Resources...).Difference(savedRefs)
 
-	policy := deletePropagationPolicy()
+	policy := r.DeletePropagation
 	for ref := range stale {
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(ref.GroupVersionKind())

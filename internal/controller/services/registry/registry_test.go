@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
@@ -21,6 +22,9 @@ type fakeServiceHandler struct {
 
 func (f *fakeServiceHandler) Init(_ common.Platform) error { return nil }
 func (f *fakeServiceHandler) GetName() string              { return f.name }
+func (f *fakeServiceHandler) GroupVersionKind() schema.GroupVersionKind {
+	return schema.GroupVersionKind{}
+}
 func (f *fakeServiceHandler) GetManagementState(_ common.Platform, _ *dsciv2.DSCInitialization) operatorv1.ManagementState {
 	return operatorv1.Managed
 }

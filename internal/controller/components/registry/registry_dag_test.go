@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -23,6 +24,7 @@ type fakeHandler struct {
 }
 
 func (f *fakeHandler) GetName() string                                                 { return f.name }
+func (f *fakeHandler) GroupVersionKind() schema.GroupVersionKind                       { return schema.GroupVersionKind{} }
 func (f *fakeHandler) Init(_ common.Platform, _ operatorconfig.OperatorSettings) error { return nil }
 func (f *fakeHandler) NewCRObject(_ context.Context, _ client.Client, _ *dscv2.DataScienceCluster) (common.PlatformObject, error) {
 	return nil, nil

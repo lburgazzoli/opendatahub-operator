@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -28,6 +29,9 @@ func (f *fakeComponentHandler) Init(_ common.Platform, _ operatorconfig.Operator
 	return nil
 }
 func (f *fakeComponentHandler) GetName() string { return f.name }
+func (f *fakeComponentHandler) GroupVersionKind() schema.GroupVersionKind {
+	return schema.GroupVersionKind{}
+}
 func (f *fakeComponentHandler) NewCRObject(_ context.Context, _ client.Client, _ *dscv2.DataScienceCluster) (common.PlatformObject, error) {
 	return nil, nil
 }

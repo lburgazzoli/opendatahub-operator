@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -58,10 +59,11 @@ type Reconciler struct {
 func New(ctx context.Context, mgr ctrl.Manager, fns ...Option) error {
 	r := &Reconciler{
 		Options: Options{
-			Registry:        modules.DefaultRegistry(),
-			ServiceRegistry: sr.DefaultRegistry(),
-			ProvisionReg:    provision.DefaultRegistry(),
-			Tracker:         provision.GetRunlevelTracker(),
+			Registry:          modules.DefaultRegistry(),
+			ServiceRegistry:   sr.DefaultRegistry(),
+			ProvisionReg:      provision.DefaultRegistry(),
+			Tracker:           provision.GetRunlevelTracker(),
+			DeletePropagation: metav1.DeletePropagationForeground,
 		},
 	}
 

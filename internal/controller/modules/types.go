@@ -43,10 +43,10 @@ type ModuleHandler interface {
 	// check platform.DSCI.
 	IsEnabled(platform *PlatformContext) bool
 
-	// GetGVK returns the GroupVersionKind of the module CR that this handler
+	// GetGroupVersionKind returns the GroupVersionKind of the module CR that this handler
 	// manages. Used for dynamic watch registration so module CR status changes
 	// requeue the DSC controller.
-	GetGVK() schema.GroupVersionKind
+	GetGroupVersionKind() schema.GroupVersionKind
 
 	// GetOperatorManifests returns the manifest descriptors for deploying this
 	// module's operator resources (Deployment, RBAC, CRD). Handlers return

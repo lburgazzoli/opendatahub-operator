@@ -84,7 +84,10 @@ func startPlatformModuleControllerWith(t *testing.T, opts ...Option) (*envt.EnvT
 			Controller: ctrlconfig.Controller{SkipNameValidation: ptr.To(true)},
 		}),
 		envt.WithRegisterControllers(func(mgr ctrl.Manager) error {
-			return New(ctx, mgr, opts...)
+			// Background deletion avoids foregroundDeletion finalizer in envtest.
+			return New(ctx, mgr, append([]Option{
+				WithDeletePropagationPolicy(metav1.DeletePropagationBackground),
+			}, opts...)...)
 		}),
 	)
 

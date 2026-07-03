@@ -5,6 +5,7 @@ import (
 
 	"github.com/hashicorp/go-multierror"
 	operatorv1 "github.com/openshift/api/operator/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
@@ -16,6 +17,10 @@ import (
 type ServiceHandler interface {
 	Init(platform common.Platform) error
 	GetName() string
+	// GroupVersionKind returns the GroupVersionKind of the service CR managed
+	// by this handler. Returns an empty GVK for services that have no dedicated
+	// CR. Used by the Platform controller to register watches dynamically.
+	GroupVersionKind() schema.GroupVersionKind
 	GetManagementState(platform common.Platform, dsci *dsciv2.DSCInitialization) operatorv1.ManagementState
 	NewReconciler(ctx context.Context, mgr ctrl.Manager) error
 }

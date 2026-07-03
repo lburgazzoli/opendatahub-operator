@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
@@ -23,6 +24,8 @@ type serviceHandler struct {
 func (h *serviceHandler) Init(_ common.Platform) error {
 	return nil
 }
+
+func (h *serviceHandler) GroupVersionKind() schema.GroupVersionKind { return schema.GroupVersionKind{} }
 
 func (h *serviceHandler) GetName() string {
 	return ServiceName

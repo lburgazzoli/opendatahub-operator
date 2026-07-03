@@ -2455,6 +2455,7 @@ _Appears in:_
 | `phase` _string_ |  |  |  |
 | `observedGeneration` _integer_ | The generation observed by the resource controller. |  |  |
 | `conditions` _[Condition](#condition) array_ |  |  |  |
+| `release` _[Release](#release)_ | Release records the platform version that was last successfully deployed<br />by this reconciler. It is set only after the operator deployment completes<br />so the DAG readiness checker can verify the version handshake — mirroring<br />the mechanism used by module operators in their own CR status. |  |  |
 | `resources` _[ResourceRef](#resourceref) array_ | Resources lists every resource deployed by the PlatformModule reconciler.<br />Used for drift cleanup: resources present here but absent from the current<br />render are deleted on the next reconcile. |  |  |
 
 
@@ -2519,6 +2520,7 @@ _Appears in:_
 | `phase` _string_ |  |  |  |
 | `observedGeneration` _integer_ | The generation observed by the resource controller. |  |  |
 | `conditions` _[Condition](#condition) array_ |  |  |  |
+| `modules` _string array_ | Modules lists the names of module operators currently enabled on this<br />Platform instance. Populated by the Platform controller from spec.modules. |  |  |
 
 
 #### ResourceRef

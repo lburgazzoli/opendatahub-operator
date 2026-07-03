@@ -30,6 +30,7 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -49,6 +50,8 @@ import (
 type componentHandler struct{}
 
 func NewHandler() *componentHandler { return &componentHandler{} }
+
+func (s *componentHandler) GroupVersionKind() schema.GroupVersionKind { return gvk.ModelsAsService }
 
 // GetName returns the component name for ModelsAsService.
 func (s *componentHandler) GetName() string {

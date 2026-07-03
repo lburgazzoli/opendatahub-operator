@@ -29,6 +29,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
@@ -56,6 +57,8 @@ type serviceHandler struct {
 func (h *serviceHandler) Init(_ common.Platform) error {
 	return nil
 }
+
+func (h *serviceHandler) GroupVersionKind() schema.GroupVersionKind { return gvk.Monitoring }
 
 func (h *serviceHandler) GetName() string {
 	return ServiceName

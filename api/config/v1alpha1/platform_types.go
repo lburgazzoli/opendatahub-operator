@@ -77,6 +77,11 @@ type PlatformModules struct {
 // PlatformStatus defines the observed state of Platform.
 type PlatformStatus struct {
 	common.Status `json:",inline"`
+	// Modules lists the names of module operators currently enabled on this
+	// Platform instance. Populated by the Platform controller from spec.modules.
+	// +optional
+	// +listType=atomic
+	Modules []string `json:"modules,omitempty"`
 }
 
 //+kubebuilder:object:root=true

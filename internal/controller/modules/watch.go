@@ -29,7 +29,7 @@ func registerModuleCROwnedTypes(rec *reconciler.Reconciler) {
 	}
 
 	_ = reg.ForAll(func(h ModuleHandler, _ bool) error {
-		rec.AddOwnedType(h.GetGVK())
+		rec.AddOwnedType(h.GetGroupVersionKind())
 		return nil
 	})
 }

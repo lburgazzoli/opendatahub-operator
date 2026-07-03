@@ -2,9 +2,11 @@ package gateway
 
 import (
 	operatorv1 "github.com/openshift/api/operator/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	dsciv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v2"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 )
 
 func NewHandler() *ServiceHandler { return &ServiceHandler{} }
@@ -20,6 +22,8 @@ func (h *ServiceHandler) Init(platform common.Platform) error {
 }
 
 // GetName returns the service name for this handler.
+func (h *ServiceHandler) GroupVersionKind() schema.GroupVersionKind { return gvk.GatewayConfig }
+
 func (h *ServiceHandler) GetName() string {
 	return ServiceName
 }

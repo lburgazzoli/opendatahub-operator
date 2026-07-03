@@ -1,9 +1,6 @@
 package platformmodule
 
 import (
-	"os"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
@@ -51,17 +48,4 @@ func ensureConfigMap(rs *[]unstructured.Unstructured, name string, namespace str
 	*rs = append(*rs, *u)
 
 	return len(*rs) - 1, nil
-}
-
-// deletePropagationPolicy returns the propagation policy to use when deleting
-// stale resources. Foreground propagation is used in production so that
-// dependent objects are cleaned up before the owner is removed.
-// Envtest does not support foreground deletion, so Background is used when
-// KUBEBUILDER_ASSETS is set.
-func deletePropagationPolicy() metav1.DeletionPropagation {
-	if _, ok := os.LookupEnv("KUBEBUILDER_ASSETS"); ok {
-		return metav1.DeletePropagationBackground
-	}
-
-	return metav1.DeletePropagationForeground
 }
