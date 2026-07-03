@@ -307,6 +307,62 @@ func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
 	))
 }
 
+func TestDSCDriven_DisableComponent_Cleanup(t *testing.T) {
+	componentReg := &cr.Registry{}
+	componentReg.Add(&cr.BaseComponentHandler{
+		Name: "dashboard",
+		GVK:  gvk.Dashboard,
+		IsEnabledFn: func(dsc *dscv2.DataScienceCluster) bool {
+			return dsc.Spec.Components.Dashboard.ManagementState == operatorv1.Managed
+		},
+		NewCRObjectFn: func(_ context.Context, _ client.Client, _ *dscv2.DataScienceCluster) (common.PlatformObject, error) {
+			return &componentApi.Dashboard{
+				ObjectMeta: metav1.ObjectMeta{Name: "default-dashboard"},
+			}, nil
+		},
+		UpdateDSCStatusFn: func(_ context.Context, _ *rrtypes.ReconciliationRequest) (metav1.ConditionStatus, error) {
+			return metav1.ConditionTrue, nil
+		},
+	})
+
+	_, tc := startAllControllers(t, suiteOpts{
+		moduleReg:    modules.NewRegistry(),
+		componentReg: componentReg,
+		provisionReg: provision.NewRegistry(),
+	})
+
+	createGatewayConfig(t, tc)
+	createDSCI(t, tc)
+
+	createDSC(t, tc, dscv2.DataScienceClusterSpec{
+		Components: dscv2.Components{
+			Dashboard: componentApi.DSCDashboard{
+				ManagementSpec: common.ManagementSpec{ManagementState: operatorv1.Managed},
+			},
+		},
+	})
+
+	wt := tc.NewWithT(t)
+	cli := tc.Client()
+
+	// Dashboard CR created by DSC.
+	wt.Get(gvk.Dashboard, types.NamespacedName{Name: "default-dashboard"}).
+		Eventually().Should(Succeed())
+
+	// Disable Dashboard by updating DSC.
+	dsc := &dscv2.DataScienceCluster{}
+	NewWithT(t).Expect(cli.Get(context.Background(),
+		types.NamespacedName{Name: "default-dsc"}, dsc)).Should(Succeed())
+	dsc.Spec.Components.Dashboard.ManagementState = operatorv1.Removed
+	NewWithT(t).Expect(cli.Update(context.Background(), dsc)).Should(Succeed())
+
+	// Dashboard CR should be deleted.
+	NewWithT(t).Eventually(func() error {
+		return cli.Get(context.Background(),
+			types.NamespacedName{Name: "default-dashboard"}, &componentApi.Dashboard{})
+	}).Should(MatchError(ContainSubstring("not found")))
+}
+
 func TestDSCDriven_PlatformReflectsDSC(t *testing.T) {
 	_, tc := startAllControllers(t, suiteOpts{
 		moduleReg:    modules.NewRegistry(),

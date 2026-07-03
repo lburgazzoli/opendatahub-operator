@@ -166,7 +166,7 @@ component GVKs).
 | 03-3 | [TestDSCDriven_StatusAggregation](task-03-3-status-aggregation.md) | done |
 | 03-4 | [TestDSCDriven_DAG_Advancement](task-03-4-dag-advancement.md) | done |
 | 03-5 | [TestDSCDriven_DAG_Gating_ModuleBlocksModule](task-03-5-dag-gating.md) | done |
-| 03-6 | [TestDSCDriven_DisableComponent_Cleanup](task-03-6-disable-cleanup.md) | pending |
+| 03-6 | [TestDSCDriven_DisableComponent_Cleanup](task-03-6-disable-cleanup.md) | done |
 
 ### Dependencies
 
