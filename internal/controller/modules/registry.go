@@ -246,7 +246,7 @@ func (r *Registry) ReverseBatches() ([][]registryEntry, error) {
 }
 
 // Lookup returns the handler for a named module, or nil if not found.
-func (r *Registry) Lookup(name string) ModuleHandler { //nolint:ireturn
+func (r *Registry) Lookup(name string) ModuleHandler { //nolint:ireturn // ireturn: returns interface required by pattern
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 

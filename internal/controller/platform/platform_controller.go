@@ -13,7 +13,6 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	sr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/deploy"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/dag"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/handlers"
@@ -67,15 +66,6 @@ func New(ctx context.Context, mgr ctrl.Manager, opts ...Option) error {
 		// WithWatchStatus so that PlatformModule status-only updates (which don't
 		// bump generation) still requeue Platform for DAG re-evaluation.
 		Owns(&configv1alpha1.PlatformModule{}, reconciler.WithPredicates(dependent.New(dependent.WithWatchStatus(true))))
-
-	// Watch DSC dynamically — the CRD may not exist on xKS. When DSC changes
-	// the component readiness checker in walkModuleDAG needs to re-evaluate.
-	b = b.WatchesGVK(
-		gvk.DataScienceCluster,
-		reconciler.Dynamic(reconciler.CrdExists(gvk.DataScienceCluster)),
-		reconciler.WithEventHandler(handlers.ToNamed(configv1alpha1.PlatformInstanceName)),
-		reconciler.WithPredicates(dependent.New(dependent.WithWatchStatus(true))),
-	)
 
 	// Watch all in-tree component CRs via the component registry. Component
 	// status changes may unblock a DAG runlevel that depends on components

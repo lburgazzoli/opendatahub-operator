@@ -1,4 +1,4 @@
-//nolint:testpackage
+//nolint:testpackage,ireturn
 package reconciler
 
 import (
@@ -56,20 +56,16 @@ func (f *MockManager) GetScheme() *runtime.Scheme { return f.scheme }
 func (f *MockManager) GetRESTMapper() meta.RESTMapper { return f.mapper }
 func (f *MockManager) GetConfig() *rest.Config        { return &rest.Config{} }
 
-//nolint:ireturn // Returns stdlib interface required by manager.Manager
-func (f *MockManager) GetFieldIndexer() client.FieldIndexer { return nil }
+func (f *MockManager) GetFieldIndexer() client.FieldIndexer { return nil } //nolint:ireturn
 
-//nolint:ireturn // Returns stdlib interface required by manager.Manager
 func (f *MockManager) GetEventRecorderFor(name string) record.EventRecorder {
 	return record.NewFakeRecorder(100)
 }
 
-//nolint:ireturn // Returns stdlib interface required by manager.Manager
 func (f *MockManager) GetEventRecorder(name string) events.EventRecorder {
 	return events.NewFakeRecorder(100)
 }
 
-//nolint:ireturn // Returns stdlib interface required by manager.Manager
 func (f *MockManager) GetCache() cache.Cache                                    { return nil }
 func (f *MockManager) GetLogger() logr.Logger                                   { return ctrl.Log }
 func (f *MockManager) Add(runnable manager.Runnable) error                      { return nil }
@@ -81,20 +77,16 @@ func (f *MockManager) AddMetricsServerExtraHandler(name string, handler http.Han
 }
 func (f *MockManager) AddReadyzCheck(name string, check healthz.Checker) error { return nil }
 
-//nolint:ireturn
 func (f *MockManager) GetAPIReader() client.Reader { return nil }
 func (f *MockManager) GetControllerOptions() config.Controller {
 	return config.Controller{SkipNameValidation: ptr.To(true)}
 }
 func (f *MockManager) GetHTTPClient() *http.Client { return &http.Client{} }
 
-//nolint:ireturn
 func (f *MockManager) GetWebhookServer() webhook.Server { return nil }
 
-//nolint:ireturn
 func (f *MockManager) GetConverterRegistry() conversion.Registry { return nil }
 
-//nolint:ireturn
 func setupTest(mockDashboard *componentApi.Dashboard) (context.Context, *MockManager, client.WithWatch) {
 	ctx := context.Background()
 

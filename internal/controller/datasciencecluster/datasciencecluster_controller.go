@@ -90,11 +90,13 @@ func NewDataScienceClusterReconciler(ctx context.Context, mgr ctrl.Manager) erro
 		WithAction(initialize).
 		WithAction(checkPreConditions).
 		WithAction(updateStatus).
-		WithAction(checkUpgradeGates).
 		WithAction(provisionComponents).
+		WithAction(provisionModuleCRs).
+		WithAction(syncPlatformModules).
 		WithAction(deploy.NewAction(
-			deploy.WithCache()),
-		).
+			deploy.WithCache(),
+			deploy.WithContinueOnError(),
+		)).
 		WithAction(gc.NewAction(
 			gc.WithTypePredicate(
 				func(rr *types.ReconciliationRequest, objGVK schema.GroupVersionKind) (bool, error) {

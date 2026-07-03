@@ -41,6 +41,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
+	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
 	dsciv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v2"
 	featuresv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/features/v1"
 	infrav1 "github.com/opendatahub-io/opendatahub-operator/v2/api/infrastructure/v1"
@@ -220,6 +222,13 @@ func (r *DSCInitializationReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	default:
 		// Unknown or empty state: do nothing
+	}
+
+	// Mirror the Monitoring management state to Platform.Spec.Modules.Monitoring
+	// so the Platform controller creates the monitoring PlatformModule CR and
+	// deploys the module operator via the PlatformModule reconciler.
+	if err = r.syncPlatformMonitoring(ctx, instance.Spec.Monitoring.ManagementState); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// legacy ServiceMesh FeatureTracker cleanup, retained from the remove ServiceMesh controller
@@ -629,4 +638,33 @@ func (r *DSCInitializationReconciler) watchHWProfileCRDResource(ctx context.Cont
 	}
 
 	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: instanceList.Items[0].Name}}}
+}
+
+// syncPlatformMonitoring SSA-patches Platform.Spec.Modules.Monitoring with the
+// monitoring management state from DSCI. The Platform controller reads this field
+// to create the monitoring PlatformModule CR, which deploys the module operator.
+// DSCI uses its own field manager so DSC can independently own other module fields.
+func (r *DSCInitializationReconciler) syncPlatformMonitoring(ctx context.Context, state operatorv1.ManagementState) error {
+	// Treat unknown/empty state as Removed — no module operator should be deployed.
+	monitoringState := operatorv1.Removed
+	if state == operatorv1.Managed {
+		monitoringState = operatorv1.Managed
+	}
+
+	platform := &configv1alpha1.Platform{}
+	platform.Name = configv1alpha1.PlatformInstanceName
+	platform.TypeMeta = metav1.TypeMeta{
+		APIVersion: configv1alpha1.GroupVersion.String(),
+		Kind:       configv1alpha1.PlatformKind,
+	}
+	platform.Spec.Modules.Monitoring = common.ManagementSpec{ManagementState: monitoringState}
+
+	if err := resources.Apply(ctx, r.Client, platform,
+		client.FieldOwner("dscinitialization"),
+		client.ForceOwnership,
+	); err != nil {
+		return fmt.Errorf("failed to patch Platform modules from DSCI: %w", err)
+	}
+
+	return nil
 }

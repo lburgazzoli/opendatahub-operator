@@ -1,4 +1,4 @@
-//nolint:testpackage
+//nolint:testpackage,ireturn
 package modelsasservice
 
 import (
@@ -12,7 +12,7 @@ import (
 
 var rf = provider.NewDefaultDepProvider().GetResourceFactory()
 
-func buildTestResMap(t *testing.T, yamls ...string) resmap.ResMap { //nolint:ireturn
+func buildTestResMap(t *testing.T, yamls ...string) resmap.ResMap {
 	t.Helper()
 	g := NewWithT(t)
 	rm := resmap.New()
