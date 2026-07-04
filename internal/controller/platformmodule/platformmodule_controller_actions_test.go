@@ -328,6 +328,8 @@ func (noopHandlerWithGVK) BuildModuleCR(_ context.Context, _ client.Client, _ *m
 
 func (noopHandlerWithGVK) IsEnabled(_ *modules.PlatformContext) bool { return true }
 
+func (noopHandlerWithGVK) ApplyManagementState(_ *modules.PlatformContext, _ *configv1alpha1.PlatformModules) {}
+
 func newNoopHandlerWithGVK(name string, k schema.GroupVersionKind) noopHandlerWithGVK {
 	return noopHandlerWithGVK{
 		BaseHandler: modules.BaseHandler{

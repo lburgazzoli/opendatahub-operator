@@ -9,6 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
+	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 
 	. "github.com/onsi/gomega"
@@ -29,6 +30,8 @@ func (m *statusMockHandler) IsEnabled(_ *modules.PlatformContext) bool {
 func (m *statusMockHandler) BuildModuleCR(_ context.Context, _ client.Client, _ *modules.PlatformContext) (*unstructured.Unstructured, error) {
 	return nil, nil
 }
+
+func (m *statusMockHandler) ApplyManagementState(_ *modules.PlatformContext, _ *configv1alpha1.PlatformModules) {}
 
 func (m *statusMockHandler) GetModuleStatus(_ context.Context, _ client.Client) (*modules.ModuleStatus, error) {
 	if m.err != nil {

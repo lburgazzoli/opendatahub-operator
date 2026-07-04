@@ -74,6 +74,8 @@ func (h *testModuleHandler) BuildModuleCR(
 	return u, nil
 }
 
+func (h *testModuleHandler) ApplyManagementState(_ *modules.PlatformContext, _ *configv1alpha1.PlatformModules) {}
+
 func (h *testModuleHandler) IsEnabled(_ *modules.PlatformContext) bool {
 	return true
 }

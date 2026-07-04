@@ -157,6 +157,7 @@ func (b *BaseHandler) GetRelatedImages() []string {
 	return b.Config.RelatedImages
 }
 
+
 func (b *BaseHandler) GetOperatorManifests(platform *PlatformContext) OperatorManifests {
 	var result OperatorManifests
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
+	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
@@ -91,6 +92,18 @@ func (h *handler) IsEnabled(platform *modules.PlatformContext) bool {
 		return platform.DSC.Spec.Components.AIGateway.ManagementState == operatorv1.Managed
 	}
 	return false
+}
+
+func (h *handler) ApplyManagementState(ctx *modules.PlatformContext, spec *configv1alpha1.PlatformModules) {
+	state := operatorv1.Removed
+
+	if ctx != nil && ctx.DSC != nil {
+		state = ctx.DSC.Spec.Components.AIGateway.ManagementState
+	}
+
+	spec.AIGateway = common.ManagementSpec{
+		ManagementState: state,
+	}
 }
 
 // BuildModuleCR projects the DSC AIGateway configuration onto the

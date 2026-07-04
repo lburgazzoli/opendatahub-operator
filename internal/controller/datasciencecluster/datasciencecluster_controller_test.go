@@ -188,6 +188,7 @@ func TestDSCReconciler_ComponentStatusReportedToDSC(t *testing.T) {
 // real BaseHandler implementations that read from Kubernetes.
 type testModuleHandler struct {
 	modules.BaseHandler
+	applyFn func(*modules.PlatformContext, *configv1alpha1.PlatformModules)
 }
 
 func (h *testModuleHandler) BuildModuleCR(_ context.Context, _ client.Client, _ *modules.PlatformContext) (*unstructured.Unstructured, error) {
@@ -198,6 +199,12 @@ func (h *testModuleHandler) BuildModuleCR(_ context.Context, _ client.Client, _ 
 }
 
 func (h *testModuleHandler) IsEnabled(_ *modules.PlatformContext) bool { return true }
+
+func (h *testModuleHandler) ApplyManagementState(ctx *modules.PlatformContext, spec *configv1alpha1.PlatformModules) {
+	if h.applyFn != nil {
+		h.applyFn(ctx, spec)
+	}
+}
 
 func newTestModuleHandler() *testModuleHandler {
 	return &testModuleHandler{
@@ -290,8 +297,28 @@ func TestDSCReconciler_ModuleStatusReportedToDSC(t *testing.T) {
 
 // TestDSCReconciler_PlatformCRSyncedWithEnabledModules verifies that
 // syncPlatformModules SSA-patches Platform.Spec.Modules to match the DSC spec.
+// The module handler's ApplyManagementState drives the mapping, so the test
+// registers a handler whose applyFn reads AIGateway from DSC.
 func TestDSCReconciler_PlatformCRSyncedWithEnabledModules(t *testing.T) {
-	tc := startDSCController(t, &cr.Registry{}, modules.NewRegistry())
+	modReg := modules.NewRegistry()
+	modReg.Add(&testModuleHandler{
+		BaseHandler: modules.BaseHandler{
+			Config: modules.ModuleConfig{
+				Name:   "aigateway",
+				GVK:    testModuleGVK,
+				CRName: testModuleCRName,
+			},
+		},
+		applyFn: func(ctx *modules.PlatformContext, spec *configv1alpha1.PlatformModules) {
+			state := operatorv1.Removed
+			if ctx != nil && ctx.DSC != nil {
+				state = ctx.DSC.Spec.Components.AIGateway.ManagementState
+			}
+			spec.AIGateway = common.ManagementSpec{ManagementState: state}
+		},
+	})
+
+	tc := startDSCController(t, &cr.Registry{}, modReg)
 	wt := tc.NewWithT(t)
 
 	createDSCI(t, tc)

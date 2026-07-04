@@ -10,6 +10,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
+	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
 	serviceApi "github.com/opendatahub-io/opendatahub-operator/v2/api/services/v1alpha1"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
@@ -59,6 +61,18 @@ func (h *handler) IsEnabled(platform *modules.PlatformContext) bool {
 		return platform.Platform.Spec.Modules.Monitoring.ManagementState == operatorv1.Managed
 	}
 	return false
+}
+
+func (h *handler) ApplyManagementState(ctx *modules.PlatformContext, spec *configv1alpha1.PlatformModules) {
+	state := operatorv1.Removed
+
+	if ctx != nil && ctx.DSCI != nil {
+		state = ctx.DSCI.Spec.Monitoring.ManagementState
+	}
+
+	spec.Monitoring = common.ManagementSpec{
+		ManagementState: state,
+	}
 }
 
 // BuildModuleCR projects platform monitoring configuration onto the module CR.

@@ -89,6 +89,13 @@ type ModuleHandler interface {
 	// deletes each resource from the cluster. Used by the two-phase cleanup
 	// action after the module CR has been confirmed deleted.
 	DeleteOperatorResources(ctx context.Context, cli client.Client, platform *PlatformContext) error
+
+	// ApplyManagementState writes this module's management state into the
+	// Platform modules spec. Component modules read from ctx.DSC; service
+	// modules (e.g. Monitoring) read from ctx.DSCI. No-op in xKS mode (both
+	// nil) or for modules not surfaced in the user-facing APIs.
+	// BaseHandler provides a no-op default.
+	ApplyManagementState(ctx *PlatformContext, spec *configv1alpha1.PlatformModules)
 }
 
 // ContainerNamer allows a module handler to override the default container

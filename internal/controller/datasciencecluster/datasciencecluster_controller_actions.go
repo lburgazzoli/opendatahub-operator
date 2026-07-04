@@ -265,6 +265,8 @@ func (r *Reconciler) provisionModuleCRs(ctx context.Context, rr *odhtype.Reconci
 
 // syncPlatformModules adds a Platform CR patch to rr.Resources so the deploy
 // action SSA-applies Platform.Spec.Modules with the modules DSC controls.
+// Each module handler writes its own field via ApplyManagementState, so this
+// action does not need updating when new modules are onboarded.
 func (r *Reconciler) syncPlatformModules(_ context.Context, rr *odhtype.ReconciliationRequest) error {
 	instance, ok := rr.Instance.(*dscv2.DataScienceCluster)
 	if !ok {
@@ -277,9 +279,12 @@ func (r *Reconciler) syncPlatformModules(_ context.Context, rr *odhtype.Reconcil
 		APIVersion: configv1alpha1.GroupVersion.String(),
 		Kind:       configv1alpha1.PlatformKind,
 	}
-	platform.Spec.Modules.AIGateway = common.ManagementSpec{
-		ManagementState: instance.Spec.Components.AIGateway.ManagementState,
-	}
+
+	platformCtx := &modules.PlatformContext{DSC: instance}
+	_ = r.ModuleRegistry.ForAll(func(h modules.ModuleHandler, _ bool) error {
+		h.ApplyManagementState(platformCtx, &platform.Spec.Modules)
+		return nil
+	})
 
 	return rr.AddResources(platform)
 }

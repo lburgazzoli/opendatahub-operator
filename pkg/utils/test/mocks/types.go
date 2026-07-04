@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
+	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
 	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	rrtypes "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
@@ -154,6 +155,10 @@ func (m *MockModuleHandler) DeleteOperatorResources(ctx context.Context, cli cli
 	return m.Called(ctx, cli, platform).Error(0)
 }
 
+func (m *MockModuleHandler) ApplyManagementState(ctx *modules.PlatformContext, spec *configv1alpha1.PlatformModules) {
+	m.Called(ctx, spec)
+}
+
 // NewMockModuleHandler creates a MockModuleHandler and passes it to f
 // for configuration. Only the expectations set in f are registered.
 func NewMockModuleHandler(f func(*MockModuleHandler)) *MockModuleHandler {
@@ -176,6 +181,7 @@ func NewDefaultMockModuleHandler(name string, gvk schema.GroupVersionKind) *Mock
 	m.On("GetModuleCRState", mock.Anything, mock.Anything).Return(modules.CRStateAbsent, nil).Maybe()
 	m.On("DeleteModuleCR", mock.Anything, mock.Anything).Return(nil).Maybe()
 	m.On("DeleteOperatorResources", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	m.On("ApplyManagementState", mock.Anything, mock.Anything).Maybe()
 	return m
 }
 

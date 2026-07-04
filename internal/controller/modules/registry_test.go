@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/dag"
 
@@ -42,6 +43,8 @@ func (m *mockHandler) IsEnabled(_ *modules.PlatformContext) bool {
 func (m *mockHandler) BuildModuleCR(_ context.Context, _ client.Client, _ *modules.PlatformContext) (*unstructured.Unstructured, error) {
 	return nil, nil
 }
+
+func (m *mockHandler) ApplyManagementState(_ *modules.PlatformContext, _ *configv1alpha1.PlatformModules) {}
 
 // Verify mockHandler satisfies ModuleHandler at compile time.
 var _ modules.ModuleHandler = (*mockHandler)(nil)
