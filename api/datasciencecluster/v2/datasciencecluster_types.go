@@ -78,7 +78,7 @@ type Components struct {
 	SparkOperator componentApi.DSCSparkOperator `json:"sparkoperator,omitempty"`
 
 	// AIGateway component configuration.
-	AIGateway componentApi.DSCAIGateway `json:"aigateway,omitempty"`
+	AIGateway componentApi.DSCAIGateway `json:"aigateway,omitempty" module:"aigateway"`
 }
 
 // ComponentsStatus defines the custom status of DataScienceCluster components.

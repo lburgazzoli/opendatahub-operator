@@ -102,11 +102,9 @@ func (r *Reconciler) cleanupDisabledComponents(ctx context.Context, rr *odhtype.
 	return nil
 }
 
-// cleanupDisabledModules deletes module operand CRs for disabled modules.
-// It iterates all registered modules but only deletes CRs that are actually
-// owned by this DSC instance (metav1.IsControlledBy). DSCI-owned module CRs
-// (e.g. Monitoring) carry DSCI as their controller owner, not DSC, so they
-// are naturally skipped without any DSCI lookup.
+// cleanupDisabledModules deletes module operand CRs for modules the DSC
+// manages (declared via module:"name" tags on DSC.Spec.Components) that are
+// currently disabled. Only CRs owned by this DSC instance are deleted.
 func (r *Reconciler) cleanupDisabledModules(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
 	instance, ok := rr.Instance.(*dscv2.DataScienceCluster)
 	if !ok {
@@ -117,11 +115,15 @@ func (r *Reconciler) cleanupDisabledModules(ctx context.Context, rr *odhtype.Rec
 		return nil
 	}
 
+	managed := modules.ManagedModuleNames(instance.Spec.Components)
 	platformCtx := &modules.PlatformContext{DSC: instance}
 
 	var errs []error
 
 	_ = r.ModuleRegistry.ForAll(func(h modules.ModuleHandler, _ bool) error {
+		if !managed.Has(h.GetName()) {
+			return nil
+		}
 		if h.IsEnabled(platformCtx) {
 			return nil
 		}
@@ -204,7 +206,8 @@ func (r *Reconciler) provisionComponents(ctx context.Context, rr *odhtype.Reconc
 	return nil
 }
 
-// provisionModuleCRs creates module operand CRs (e.g. AIGateway) for enabled modules.
+// provisionModuleCRs creates module operand CRs for modules declared in
+// DSC.Spec.Components via module:"name" tags that are currently enabled.
 // Does NOT deploy module operator manifests — that is the PlatformModule controller's job.
 func (r *Reconciler) provisionModuleCRs(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
 	instance, ok := rr.Instance.(*dscv2.DataScienceCluster)
@@ -216,9 +219,7 @@ func (r *Reconciler) provisionModuleCRs(ctx context.Context, rr *odhtype.Reconci
 		return nil
 	}
 
-	// DSCI is intentionally excluded from the PlatformContext: DSCI-owned modules
-	// (e.g. Monitoring) must not be provisioned by the DSC controller. Each
-	// handler's IsEnabled reads only ctx.DSC, so DSCI-owned handlers return false.
+	managed := modules.ManagedModuleNames(instance.Spec.Components)
 	platformCtx := &modules.PlatformContext{DSC: instance}
 
 	var err error
@@ -231,6 +232,9 @@ func (r *Reconciler) provisionModuleCRs(ctx context.Context, rr *odhtype.Reconci
 	var failedModules []string
 
 	_ = r.ModuleRegistry.ForAll(func(handler modules.ModuleHandler, _ bool) error {
+		if !managed.Has(handler.GetName()) {
+			return nil
+		}
 		if !handler.IsEnabled(platformCtx) {
 			return nil
 		}
@@ -260,10 +264,10 @@ func (r *Reconciler) provisionModuleCRs(ctx context.Context, rr *odhtype.Reconci
 	return nil
 }
 
-// syncPlatformModules adds a Platform CR patch to rr.Resources so the deploy
-// action SSA-applies Platform.Spec.Modules with the modules DSC controls.
-// Each module handler writes its own field via ApplyManagementState, so this
-// action does not need updating when new modules are onboarded.
+// syncPlatformModules SSA-patches Platform.Spec.Modules with the management
+// state of modules declared in DSC.Spec.Components (via module:"name" tags).
+// Only DSC-managed modules are written; DSCI-managed fields are left to the
+// DSCI controller so SSA field ownership stays correct.
 func (r *Reconciler) syncPlatformModules(_ context.Context, rr *odhtype.ReconciliationRequest) error {
 	instance, ok := rr.Instance.(*dscv2.DataScienceCluster)
 	if !ok {
@@ -277,8 +281,12 @@ func (r *Reconciler) syncPlatformModules(_ context.Context, rr *odhtype.Reconcil
 		Kind:       configv1alpha1.PlatformKind,
 	}
 
+	managed := modules.ManagedModuleNames(instance.Spec.Components)
 	platformCtx := &modules.PlatformContext{DSC: instance}
 	_ = r.ModuleRegistry.ForAll(func(h modules.ModuleHandler, _ bool) error {
+		if !managed.Has(h.GetName()) {
+			return nil
+		}
 		h.ApplyManagementState(platformCtx, &platform.Spec.Modules)
 		return nil
 	})

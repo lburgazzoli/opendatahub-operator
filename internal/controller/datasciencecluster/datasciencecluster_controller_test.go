@@ -206,34 +206,38 @@ func (h *testModuleHandler) ApplyManagementState(ctx *modules.PlatformContext, s
 	}
 }
 
-func newTestModuleHandler() *testModuleHandler {
-	return &testModuleHandler{
+
+// TestDSCReconciler_ModuleCRsCreated verifies that the DSC controller creates
+// module operand CRs for enabled modules. The handler is named "aigateway" so
+// ManagedModuleNames(dsc.Spec.Components) includes it via the module:"aigateway"
+// struct tag. BuildModuleCR returns a TestModule CR that deploy SSA-applies.
+func TestDSCReconciler_ModuleCRsCreated(t *testing.T) {
+	modReg := modules.NewRegistry()
+	modReg.Add(&testModuleHandler{
 		BaseHandler: modules.BaseHandler{
 			Config: modules.ModuleConfig{
-				Name:   "testmodule",
+				Name:   "aigateway",
 				GVK:    testModuleGVK,
 				CRName: testModuleCRName,
 			},
 		},
-	}
-}
-
-// TestDSCReconciler_ModuleCRsCreated verifies that the DSC controller creates
-// module operand CRs for enabled modules. BuildModuleCR returns a TestModule CR
-// which the deploy action SSA-applies to the real Kubernetes API server.
-func TestDSCReconciler_ModuleCRsCreated(t *testing.T) {
-	modReg := modules.NewRegistry()
-	modReg.Add(newTestModuleHandler())
+	})
 
 	tc := startDSCController(t, &cr.Registry{}, modReg)
 	wt := tc.NewWithT(t)
 
 	createDSCI(t, tc)
-	createDSC(t, tc, dscv2.DataScienceClusterSpec{})
+	createDSC(t, tc, dscv2.DataScienceClusterSpec{
+		Components: dscv2.Components{
+			AIGateway: componentApi.DSCAIGateway{
+				ManagementSpec: common.ManagementSpec{ManagementState: operatorv1.Managed},
+			},
+		},
+	})
 
 	// TestModule CR must be created by provisionModuleCRs + deploy.
 	wt.Get(testModuleGVK, types.NamespacedName{Name: testModuleCRName}).
-		Eventually().Should(Succeed())
+		Eventually().ShouldNot(BeNil())
 }
 
 // TestDSCReconciler_ModuleStatusReportedToDSC verifies that module CR status
@@ -244,19 +248,33 @@ func TestDSCReconciler_ModuleCRsCreated(t *testing.T) {
 // Phase 2: patch TestModule CR status Ready=True → ModulesReady=True.
 func TestDSCReconciler_ModuleStatusReportedToDSC(t *testing.T) {
 	modReg := modules.NewRegistry()
-	modReg.Add(newTestModuleHandler())
+	modReg.Add(&testModuleHandler{
+		BaseHandler: modules.BaseHandler{
+			Config: modules.ModuleConfig{
+				Name:   "aigateway",
+				GVK:    testModuleGVK,
+				CRName: testModuleCRName,
+			},
+		},
+	})
 
 	tc := startDSCController(t, &cr.Registry{}, modReg)
 	wt := tc.NewWithT(t)
 
 	createDSCI(t, tc)
-	dsc := createDSC(t, tc, dscv2.DataScienceClusterSpec{})
+	dsc := createDSC(t, tc, dscv2.DataScienceClusterSpec{
+		Components: dscv2.Components{
+			AIGateway: componentApi.DSCAIGateway{
+				ManagementSpec: common.ManagementSpec{ManagementState: operatorv1.Managed},
+			},
+		},
+	})
 	dscKey := types.NamespacedName{Name: dsc.Name}
 
 	// Phase 1: TestModule CR exists (created by deploy) but has no Ready condition.
 	// GetModuleStatus (BaseHandler) reads from Kubernetes → empty conditions → not ready.
 	wt.Get(testModuleGVK, types.NamespacedName{Name: testModuleCRName}).
-		Eventually().Should(Succeed())
+		Eventually().ShouldNot(BeNil())
 
 	wt.Get(gvk.DataScienceCluster, dscKey).Eventually().Should(
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,

@@ -32,7 +32,7 @@ type DSCInitializationSpec struct {
 	ApplicationsNamespace string `json:"applicationsNamespace,omitempty"`
 	// Enable monitoring on specified namespace
 	// +optional
-	Monitoring serviceApi.DSCIMonitoring `json:"monitoring,omitempty"`
+	Monitoring serviceApi.DSCIMonitoring `json:"monitoring,omitempty" module:"monitoring"`
 	// When set to `Managed`, adds odh-trusted-ca-bundle Configmap to all namespaces that includes
 	// cluster-wide Trusted CA Bundle in .data["ca-bundle.crt"].
 	// Additionally, this fields allows admins to add custom CA bundles to the configmap using the .CustomCABundle field.

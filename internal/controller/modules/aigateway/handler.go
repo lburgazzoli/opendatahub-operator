@@ -95,14 +95,11 @@ func (h *handler) IsEnabled(platform *modules.PlatformContext) bool {
 }
 
 func (h *handler) ApplyManagementState(ctx *modules.PlatformContext, spec *configv1alpha1.PlatformModules) {
-	state := operatorv1.Removed
-
-	if ctx != nil && ctx.DSC != nil {
-		state = ctx.DSC.Spec.Components.AIGateway.ManagementState
+	if ctx == nil || ctx.DSC == nil {
+		return
 	}
-
 	spec.AIGateway = common.ManagementSpec{
-		ManagementState: state,
+		ManagementState: ctx.DSC.Spec.Components.AIGateway.ManagementState,
 	}
 }
 

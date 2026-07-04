@@ -64,14 +64,11 @@ func (h *handler) IsEnabled(platform *modules.PlatformContext) bool {
 }
 
 func (h *handler) ApplyManagementState(ctx *modules.PlatformContext, spec *configv1alpha1.PlatformModules) {
-	state := operatorv1.Removed
-
-	if ctx != nil && ctx.DSCI != nil {
-		state = ctx.DSCI.Spec.Monitoring.ManagementState
+	if ctx == nil || ctx.DSCI == nil {
+		return
 	}
-
 	spec.Monitoring = common.ManagementSpec{
-		ManagementState: state,
+		ManagementState: ctx.DSCI.Spec.Monitoring.ManagementState,
 	}
 }
 
