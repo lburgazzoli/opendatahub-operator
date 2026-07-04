@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -252,4 +253,130 @@ func TestWalkBatches_ProcessBatchErrorHaltsWalk(t *testing.T) {
 	})
 
 	require.ErrorContains(t, err, "reconcile failed")
+}
+
+// --- Metric tests ---
+
+func resetMetrics() {
+	provision.RunlevelStatus.Reset()
+	provision.RunlevelDurationSeconds.Reset()
+	provision.RunlevelCleared.Set(0)
+	provision.RunlevelBlocked.Set(0)
+	provision.RunlevelTimeoutTotal.Reset()
+}
+
+func rlStatus(runlevel string, status string) float64 {
+	return testutil.ToFloat64(provision.RunlevelStatus.WithLabelValues(runlevel, status))
+}
+
+func rlDuration(runlevel string) float64 {
+	return testutil.ToFloat64(provision.RunlevelDurationSeconds.WithLabelValues(runlevel))
+}
+
+func TestWalkBatches_Metrics_AllReady(t *testing.T) {
+	resetDefaultRegistry(t, map[string]dag.Runlevel{
+		"alpha": dag.RL(20),
+		"beta":  dag.RL(31),
+	})
+	resetMetrics()
+
+	checker := &readinessStub{ready: map[string]bool{"alpha": true, "beta": true}}
+	tracker := dag.NewStuckTracker()
+	conds := &conditionRecorder{}
+
+	_, err := provision.WalkBatches(context.Background(), checker, tracker, "test", conds, func(batch []provision.UnifiedNode) error {
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Both runlevels processed.
+	assert.Equal(t, float64(1), rlStatus("20", provision.StatusProcessed))
+	assert.Equal(t, float64(0), rlStatus("20", provision.StatusPending))
+	assert.Equal(t, float64(0), rlStatus("20", provision.StatusBlocked))
+	assert.Equal(t, float64(0), rlStatus("20", provision.StatusTimedOut))
+
+	assert.Equal(t, float64(1), rlStatus("31", provision.StatusProcessed))
+	assert.Equal(t, float64(0), rlStatus("31", provision.StatusBlocked))
+
+	// Aggregate: cleared = 31, blocked = 0.
+	assert.Equal(t, float64(31), testutil.ToFloat64(provision.RunlevelCleared))
+	assert.Equal(t, float64(0), testutil.ToFloat64(provision.RunlevelBlocked))
+
+	// Two batches processed.
+	assert.GreaterOrEqual(t, testutil.ToFloat64(provision.BatchesProcessedTotal), float64(2))
+
+	// Duration >= 0 for both.
+	assert.GreaterOrEqual(t, rlDuration("20"), float64(0))
+	assert.GreaterOrEqual(t, rlDuration("31"), float64(0))
+}
+
+func TestWalkBatches_Metrics_GatingBlocks(t *testing.T) {
+	resetDefaultRegistry(t, map[string]dag.Runlevel{
+		"alpha": dag.RL(20),
+		"beta":  dag.RL(31),
+	})
+	resetMetrics()
+
+	checker := &readinessStub{ready: map[string]bool{"alpha": false, "beta": true}}
+	tracker := dag.NewStuckTracker()
+	conds := &conditionRecorder{}
+
+	_, err := provision.WalkBatches(context.Background(), checker, tracker, "test", conds, func(batch []provision.UnifiedNode) error {
+		return nil
+	})
+	require.NoError(t, err)
+
+	// RL20 processed (first batch, never gated).
+	assert.Equal(t, float64(1), rlStatus("20", provision.StatusProcessed))
+
+	// RL31 blocked (alpha not ready).
+	assert.Equal(t, float64(1), rlStatus("31", provision.StatusBlocked))
+	assert.Equal(t, float64(0), rlStatus("31", provision.StatusProcessed))
+	assert.Equal(t, float64(0), rlStatus("31", provision.StatusPending))
+
+	// Aggregate: cleared = 20, blocked = 31.
+	assert.Equal(t, float64(20), testutil.ToFloat64(provision.RunlevelCleared))
+	assert.Equal(t, float64(31), testutil.ToFloat64(provision.RunlevelBlocked))
+
+	// Duration > 0 for blocked runlevel.
+	assert.GreaterOrEqual(t, rlDuration("31"), float64(0))
+}
+
+func TestWalkBatches_Metrics_Timeout(t *testing.T) {
+	resetDefaultRegistry(t, map[string]dag.Runlevel{
+		"alpha": dag.RL(20),
+		"beta":  dag.RL(31),
+	})
+	resetMetrics()
+
+	dag.SetRunlevelPolicy(31, dag.RunlevelPolicy{Timeout: 1 * time.Millisecond})
+	defer dag.ClearRunlevelPolicy(31)
+
+	checker := &readinessStub{ready: map[string]bool{"alpha": false, "beta": true}}
+	tracker := dag.NewStuckTracker()
+	conds := &conditionRecorder{}
+
+	tracker.Since("test", 31)
+	time.Sleep(2 * time.Millisecond)
+
+	_, err := provision.WalkBatches(context.Background(), checker, tracker, "test", conds, func(batch []provision.UnifiedNode) error {
+		return nil
+	})
+	require.NoError(t, err)
+
+	// RL20 processed (first batch).
+	assert.Equal(t, float64(1), rlStatus("20", provision.StatusProcessed))
+
+	// RL31 timed out then processed (timeout advances, then batch runs).
+	// The final status for RL31 is "processed" because after timeout the
+	// batch is still executed.
+	assert.Equal(t, float64(1), rlStatus("31", provision.StatusProcessed))
+
+	// Timeout counter incremented for RL31.
+	assert.Equal(t, float64(1),
+		testutil.ToFloat64(provision.RunlevelTimeoutTotal.WithLabelValues("31")))
+
+	// Both cleared.
+	assert.Equal(t, float64(31), testutil.ToFloat64(provision.RunlevelCleared))
+	assert.Equal(t, float64(0), testutil.ToFloat64(provision.RunlevelBlocked))
 }
