@@ -2,19 +2,44 @@
 
 ## Context
 
-The module reconciler currently operates in two modes: **DSC mode** (OpenShift — reads DSC/DSCI) and **Platform mode** (xKS — reads Platform CR). This creates dual code paths in every module handler. Additionally, the module reconciler both installs module operators AND creates module CRs, mixing two concerns.
+The module reconciler currently operates in two modes: **DSC mode** (OpenShift — reads DSC/DSCI)
+and **Platform mode** (xKS — reads Platform CR). This creates dual code paths in every module
+handler. Additionally, the module reconciler both installs module operators AND creates module
+CRs, mixing two concerns.
 
-The goal: **Platform CR becomes the single entry point for module operator installation**. On OpenShift, DSC and DSCI controllers project module enablement into Platform CR via SSA. On xKS, users write Platform CR directly. The module reconciler always reads Platform CR — one code path, one concern (operator lifecycle).
+The goal: **Platform CR becomes the single entry point for module operator installation**. On
+OpenShift, DSC and DSCI controllers project module enablement into Platform CR via SSA. On xKS,
+users write Platform CR directly. The module reconciler always reads Platform CR — one code path,
+one concern (operator lifecycle).
 
-Module CRs (Monitoring CR, AIGateway CR) remain the responsibility of DSC/DSCI controllers. The module reconciler never touches them.
+Module CRs (Monitoring CR, AIGateway CR) remain the responsibility of DSC/DSCI controllers. The
+module reconciler never touches them.
+
+## Implementation Status
+
+| Symbol | Meaning |
+|--------|---------|
+| ✅ | Implemented and merged to branch |
+| 🚧 | Partially implemented |
+| ❌ | Not yet implemented |
 
 ## Architecture
 
 ```
 OpenShift:
-  User → DSC/DSCI → SSA writes → Platform CR → Platform Controller → creates PlatformModule CRs
-                  → creates module CRs directly (Monitoring, AIGateway)
+  User → DSC  → syncPlatformModules (SSA) → Platform CR
+             → provisionModuleCRs         → AIGateway CR (direct)
+             → provisionComponents        → Component CRs (Dashboard, KServe, …)
+
+  User → DSCI → syncPlatformMonitoring (SSA) → Platform CR
+              → creates Monitoring CR (direct)
+
+  Platform CR → Platform Controller → creates/deletes PlatformModule CRs
+                                   → walks unified DAG (WalkBatches)
+                                   → checks readiness of component CRs + PlatformModule CRs
+
   PlatformModule CRs → PlatformModule Reconciler → installs module operators
+                                                 → status.resources drift cleanup
 
 xKS:
   User → Platform CR → Platform Controller → creates PlatformModule CRs
@@ -26,20 +51,23 @@ xKS:
 
 | Concern | Owner |
 |---------|-------|
-| Module operator install/remove | Platform controller (reads Platform CR) + PlatformModule reconciler (deploys operators) |
-| Module CR create/configure/delete | DSC controller (DSC-owned) or DSCI controller (DSCI-owned) |
-| Module CR status tracking | DSC/DSCI controllers |
-| DAG orchestration | Platform controller (sole DAG orchestrator for both components and modules) |
-| Cleanup (operator resources) | Owner references on PlatformModule CR + drift cleanup via `status.resources` |
+| Module operator install/remove | Platform controller (creates PlatformModule CRs) + PlatformModule reconciler (deploys) |
+| Module CR create/configure/delete | DSC controller (AIGateway) or DSCI controller (Monitoring) |
+| Module CR status tracking | DSC controller (`ComputeModulesStatus` via injectable `*modules.Registry`) |
+| DAG orchestration | Platform controller — sole orchestrator for components and modules |
+| Cleanup (operator resources) | Owner references on PlatformModule CR + `status.resources` drift cleanup |
 | Cleanup (module CR operands) | Module operator (via its own finalizers/GC) |
+| Cleanup (component CRs) | DSC controller (`cleanupDisabledComponents`) |
+| Cleanup (module operand CRs) | DSC controller (`cleanupDisabledModules`) |
 
 ## Changes
 
-### 1. Keep PlatformModules struct, add module fields
+### 1. ✅ Keep PlatformModules struct, add module fields
 
 **File:** `api/config/v1alpha1/platform_types.go`
 
-Keep the existing `PlatformModules` struct — the Platform CR is already deployed and changing to a list would be a breaking API change. Add new `ManagementSpec` fields per module as they're onboarded.
+The existing `PlatformModules` struct is kept — the Platform CR is already deployed and changing
+to a list would be a breaking API change. New `ManagementSpec` fields are added per module.
 
 ```go
 type PlatformModules struct {
@@ -50,25 +78,26 @@ type PlatformModules struct {
 ```
 
 SSA field managers own individual struct fields:
-- DSCI controller (field manager `dsci`) owns `.spec.modules.monitoring`
-- DSC controller (field manager `dsc`) owns `.spec.modules.aigateway`
+- DSCI controller (field manager `dsci-controller`) owns `.spec.modules.monitoring`
+- DSC controller (field manager `dsc-controller`) owns `.spec.modules.aigateway`
 - On xKS, kubectl/user owns all fields
 
-Update `EnabledModules()` to include AIGateway. Consider migrating to a list-based representation in a future v1alpha2 when the module count grows (all components become modules).
+`EnabledModules()` includes AIGateway.
 
-> **Future migration note:** When in-tree components migrate to modules (16+ fields), switch `PlatformModules` to a `+listType=map` list with `+listMapKey=name`. This is a breaking change acceptable in v1alpha1 but better deferred to a planned API version bump.
+> **Future migration note:** When in-tree components migrate to modules (16+ fields), switch
+> `PlatformModules` to a `+listType=map` list with `+listMapKey=name`. This is a breaking change
+> acceptable in v1alpha1 but better deferred to a planned API version bump.
 
-### 2. Introduce PlatformModule tracker CRD
+### 2. ✅ Introduce PlatformModule tracker CRD
 
 **New file:** `api/config/v1alpha1/platformmodule_types.go`
 
 One CR per installed module operator. Cluster-scoped. Created/owned by Platform controller.
 
-**Naming convention:** The PlatformModule CR `metadata.name` IS the module name. This creates a 1:1 mapping:
+**Naming convention:** The PlatformModule CR `metadata.name` IS the module name:
 - Handler `GetName()` → `"aigateway"`
 - `PlatformModules.AIGateway` field → ManagementState
 - PlatformModule CR → `metadata.name: "aigateway"`
-- No spec field needed — the name carries the identity.
 
 ```go
 // PlatformModuleSpec is intentionally empty. The CR name (metadata.name)
@@ -77,49 +106,54 @@ One CR per installed module operator. Cluster-scoped. Created/owned by Platform 
 type PlatformModuleSpec struct {}
 
 type PlatformModuleStatus struct {
-    // Resources tracked for per-reconcile drift cleanup.
-    // +optional
-    Resources []ResourceRef `json:"resources,omitempty"`
-    // Standard conditions (e.g., Ready, Degraded).
+    Resources  []ResourceRef      `json:"resources,omitempty"`
     Conditions []metav1.Condition `json:"conditions,omitempty"`
-}
-
-type ResourceRef struct {
-    schema.GroupVersionKind `json:",inline"`
-    Namespace string `json:"namespace,omitempty"`
-    Name      string `json:"name"`
 }
 ```
 
 Lifecycle:
-- Platform controller creates PlatformModule CR (named after module) when module is `Managed` in Platform.Spec.Modules
-- PlatformModule reconciler deploys operator resources with ownerReferences pointing to the PlatformModule CR, and records them in `status.resources`
-- Per reconcile: compare rendered resources against `status.resources` — delete anything tracked that's no longer rendered (drift cleanup for version changes), then update the list
-- Platform controller deletes PlatformModule CR when module is `Removed` → Kubernetes GC cascade-deletes all owned resources automatically (no finalizer needed)
+- Platform controller creates PlatformModule CR when module is `Managed` in Platform.Spec.Modules
+- PlatformModule reconciler deploys operator resources owned by the PlatformModule CR and records
+  them in `status.resources`
+- Per reconcile: compare rendered resources against `status.resources`, delete stale entries
+  (drift cleanup for version changes), update the list
+- Platform controller deletes PlatformModule CR when module is `Removed` → Kubernetes GC
+  cascade-deletes all owned resources (no finalizer needed)
 
-### 3. Simplify ModuleHandler interface
+### 3. ❌ Simplify ModuleHandler interface
 
 **File:** `internal/controller/modules/types.go`
 
-Remove module CR concerns. The handler only knows about operator deployment:
+**Not yet implemented.** ModuleHandler still has the full set of methods including `BuildModuleCR`,
+`GetModuleStatus`, `GetModuleCRState`, `DeleteModuleCR`, `DeleteOperatorResources`, `IsEnabled`.
+
+Target interface (after simplification):
 
 ```go
 type ModuleHandler interface {
     GetName() string
+    GetGroupVersionKind() schema.GroupVersionKind
     GetOperatorManifests(platform *PlatformContext) OperatorManifests
     GetRelatedImages() []string
 }
 ```
 
-Remove: `IsEnabled()` (registry reads from Platform CR), `BuildModuleCR()`, `GetGVK()`, `GetModuleStatus()`, `GetModuleCRState()`, `DeleteModuleCR()`, `DeleteOperatorResources()` (replaced by owner-ref cascade + drift cleanup via PlatformModule CR).
+`IsEnabled` will be removed (the Platform controller reads enabled state from Platform CR directly).
+`BuildModuleCR`, `GetModuleStatus`, `GetModuleCRState`, `DeleteModuleCR`, `DeleteOperatorResources`
+will be removed (DSC/DSCI own module CRs directly; PlatformModule reconciler owns cleanup via
+owner-ref cascade).
 
-Keep optional interfaces: `ContainerNamer`, `ControllerImager`, `InitContainerNamer`, `DeploymentNamer`.
+Optional interfaces `ContainerNamer`, `ControllerImager`, `InitContainerNamer`, `DeploymentNamer`
+remain.
 
-### 4. Simplify PlatformContext
+### 4. ❌ Simplify PlatformContext
 
 **File:** `internal/controller/modules/types.go`
 
-Remove DSC/DSCI fields. The module reconciler never reads them.
+**Not yet implemented.** PlatformContext still carries `DSC` and `DSCI` fields that module
+handlers use for `IsEnabled` and `BuildModuleCR`.
+
+Target struct (after simplification):
 
 ```go
 type PlatformContext struct {
@@ -132,133 +166,247 @@ type PlatformContext struct {
 }
 ```
 
-### 5. Platform reconciler: orchestrates PlatformModule CRs
+### 5. ✅ Platform controller: orchestrates PlatformModule CRs
 
-**File:** `internal/controller/modules/modules_controller.go`
+**File:** `internal/controller/platform/platform_controller.go`
 
-Remove DSC-mode vs Platform-mode split. Single reconciler for Platform CR. Its sole job is creating/deleting PlatformModule CRs based on `Platform.Spec.Modules` and orchestrating the DAG.
+Single reconciler for Platform CR. Uses `Options` pattern (same as PlatformModule) with injectable
+registries for testing.
 
 Action chain:
-1. Read `Platform.Spec.Modules` fields
-2. For each `Managed` module: ensure PlatformModule CR exists (create if absent)
-3. For each `Removed` module: delete PlatformModule CR
-4. Walk DAG runlevels: clear runlevel in `RunlevelTracker` when all entries at that level are Ready
-5. Aggregate PlatformModule CR conditions into Platform CR status
+1. For each `Managed` module in `Platform.Spec.Modules`: ensure PlatformModule CR exists
+2. For each `Removed` module: delete PlatformModule CR
+3. Walk unified DAG (`WalkBatches`) with `CompositeChecker` spanning component CRs and PlatformModule CRs
+4. Aggregate PlatformModule CR conditions into Platform CR status
 
-**DAG advancement:** Shared `UnifiedRegistry` + `RunlevelTracker` pattern (same as today):
+**Readiness checkers:**
+- `componentReadinessChecker`: reads component CR via `cluster.GetSingleton` + unstructured Get
+- `moduleReadinessChecker`: reads PlatformModule CR directly + version handshake
 
-- **Shared DAG:** Components and modules are in the same `UnifiedRegistry` (`pkg/controller/provision/unified.go`). Both controllers resolve the same unified batches so cross-type ordering works (a module at RL(33) waits for components at RL(31)).
-- **Platform controller** is the sole DAG orchestrator. It calls `WalkBatches` on unified batches, checks readiness of both component CRs and PlatformModule CRs via `CompositeChecker`, and clears runlevels for everything.
-- **DSC controller** no longer walks the DAG. It creates/deletes component CRs and module CRs without ordering.
-- **PlatformModule reconciler** includes `RunlevelGateAction` as its first action — checks `tracker.IsCleared()`, sets `SkipDeploy` if runlevel not reached, requeues after configurable interval (default 30s).
-- **Watches:** Platform controller watches PlatformModule CRs (automatic via `Owns()`) and component CRs (explicit `Watches()` with status-change predicate) for DAG advancement. It does NOT watch module CRs (Monitoring, AIGateway) — those are DSC/DSCI's domain.
-- **Triggering:** Event-driven (component/PlatformModule status changes) + `WalkBatches` requeue when blocked on unready entries + configurable periodic resync (default 5min) as a safety net.
+**Watches:**
+- `Owns(gvk.PlatformModule)` — requeue when PlatformModule status changes
+- `WatchesGVK(componentGVK, ...)` with status-change predicate — requeue when component CR status changes
+- `WatchesGVK(gvk.CustomResourceDefinition, ...)` — requeue when CRDs installed/removed
+- Dynamic watch registration via `registry.ForEach` and `modReg.ForAll`
 
-The Platform controller **does not deploy operator resources** — that's the PlatformModule reconciler's job.
+**DAG advancement:**
+- `StuckTracker` (per-component timeout) detects runlevels blocked beyond policy limits
+- `WalkBatches` marks timed-out entries and allows subsequent runlevels to proceed
+- `ProvisioningProgress` condition on Platform CR written by `WalkBatches`
 
-Remove from current module reconciler: `initializeModules`, `cleanupDisabledModules`, `provisionModules`, `BuildModuleCR` calls, `updateModuleStatus`, `gc.NewAction()`, all Helm/Kustomize render actions, `deploy.NewAction()`, `injectModuleEnv`, `injectPlatformConfig`.
+The Platform controller **does not deploy operator resources** — that remains the PlatformModule
+reconciler's sole concern.
 
-### 6. PlatformModule reconciler: deploys module operators
+### 6. ✅ PlatformModule reconciler: deploys module operators
 
-**New file:** `internal/controller/modules/platformmodule_controller.go`
+**New file:** `internal/controller/platformmodule/platformmodule_controller.go`
 
 Watches PlatformModule CRs. Each PlatformModule CR triggers independent reconciliation:
 
 Action chain:
-1. `RunlevelGateAction` — check `RunlevelTracker`, set `SkipDeploy` if runlevel not cleared
-2. Look up module handler by `spec.moduleName` in the registry
+1. `runlevelGateAction` — check `provision.DefaultRegistry()` runlevel status; block until cleared
+2. Look up module handler by `metadata.name` in the registry
 3. Call `handler.GetOperatorManifests()` → render Helm/Kustomize
-4. Inject RELATED_IMAGE_* env vars (`handler.GetRelatedImages()`)
-5. Inject platform config ConfigMap
-6. Deploy via SSA with ownerReferences pointing to PlatformModule CR
-7. Drift cleanup: compare rendered resources against `status.resources`, delete stale entries
-8. Update `status.resources` with current set
-9. Check operator Deployment readiness → update conditions
+4. Inject RELATED_IMAGE_* env vars and platform config
+5. Deploy via SSA with ownerReferences pointing to PlatformModule CR
+6. Drift cleanup: delete resources in `status.resources` no longer in the rendered set
+7. Update `status.resources` with current rendered set
+8. Check operator Deployment readiness → update conditions
 
-**No GC action, no finalizer.** Owner references on deployed resources enable Kubernetes GC cascade deletion when the PlatformModule CR is deleted. `status.resources` handles per-reconcile drift cleanup (resource removed between versions).
+**No GC action, no finalizer.** Owner references on deployed resources enable Kubernetes GC
+cascade deletion when the PlatformModule CR is deleted.
 
-This mirrors the component controller pattern: Platform creates PlatformModule CRs (like DSC creates component CRs), and the PlatformModule reconciler handles deployment (like component controllers handle deployment).
+### 7. ✅ DSC controller: write to Platform CR + create module CRs
 
-### 7. DSC controller: write to Platform CR + create module CRs
+**Files:** `internal/controller/datasciencecluster/datasciencecluster_controller_actions.go`,
+`datasciencecluster_controller.go`, `datasciencecluster_controller_options.go`
 
-**File:** `internal/controller/datasciencecluster/datasciencecluster_controller_actions.go`
+The DSC controller was refactored with injectable registries:
 
-Add action (early in chain) that SSA-patches Platform CR:
-- Write `Platform.Spec.Modules.AIGateway.ManagementState` from `DSC.Spec.Components.AIGateway.ManagementState`
-- Field manager: `dsc-controller`
+```go
+type Options struct {
+    ComponentRegistry *cr.Registry
+    ModuleRegistry    *modules.Registry
+    DeletePropagation metav1.DeletionPropagation
+}
+type Reconciler struct { Options }
 
-Move `BuildModuleCR()` logic for AIGateway into DSC controller actions — DSC creates the AIGateway module CR directly (like it creates component CRs today).
+func NewDataScienceClusterReconciler(ctx context.Context, mgr ctrl.Manager, opts ...Option) error
+```
 
-### 8. DSCI controller: write to Platform CR
+Action chain:
+1. `initialize` — remove legacy finalizer
+2. `checkPreConditions` — verify DSCI and DSC exist
+3. `updateStatus` — aggregate component and module status (`computeComponentsStatus` + `ComputeModulesStatus`)
+4. `provisionComponents` — create component CRs for enabled components (no ordering)
+5. `provisionModuleCRs` — create module operand CRs (AIGateway, etc.) for enabled modules
+6. `syncPlatformModules` — SSA-patch `Platform.Spec.Modules` from DSC spec
+7. `deploy` — SSA-apply all resources collected in `rr.Resources`
+8. `cleanupDisabledComponents` — delete component CRs for disabled components
+9. `cleanupDisabledModules` — call `handler.DeleteModuleCR()` for disabled modules
+
+`gc.NewAction()` and `WalkBatches` are removed from the DSC controller. The Platform controller
+is the sole DAG orchestrator.
+
+`updateStatus` calls:
+- `computeComponentsStatus(ctx, rr, r.ComponentRegistry)` — injectable registry
+- `modules.ComputeModulesStatus(ctx, rr, r.ModuleRegistry)` — injectable registry
+
+### 8. ✅ DSCI controller: write to Platform CR
 
 **File:** `internal/controller/dscinitialization/dscinitialization_controller.go`
 
-Add action that SSA-patches Platform CR:
-- Write `Platform.Spec.Modules.Monitoring.ManagementState` from `DSCI.Spec.Monitoring.ManagementState`
-- Field manager: `dsci-controller`
+`syncPlatformMonitoring` SSA-patches `Platform.Spec.Modules.Monitoring.ManagementState` from
+`DSCI.Spec.Monitoring.ManagementState`. Field manager: `dsci-controller`.
 
-DSCI already creates the Monitoring CR directly — keep that path.
+DSCI already creates the Monitoring CR directly — that path is unchanged.
 
-### 9. Simplify DSC: CR-based lifecycle, no DAG
+### 9. ✅ DSC controller: simplified, no DAG
 
-**File:** `internal/controller/datasciencecluster/datasciencecluster_controller_actions.go`
+The DSC controller no longer walks the unified DAG. `gc.NewAction()` and `StuckTracker` are gone.
+Cleanup is explicit: `cleanupDisabledComponents` and `cleanupDisabledModules` run as named actions.
+The Platform controller handles all DAG-ordered orchestration.
 
-Replace `gc.NewAction()` and `WalkBatches` with a simple CR lifecycle loop. DSC no longer walks the DAG — the Platform controller is the sole DAG orchestrator.
+**Watches:** DSC watches component CRs (via dynamic `OwnsGVK` for each registered component GVK)
+and module CRs (via `WatchesGVK` for Monitoring, `OwnsGVK` for others). CRD watch
+(`WatchesGVK(gvk.CustomResourceDefinition, ...)`) triggers re-evaluation when module CRDs are
+installed.
 
-DSC action chain simplifies to:
-1. For each `Managed` component: ensure component CR exists (create if absent, no ordering)
-2. For each `Removed` component: delete component CR → component controller handles operand cleanup
-3. SSA-write module enablement to Platform CR
-4. For each DSC-owned `Managed` module: ensure module CR exists
-5. For each DSC-owned `Removed` module: delete module CR + write `Removed` to Platform CR
-6. Aggregate component/module status into DSC conditions
+**Module ownership distinction:**
+- Monitoring → `WatchesGVK` only (owned by DSCI, not DSC)
+- All other modules → `OwnsGVK` (owned by DSC)
 
-No `WalkBatches`, no `StuckTracker`, no `gc.NewAction()`. Each CR owner handles its own resource lifecycle. Component controllers self-gate via `RunlevelGateAction` using the `RunlevelTracker` cleared by the Platform controller.
+### 10. ✅ Platform CR creation
 
-**Watch Platform CR:** DSC and DSCI controllers `Watches()` the Platform CR with a status-change predicate. When module operators become Ready (reflected in Platform CR status via PlatformModule conditions), DSC/DSCI know it's safe to create module CRs (CRD is installed). This replaces blind retry on `IsNoMatchError` with informed, event-driven module CR creation.
+SSA creates Platform CR implicitly on first write. Both DSCI and DSC controllers use SSA
+(create-or-update), so whichever reconciles first creates the CR. No explicit creation step needed.
 
-**Safety net:** DSC/DSCI controllers include configurable periodic resync (same as Platform controller) to guard against missed events, accidental CR deletion, or failed SSA writes to Platform CR. On each resync: verify all expected CRs exist, re-apply SSA writes if needed, re-aggregate status.
+## New Infrastructure (not in original design)
 
-**CRD-not-ready handling:** When creating a module CR fails with `IsNoMatchError` (CRD not yet installed), check the corresponding PlatformModule CR status:
-- PlatformModule CR **not Ready** (operator still deploying) → expected, requeue after configurable delay (e.g., 10s)
-- PlatformModule CR **Ready** but CRD missing → operator is broken, report error condition on DSC/DSCI, do not blindly retry
+### ✅ BaseComponentHandler
 
-This distinction prevents masking a real operator failure as a transient "CRD not yet installed" state.
+**New file:** `internal/controller/components/registry/base.go`
 
-**StuckTracker:** The `StuckTracker` (timeout detection for runlevels blocked beyond policy limits) stays in the Platform controller's `WalkBatches` call. When a runlevel is stuck past its timeout, `WalkBatches` marks timed-out entries and allows subsequent runlevels to proceed — same behavior as today, just centralized in the Platform controller instead of split between DSC and module reconciler.
+A configurable `ComponentHandler` implementation with function fields for every interface method.
+`Name` and `GVK` are plain struct fields; unset function fields fall back to safe defaults.
 
-### 10. Platform CR creation
+```go
+type BaseComponentHandler struct {
+    Name string
+    GVK  schema.GroupVersionKind
 
-SSA creates Platform CR implicitly on first write. No explicit creation step needed. Both DSCI and DSC controllers use SSA (create-or-update), so whichever reconciles first creates the CR.
+    InitFn                   func(common.Platform, operatorconfig.OperatorSettings) error
+    IsEnabledFn              func(*dscv2.DataScienceCluster) bool
+    NewCRObjectFn            func(context.Context, client.Client, *dscv2.DataScienceCluster) (common.PlatformObject, error)
+    NewComponentReconcilerFn func(context.Context, ctrl.Manager) error
+    UpdateDSCStatusFn        func(context.Context, *types.ReconciliationRequest) (metav1.ConditionStatus, error)
+}
+```
 
-## Files to Modify
+Defaults: `Init`→nil (no-op), `IsEnabled`→false, `NewCRObject`→nil (no CR),
+`NewComponentReconciler`→nil (no controller), `UpdateDSCStatus`→ConditionTrue.
 
-| File | Change |
-|------|--------|
-| `api/config/v1alpha1/platform_types.go` | Add AIGateway field to `PlatformModules`, update `EnabledModules()` |
-| `api/config/v1alpha1/platformmodule_types.go` | **New** — PlatformModule CRD |
-| `internal/controller/modules/types.go` | Simplify ModuleHandler, PlatformContext |
-| `internal/controller/modules/modules_controller.go` | Remove mode split, single Platform reconciler (creates/deletes PlatformModule CRs, DAG orchestration) |
-| `internal/controller/modules/platformmodule_controller.go` | **New** — PlatformModule reconciler (deploys operators per CR) |
-| `internal/controller/modules/modules_controller_actions.go` | Simplify to PlatformModule CR creation/deletion + status aggregation |
-| `internal/controller/modules/base.go` | Simplify BaseHandler (remove CR methods) |
-| `internal/controller/modules/registry.go` | Read enabled state from Platform CR fields |
-| `internal/controller/modules/monitoring/handler.go` | Remove IsEnabled/BuildModuleCR |
-| `internal/controller/modules/aigateway/handler.go` | Remove IsEnabled/BuildModuleCR |
-| `internal/controller/datasciencecluster/datasciencecluster_controller_actions.go` | Add SSA write to Platform CR, add AIGateway CR creation, replace GC/DAG with CR lifecycle loop |
-| `internal/controller/dscinitialization/dscinitialization_controller.go` | Add SSA write to Platform CR |
-| `cmd/main.go` | Remove DSC/Platform mode conditional for module reconciler |
+Replaces ad-hoc test structs in tests that need a lightweight `ComponentHandler` without a full
+per-component controller.
+
+### ✅ ProvisionRegistry field on component and module registries
+
+**Files:** `internal/controller/components/registry/registry.go`,
+`internal/controller/modules/registry.go`
+
+Both `Registry` types now carry:
+
+```go
+// ProvisionRegistry is the unified DAG registry used for cache invalidation.
+// If nil, provision.DefaultRegistry() is used.
+ProvisionRegistry *provision.UnifiedRegistry
+```
+
+`InvalidateCache`, `Enable`, `Disable` route through the field when set, else fall back to the
+global `provision.DefaultRegistry()` singleton. This allows integration tests to inject isolated
+provision registries and avoid polluting the global DAG state across parallel test runs.
+
+### ✅ DSC controller integration tests
+
+**New file:** `internal/controller/datasciencecluster/datasciencecluster_controller_test.go`
+
+Five envtest integration tests covering the full DSC reconcile action chain. No component or
+module controllers are registered — the DSC controller operates alone against a real Kubernetes
+API server.
+
+| Test | What it exercises |
+|------|------------------|
+| `TestDSCReconciler_ComponentCRsCreated` | `provisionComponents` + `deploy`: Dashboard CR appears after DSC creation |
+| `TestDSCReconciler_ComponentStatusReportedToDSC` | `updateStatus` → `computeComponentsStatus`: `ComponentsReady=False` when one handler returns False |
+| `TestDSCReconciler_ModuleCRsCreated` | `provisionModuleCRs` + `deploy`: TestModule CR appears after DSC creation |
+| `TestDSCReconciler_ModuleStatusReportedToDSC` | `updateStatus` → `ComputeModulesStatus` via real k8s reads (`BaseHandler.GetModuleStatus`): `ModulesReady` transitions False→True after patching CR status |
+| `TestDSCReconciler_PlatformCRSyncedWithEnabledModules` | `syncPlatformModules`: Platform CR `.spec.modules.aigateway.managementState` matches DSC spec |
+
+Key design decisions:
+- `BaseComponentHandler` (not testify mock) for component handlers — function fields control
+  `UpdateDSCStatus` and `NewCRObject` return values
+- `testModuleHandler` embeds `modules.BaseHandler` — `GetModuleStatus` and `GetModuleCRState`
+  read directly from Kubernetes, no mock k8s reads
+- Module status test uses `cli.Status().Update` to set Ready=True on the TestModule CR, then
+  triggers a re-reconcile via annotation — proves the real k8s read path
+
+## Files Status
+
+| File | Status | Notes |
+|------|--------|-------|
+| `api/config/v1alpha1/platform_types.go` | ✅ Done | AIGateway field added, `EnabledModules()` updated |
+| `api/config/v1alpha1/platformmodule_types.go` | ✅ Done | PlatformModule CRD |
+| `internal/controller/components/registry/base.go` | ✅ Done | New — `BaseComponentHandler` |
+| `internal/controller/components/registry/registry.go` | ✅ Done | `ProvisionRegistry` field |
+| `internal/controller/modules/registry.go` | ✅ Done | `ProvisionRegistry` field |
+| `internal/controller/modules/types.go` | 🚧 Partial | ModuleHandler still has BuildModuleCR/GetModuleStatus/etc.; PlatformContext still has DSC/DSCI fields |
+| `internal/controller/modules/modules_controller_actions.go` | 🚧 Partial | `ComputeModulesStatus` accepts `*Registry`; provisionModules still present for platform mode |
+| `internal/controller/modules/base.go` | 🚧 Partial | `BaseHandler` still has CR methods |
+| `internal/controller/modules/monitoring/handler.go` | ❌ Pending | Still has `IsEnabled`/`BuildModuleCR` |
+| `internal/controller/modules/aigateway/handler.go` | ❌ Pending | Still has `IsEnabled`/`BuildModuleCR` |
+| `internal/controller/platform/platform_controller.go` | ✅ Done | `Options` pattern, DAG orchestrator, composite readiness checkers, CRD watch |
+| `internal/controller/platformmodule/platformmodule_controller.go` | ✅ Done | Operator deployment, drift cleanup, runlevel gating |
+| `internal/controller/datasciencecluster/datasciencecluster_controller.go` | ✅ Done | Injectable registries, dynamic GVK watches |
+| `internal/controller/datasciencecluster/datasciencecluster_controller_actions.go` | ✅ Done | provisionModuleCRs, syncPlatformModules, cleanupDisabled*, no DAG |
+| `internal/controller/datasciencecluster/datasciencecluster_controller_options.go` | ✅ Done | New — Options/WithXxx pattern |
+| `internal/controller/datasciencecluster/datasciencecluster_controller_test.go` | ✅ Done | New — 5 envtest integration tests |
+| `internal/controller/dscinitialization/dscinitialization_controller.go` | ✅ Done | `syncPlatformMonitoring` SSA write to Platform CR |
+| `pkg/utils/test/mocks/types.go` | ✅ Done | `MockModuleHandler`, `NewDefaultMock*` constructors |
+| `cmd/main.go` | ❌ Pending | Still has DSC/Platform mode conditional for module reconciler |
+
+## Remaining Work
+
+1. **Simplify ModuleHandler** (change 3): remove `BuildModuleCR`, `GetModuleStatus`,
+   `GetModuleCRState`, `DeleteModuleCR`, `DeleteOperatorResources`, `IsEnabled`. The DSC
+   controller owns module CR lifecycle directly; cleanup is via owner-ref cascade.
+
+2. **Simplify PlatformContext** (change 4): drop `DSC` and `DSCI` fields once no handler
+   reads them for `IsEnabled`/`BuildModuleCR`.
+
+3. **Migrate aigateway handler**: remove `IsEnabled` and `BuildModuleCR`; DSC controller
+   creates AIGateway CR from `DSC.Spec.Components.AIGateway` directly.
+
+4. **Migrate monitoring handler**: remove `IsEnabled` and `BuildModuleCR`; DSCI controller
+   already creates Monitoring CR directly.
+
+5. **Simplify cmd/main.go**: remove DSC/Platform mode conditional for the module reconciler
+   once the module reconciler is removed or reduced to platform-mode only.
+
+## Integration Test Plan
+
+See [docs/platform-tests/plan.md](platform-tests/plan.md) for the full envtest
+integration test plan covering Platform, PlatformModule, and DSC controller
+pipelines. Tests are in `tests/integration/platform/`.
 
 ## Verification
 
 1. `make generate manifests api-docs` — regenerate after type changes
 2. `make lint` — pass linter
-3. Unit tests: module handlers with simplified interface
-4. Unit tests: SSA projection from DSC/DSCI to Platform CR
-5. Unit tests: PlatformModule CR lifecycle (create/delete/owner-ref cascade)
-6. E2E (OpenShift): DSC+DSCI → Platform CR → module operators installed, module CRs created by DSC/DSCI
+3. Unit tests: `TestDSCReconciler_*` (5 envtest tests) confirm the full DSC action chain
+4. Unit tests: `TestPlatformReconciler_*` confirm DAG gating and readiness propagation
+5. Unit tests: `TestPlatformModuleReconciler_*` confirm operator deployment and drift cleanup
+6. E2E (OpenShift): DSC+DSCI → Platform CR → module operators installed, module CRs created
 7. E2E (xKS): user writes Platform CR → operators installed; user creates module CRs manually
 8. Verify SSA ownership: `kubectl get platform default -o json | jq '.metadata.managedFields'`
 9. Verify cleanup: remove module from Platform CR → PlatformModule CR deleted → operator resources gone
 10. Verify DAG ordering: RL(20) modules deploy before RL(31); cross-type gating works
-11. Verify CRD-not-ready handling: module CR creation retries with delay when operator not yet installed
