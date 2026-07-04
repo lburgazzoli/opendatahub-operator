@@ -392,6 +392,37 @@ Key design decisions:
 5. **Simplify cmd/main.go**: remove DSC/Platform mode conditional for the module reconciler
    once the module reconciler is removed or reduced to platform-mode only.
 
+## DAG Metrics
+
+The DAG walking system (`WalkBatches`) emits Prometheus metrics registered in
+the controller-runtime metrics registry. These are production metrics, not
+test-only constructs.
+
+**File:** `pkg/controller/provision/gating_metrics.go`
+
+### Per-runlevel metrics
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `odh_dag_runlevel_status` | GaugeVec | `runlevel`, `status` | Info-style state indicator. `status` is one of `pending`, `processed`, `blocked`, `timed_out`. Active state = `1`, others = `0`. |
+| `odh_dag_runlevel_duration_seconds` | GaugeVec | `runlevel` | Seconds spent in the current state. For `processed`: batch processing time. For `blocked`: time spent waiting (from `StuckTracker`). |
+
+### Aggregate metrics
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `odh_dag_runlevel_cleared` | Gauge | — | Highest runlevel order fully processed in the current walk. |
+| `odh_dag_runlevel_blocked` | Gauge | — | Runlevel currently blocked on. `0` when not blocked. |
+| `odh_dag_batches_processed_total` | Counter | — | Cumulative batches processed across all reconcile cycles. |
+| `odh_dag_runlevel_timeout_total` | CounterVec | `runlevel` | Incremented each time a runlevel times out and is skipped. |
+
+### Example PromQL
+
+- All blocked runlevels: `odh_dag_runlevel_status{status="blocked"} == 1`
+- Timed-out runlevels: `odh_dag_runlevel_status{status="timed_out"} == 1`
+- Alert on stuck DAG: `odh_dag_runlevel_blocked > 0`
+- Time stuck: `odh_dag_runlevel_duration_seconds{runlevel="31"}`
+
 ## Integration Test Plan
 
 See [docs/platform-tests/plan.md](platform-tests/plan.md) for the full envtest

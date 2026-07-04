@@ -168,6 +168,32 @@ component GVKs).
 | 03-5 | [TestDSCDriven_DAG_Gating_ModuleBlocksModule](task-03-5-dag-gating.md) | done |
 | 03-6 | [TestDSCDriven_DisableComponent_Cleanup](task-03-6-disable-cleanup.md) | done |
 
+### Group 04: DAG Metrics Assertions
+
+Enhance existing DAG tests to assert on Prometheus metrics emitted by
+`WalkBatches`. Metrics are defined in `pkg/controller/provision/gating_metrics.go`.
+Use `prometheus/client_golang/prometheus/testutil.ToFloat64()` to read values.
+Reset metrics at the start of each test with `.Reset()`.
+
+| # | Task | Status |
+|---|------|--------|
+| 04-1 | [Add metric assertions to DAG advancement tests](task-04-1-metrics-advancement.md) | pending |
+| 04-2 | [Add metric assertions to DAG gating tests](task-04-2-metrics-gating.md) | pending |
+
+**04-1** covers `TestPlatformOnly_DAG_Advancement` and `TestDSCDriven_DAG_Advancement`:
+- After DAG completes: assert `runlevel_status{status="processed"} == 1` for all runlevels
+- Assert `runlevel_cleared` equals the highest order
+- Assert `runlevel_blocked == 0`
+- Assert `batches_processed_total` equals batch count
+- Assert `runlevel_duration_seconds > 0` for gated runlevels
+
+**04-2** covers `TestPlatformOnly_DAG_Gating_ComponentBlocksModule` and `TestDSCDriven_DAG_Gating_ModuleBlocksModule`:
+- While blocked: assert `runlevel_status{status="blocked"} == 1` for the gated runlevel
+- Assert `runlevel_blocked` equals the blocked order
+- Assert `runlevel_status{status="processed"} == 1` for cleared runlevels
+- Assert `runlevel_duration_seconds > 0` for the blocked runlevel
+- After unblocking: assert all statuses flip to `processed`
+
 ### Dependencies
 
 - **01-1** must be completed first (creates the file).
@@ -177,3 +203,4 @@ component GVKs).
 - **03-1** depends on 01-2 (creates `dsc_driven_test.go`).
 - **03-2 through 03-6** each depend on 03-1 (adds tests to the same file) but are independent of each other.
 - Groups 02 and 03 are independent and can be executed in parallel.
+- **04-1, 04-2** depend on DAG metrics being implemented (Group 04 in the DAG Prometheus Metrics plan) and on Groups 02/03 (existing tests to enhance).

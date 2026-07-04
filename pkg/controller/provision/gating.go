@@ -3,6 +3,7 @@ package provision
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -71,6 +72,23 @@ func WalkBatches(
 		return 0, fmt.Errorf("unified DAG resolution failed: %w", err)
 	}
 
+	// Pre-compute order→string for metric labels to avoid repeated allocations.
+	orderLabels := make(map[int]string, len(batches))
+	for _, batch := range batches {
+		order := batch[0].GetRunlevel().Order
+		orderLabels[order] = strconv.Itoa(order)
+	}
+
+	// Initialize per-runlevel metrics for all batches in this walk.
+	for _, batch := range batches {
+		rl := orderLabels[batch[0].GetRunlevel().Order]
+		setRunlevelStatusByLabel(rl, StatusPending)
+		RunlevelDurationSeconds.WithLabelValues(rl).Set(0)
+	}
+	RunlevelCleared.Set(0)
+	RunlevelBlocked.Set(0)
+
+	walkStart := time.Now()
 	progressBlocked := false
 	timedOut := map[string]bool{}
 
@@ -123,6 +141,11 @@ func WalkBatches(
 						Message: fmt.Sprintf("Timed out after %s; not ready: %s", dag.FormatDuration(policy.Timeout), strings.Join(notReadyInPrev, ", ")),
 					})
 
+					rl := orderLabels[currentOrder]
+					setRunlevelStatusByLabel(rl, StatusTimedOut)
+					RunlevelDurationSeconds.WithLabelValues(rl).Set(elapsed.Seconds())
+					RunlevelTimeoutTotal.WithLabelValues(rl).Inc()
+
 					for _, name := range notReadyInPrev {
 						timedOut[name] = true
 					}
@@ -153,6 +176,11 @@ func WalkBatches(
 						Message: fmt.Sprintf("Waiting up to %s on %s", dag.FormatDuration(policy.Timeout), strings.Join(notReadyInPrev, ", ")),
 					})
 
+					rl := orderLabels[currentOrder]
+					setRunlevelStatusByLabel(rl, StatusBlocked)
+					RunlevelDurationSeconds.WithLabelValues(rl).Set(elapsed.Seconds())
+					RunlevelBlocked.Set(float64(currentOrder))
+
 					requeueAfter = remaining
 
 					break
@@ -160,16 +188,31 @@ func WalkBatches(
 			}
 		}
 
+		batchStart := time.Now()
+
 		if err := processBatch(batch); err != nil {
 			return 0, err
 		}
 
+		order := batch[0].GetRunlevel().Order
+		rl := orderLabels[order]
+		setRunlevelStatusByLabel(rl, StatusProcessed)
+		if batchIdx == 0 {
+			RunlevelDurationSeconds.WithLabelValues(rl).Set(time.Since(batchStart).Seconds())
+		} else {
+			RunlevelDurationSeconds.WithLabelValues(rl).Set(time.Since(walkStart).Seconds())
+		}
+		RunlevelCleared.Set(float64(order))
+		BatchesProcessedTotal.Inc()
+
 		if batchIdx > 0 {
-			tracker.Clear(instanceID, batch[0].GetRunlevel().Order)
+			tracker.Clear(instanceID, order)
 		}
 	}
 
 	if !progressBlocked {
+		RunlevelBlocked.Set(0)
+
 		conditions.SetCondition(common.Condition{
 			Type:   status.ConditionTypeProvisioningProgress,
 			Status: metav1.ConditionTrue,
