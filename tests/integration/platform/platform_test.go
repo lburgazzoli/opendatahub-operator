@@ -81,16 +81,20 @@ func TestPlatformOnly_DAG_Advancement(t *testing.T) {
 
 	// Pre-create module operand CRs with no conditions. syncModuleCRStatus
 	// sees "CR exists, zero conditions" → OperandInitializing → blocks Ready.
+	wt := tc.NewWithT(t)
+	g := NewWithT(t)
+	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
+
 	monitoringCR := &unstructured.Unstructured{}
 	monitoringCR.SetGroupVersionKind(testModuleAGVK)
 	monitoringCR.SetName("default-monitoring")
-	NewWithT(t).Expect(cli.Create(t.Context(), monitoringCR)).Should(Succeed())
+	g.Expect(cli.Create(t.Context(), monitoringCR)).Should(Succeed())
 	t.Cleanup(func() { _ = cli.Delete(context.Background(), monitoringCR) })
 
 	aigateCR := &unstructured.Unstructured{}
 	aigateCR.SetGroupVersionKind(testModuleBGVK)
 	aigateCR.SetName("default-aigateway")
-	NewWithT(t).Expect(cli.Create(t.Context(), aigateCR)).Should(Succeed())
+	g.Expect(cli.Create(t.Context(), aigateCR)).Should(Succeed())
 	t.Cleanup(func() { _ = cli.Delete(context.Background(), aigateCR) })
 
 	createPlatform(t, tc, configv1alpha1.PlatformSpec{
@@ -99,10 +103,6 @@ func TestPlatformOnly_DAG_Advancement(t *testing.T) {
 			AIGateway:  common.ManagementSpec{ManagementState: operatorv1.Managed},
 		},
 	})
-
-	wt := tc.NewWithT(t)
-	g := NewWithT(t)
-	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
 	batchesBefore := captureBatchCount()
 
 	// Step 1: Both PlatformModule CRs created; neither is Ready yet
@@ -192,6 +192,7 @@ func TestPlatformOnly_DisableModule_Cleanup(t *testing.T) {
 	})
 
 	wt := tc.NewWithT(t)
+	g := NewWithT(t)
 	cli := tc.Client()
 
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).
@@ -201,13 +202,13 @@ func TestPlatformOnly_DisableModule_Cleanup(t *testing.T) {
 
 	// Disable monitoring by updating Platform spec.
 	p := &configv1alpha1.Platform{}
-	NewWithT(t).Expect(cli.Get(t.Context(),
+	g.Expect(cli.Get(t.Context(),
 		types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}, p)).Should(Succeed())
 	p.Spec.Modules.Monitoring = common.ManagementSpec{ManagementState: operatorv1.Removed}
-	NewWithT(t).Expect(cli.Update(t.Context(), p)).Should(Succeed())
+	g.Expect(cli.Update(t.Context(), p)).Should(Succeed())
 
 	// monitoring PlatformModule should be deleted.
-	NewWithT(t).Eventually(func() error {
+	g.Eventually(func() error {
 		return cli.Get(t.Context(),
 			types.NamespacedName{Name: "monitoring"}, &configv1alpha1.PlatformModule{})
 	}).Should(MatchError(ContainSubstring("not found")))

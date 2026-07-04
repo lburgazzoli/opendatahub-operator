@@ -126,6 +126,7 @@ func TestDSCDriven_StatusAggregation(t *testing.T) {
 	})
 
 	wt := tc.NewWithT(t)
+	g := NewWithT(t)
 	cli := tc.Client()
 	dscKey := types.NamespacedName{Name: "default-dsc"}
 
@@ -141,7 +142,7 @@ func TestDSCDriven_StatusAggregation(t *testing.T) {
 	// Phase 2: Patch module operand CR with Ready=True.
 	moduleCR := &unstructured.Unstructured{}
 	moduleCR.SetGroupVersionKind(testModuleAGVK)
-	NewWithT(t).Eventually(func() error {
+	g.Eventually(func() error {
 		return cli.Get(t.Context(), types.NamespacedName{Name: "default-aigateway"}, moduleCR)
 	}).Should(Succeed())
 
@@ -149,11 +150,11 @@ func TestDSCDriven_StatusAggregation(t *testing.T) {
 
 	// Trigger DSC re-reconcile so updateStatus picks up the new CR status.
 	latestDSC := &dscv2.DataScienceCluster{}
-	NewWithT(t).Expect(cli.Get(t.Context(), dscKey, latestDSC)).Should(Succeed())
+	g.Expect(cli.Get(t.Context(), dscKey, latestDSC)).Should(Succeed())
 	if latestDSC.Annotations == nil {
 		latestDSC.Annotations = map[string]string{}
 	}
-	NewWithT(t).Expect(cli.Update(t.Context(), latestDSC)).Should(Succeed())
+	g.Expect(cli.Update(t.Context(), latestDSC)).Should(Succeed())
 
 	wt.Get(gvk.DataScienceCluster, dscKey).Eventually().Should(
 		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .status == "True"`),
@@ -401,6 +402,7 @@ func TestDSCDriven_DisableComponent_Cleanup(t *testing.T) {
 	})
 
 	wt := tc.NewWithT(t)
+	g := NewWithT(t)
 	cli := tc.Client()
 
 	// Dashboard CR created by DSC.
@@ -409,13 +411,13 @@ func TestDSCDriven_DisableComponent_Cleanup(t *testing.T) {
 
 	// Disable Dashboard by updating DSC.
 	dsc := &dscv2.DataScienceCluster{}
-	NewWithT(t).Expect(cli.Get(t.Context(),
+	g.Expect(cli.Get(t.Context(),
 		types.NamespacedName{Name: "default-dsc"}, dsc)).Should(Succeed())
 	dsc.Spec.Components.Dashboard.ManagementState = operatorv1.Removed
-	NewWithT(t).Expect(cli.Update(t.Context(), dsc)).Should(Succeed())
+	g.Expect(cli.Update(t.Context(), dsc)).Should(Succeed())
 
 	// Dashboard CR should be deleted.
-	NewWithT(t).Eventually(func() error {
+	g.Eventually(func() error {
 		return cli.Get(t.Context(),
 			types.NamespacedName{Name: "default-dashboard"}, &componentApi.Dashboard{})
 	}).Should(MatchError(ContainSubstring("not found")))
