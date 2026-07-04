@@ -189,7 +189,7 @@ func createDSCI(t *testing.T, tc *testf.TestContext) {
 			ApplicationsNamespace: "default",
 		},
 	}
-	g.Expect(tc.Client().Create(context.Background(), dsci)).Should(Succeed())
+	g.Expect(tc.Client().Create(t.Context(), dsci)).Should(Succeed())
 	t.Cleanup(func() { _ = tc.Client().Delete(context.Background(), dsci) })
 }
 
@@ -199,11 +199,11 @@ func createGatewayConfig(t *testing.T, tc *testf.TestContext) {
 
 	gwCfg := &serviceApi.GatewayConfig{}
 	gwCfg.SetName(serviceApi.GatewayConfigName)
-	g.Expect(tc.Client().Create(context.Background(), gwCfg)).Should(Succeed())
+	g.Expect(tc.Client().Create(t.Context(), gwCfg)).Should(Succeed())
 	envt.CleanupDelete(t, g, context.Background(), tc.Client(), gwCfg)
 
 	gwCfg.Status.Domain = "example.com"
-	g.Expect(tc.Client().Status().Update(context.Background(), gwCfg)).Should(Succeed())
+	g.Expect(tc.Client().Status().Update(t.Context(), gwCfg)).Should(Succeed())
 }
 
 func createPlatform(t *testing.T, tc *testf.TestContext, spec configv1alpha1.PlatformSpec) {
@@ -214,7 +214,7 @@ func createPlatform(t *testing.T, tc *testf.TestContext, spec configv1alpha1.Pla
 		ObjectMeta: metav1.ObjectMeta{Name: configv1alpha1.PlatformInstanceName},
 		Spec:       spec,
 	}
-	g.Expect(tc.Client().Create(context.Background(), p)).Should(Succeed())
+	g.Expect(tc.Client().Create(t.Context(), p)).Should(Succeed())
 	envt.CleanupDelete(t, g, context.Background(), tc.Client(), p)
 }
 
@@ -226,7 +226,7 @@ func createDSC(t *testing.T, tc *testf.TestContext, spec dscv2.DataScienceCluste
 		ObjectMeta: metav1.ObjectMeta{Name: "default-dsc"},
 		Spec:       spec,
 	}
-	g.Expect(tc.Client().Create(context.Background(), dsc)).Should(Succeed())
+	g.Expect(tc.Client().Create(t.Context(), dsc)).Should(Succeed())
 	envt.CleanupDelete(t, g, context.Background(), tc.Client(), dsc)
 }
 
@@ -236,7 +236,7 @@ func setPlatformModuleReady(t *testing.T, cli client.Client, name string, ready 
 
 	pm := &configv1alpha1.PlatformModule{}
 	g.Eventually(func() error {
-		return cli.Get(context.Background(), types.NamespacedName{Name: name}, pm)
+		return cli.Get(t.Context(), types.NamespacedName{Name: name}, pm)
 	}).Should(Succeed())
 
 	condStatus := metav1.ConditionFalse
@@ -250,14 +250,14 @@ func setPlatformModuleReady(t *testing.T, cli client.Client, name string, ready 
 		Reason:             "Test",
 		LastTransitionTime: metav1.Now(),
 	}}
-	g.Expect(cli.Status().Update(context.Background(), pm)).Should(Succeed())
+	g.Expect(cli.Status().Update(t.Context(), pm)).Should(Succeed())
 }
 
 func setUnstructuredReady(t *testing.T, cli client.Client, u *unstructured.Unstructured, ready bool) {
 	t.Helper()
 	g := NewWithT(t)
 
-	g.Expect(cli.Get(context.Background(), client.ObjectKeyFromObject(u), u)).Should(Succeed())
+	g.Expect(cli.Get(t.Context(), client.ObjectKeyFromObject(u), u)).Should(Succeed())
 
 	condStatus := string(metav1.ConditionFalse)
 	if ready {
@@ -273,7 +273,7 @@ func setUnstructuredReady(t *testing.T, cli client.Client, u *unstructured.Unstr
 		},
 	}, "status", "conditions")
 
-	g.Expect(cli.Status().Update(context.Background(), u)).Should(Succeed())
+	g.Expect(cli.Status().Update(t.Context(), u)).Should(Succeed())
 }
 
 func registerModuleCRD(t *testing.T, et *envt.EnvT, gvkVal schema.GroupVersionKind) {
@@ -284,7 +284,7 @@ func registerModuleCRD(t *testing.T, et *envt.EnvT, gvkVal schema.GroupVersionKi
 	singular := strings.ToLower(gvkVal.Kind)
 
 	crd, err := et.RegisterCRD(
-		context.Background(),
+		t.Context(),
 		gvkVal,
 		plural, singular,
 		apiextensionsv1.ClusterScoped,
@@ -305,8 +305,9 @@ func resetDAGMetrics() {
 	provision.RunlevelBlocked.Set(0)
 }
 
-func rlStatusValue(order int, status string) float64 {
-	return testutil.ToFloat64(
-		provision.RunlevelStatus.WithLabelValues(strconv.Itoa(order), status),
-	)
+func rlStatusValue(order int, status string) func() float64 {
+	rl := strconv.Itoa(order)
+	return func() float64 {
+		return testutil.ToFloat64(provision.RunlevelStatus.WithLabelValues(rl, status))
+	}
 }

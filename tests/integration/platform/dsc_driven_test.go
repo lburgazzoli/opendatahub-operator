@@ -142,19 +142,18 @@ func TestDSCDriven_StatusAggregation(t *testing.T) {
 	moduleCR := &unstructured.Unstructured{}
 	moduleCR.SetGroupVersionKind(testModuleAGVK)
 	NewWithT(t).Eventually(func() error {
-		return cli.Get(context.Background(), types.NamespacedName{Name: "default-aigateway"}, moduleCR)
+		return cli.Get(t.Context(), types.NamespacedName{Name: "default-aigateway"}, moduleCR)
 	}).Should(Succeed())
 
 	setUnstructuredReady(t, cli, moduleCR, true)
 
 	// Trigger DSC re-reconcile so updateStatus picks up the new CR status.
 	latestDSC := &dscv2.DataScienceCluster{}
-	NewWithT(t).Expect(cli.Get(context.Background(), dscKey, latestDSC)).Should(Succeed())
+	NewWithT(t).Expect(cli.Get(t.Context(), dscKey, latestDSC)).Should(Succeed())
 	if latestDSC.Annotations == nil {
 		latestDSC.Annotations = map[string]string{}
 	}
-	latestDSC.Annotations["test/trigger"] = "ready"
-	NewWithT(t).Expect(cli.Update(context.Background(), latestDSC)).Should(Succeed())
+	NewWithT(t).Expect(cli.Update(t.Context(), latestDSC)).Should(Succeed())
 
 	wt.Get(gvk.DataScienceCluster, dscKey).Eventually().Should(
 		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .status == "True"`),
@@ -213,24 +212,33 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .message | contains("dashboard")`),
 	))
 
-	// Metrics: RL10 processed (first batch), RL20 blocked.
-	g.Eventually(func() float64 { return rlStatusValue(10, provision.StatusProcessed) }).Should(Equal(float64(1)))
-	g.Eventually(func() float64 { return rlStatusValue(20, provision.StatusBlocked) }).Should(Equal(float64(1)))
+	// Metrics: RL10 processed, RL20 blocked — DAG stuck at runlevel boundary.
+	g.Eventually(rlStatusValue(10, provision.StatusProcessed)).Should(Equal(float64(1)))
+	g.Eventually(rlStatusValue(20, provision.StatusBlocked)).Should(Equal(float64(1)))
+	g.Expect(rlStatusValue(10, provision.StatusBlocked)()).Should(Equal(float64(0)))
+	g.Expect(rlStatusValue(20, provision.StatusProcessed)()).Should(Equal(float64(0)))
+	g.Expect(testutil.ToFloat64(provision.RunlevelCleared)).Should(Equal(float64(10)))
 	g.Expect(testutil.ToFloat64(provision.RunlevelBlocked)).Should(Equal(float64(20)))
 
 	// Step 2: Create Dashboard CR and mark Ready=True → RL10 clears.
 	dashboard := &unstructured.Unstructured{}
 	dashboard.SetGroupVersionKind(gvk.Dashboard)
 	dashboard.SetName("default-dashboard")
-	g.Expect(cli.Create(context.Background(), dashboard)).Should(Succeed())
+	g.Expect(cli.Create(t.Context(), dashboard)).Should(Succeed())
 	t.Cleanup(func() { _ = cli.Delete(context.Background(), dashboard) })
 
 	setUnstructuredReady(t, cli, dashboard, true)
 
-	// Step 3: ProvisioningProgress=True → RL10 cleared.
+	// Step 3: ProvisioningProgress=True → RL10 cleared, RL20 unblocks.
 	wt.Get(gvk.Platform, nn).Eventually().Should(
 		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .status == "True"`),
 	)
+
+	// Metrics: RL20 transitioned from blocked → processed.
+	g.Eventually(rlStatusValue(20, provision.StatusProcessed)).Should(Equal(float64(1)))
+	g.Expect(rlStatusValue(20, provision.StatusBlocked)()).Should(Equal(float64(0)))
+	g.Expect(testutil.ToFloat64(provision.RunlevelBlocked)).Should(Equal(float64(0)))
+	g.Expect(testutil.ToFloat64(provision.RunlevelCleared)).Should(Equal(float64(20)))
 
 	// Step 4: aigateway PlatformModule still not ready — DSC created the module
 	// operand CR with no conditions → OperandInitializing blocks.
@@ -245,7 +253,7 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 	moduleCR := &unstructured.Unstructured{}
 	moduleCR.SetGroupVersionKind(testModuleAGVK)
 	g.Eventually(func() error {
-		return cli.Get(context.Background(), types.NamespacedName{Name: "default-aigateway"}, moduleCR)
+		return cli.Get(t.Context(), types.NamespacedName{Name: "default-aigateway"}, moduleCR)
 	}).Should(Succeed())
 
 	setUnstructuredReady(t, cli, moduleCR, true)
@@ -255,8 +263,7 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 		jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
 	))
 
-	// Metrics: both runlevels processed, DAG fully advanced.
-	g.Eventually(func() float64 { return rlStatusValue(20, provision.StatusProcessed) }).Should(Equal(float64(1)))
+	// Metrics: final state — fully advanced, nothing blocked.
 	g.Expect(testutil.ToFloat64(provision.RunlevelCleared)).Should(Equal(float64(20)))
 	g.Expect(testutil.ToFloat64(provision.RunlevelBlocked)).Should(Equal(float64(0)))
 	g.Expect(testutil.ToFloat64(provision.BatchesProcessedTotal)).Should(BeNumerically(">=", 2))
@@ -282,6 +289,7 @@ func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
 	registerModuleCRD(t, et, testModuleAGVK)
 	registerModuleCRD(t, et, testModuleBGVK)
 	createGatewayConfig(t, tc)
+	resetDAGMetrics()
 
 	createPlatform(t, tc, configv1alpha1.PlatformSpec{
 		Modules: configv1alpha1.PlatformModules{
@@ -291,6 +299,7 @@ func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
 	})
 
 	wt := tc.NewWithT(t)
+	g := NewWithT(t)
 	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
 
 	// Phase 1: Both PlatformModule CRs created.
@@ -298,6 +307,11 @@ func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
 		Eventually().Should(Succeed())
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
 		Eventually().Should(Succeed())
+
+	// Metrics: at least RL10 has been processed (first batch always runs).
+	g.Eventually(rlStatusValue(10, provision.StatusProcessed)).Should(Equal(float64(1)))
+	// RL20 may be blocked or pending while RL10 readiness is evaluated.
+	g.Expect(rlStatusValue(20, provision.StatusProcessed)()).Should(Equal(float64(0)))
 
 	// Phase 2: monitoring at RL10 becomes Ready=True (no manifests, module CR
 	// absent → OperandAbsent+Info → Ready=True).
@@ -307,6 +321,10 @@ func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
 			jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "OperandAbsent"`),
 		))
 
+	// Metrics: monitoring Ready unblocks RL20; cleared should be >= 10.
+	g.Expect(testutil.ToFloat64(provision.RunlevelCleared)).Should(BeNumerically(">=", 10))
+	g.Eventually(rlStatusValue(20, provision.StatusPending)).Should(Equal(float64(0)))
+
 	// Phase 3: aigateway at RL20 unblocked, also becomes Ready=True.
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
 		Eventually().Should(And(
@@ -314,11 +332,18 @@ func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
 			jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "OperandAbsent"`),
 		))
 
+	// Metrics: RL20 processed, DAG fully cleared.
+	g.Eventually(rlStatusValue(20, provision.StatusProcessed)).Should(Equal(float64(1)))
+	g.Expect(testutil.ToFloat64(provision.RunlevelCleared)).Should(Equal(float64(20)))
+	g.Expect(testutil.ToFloat64(provision.RunlevelBlocked)).Should(Equal(float64(0)))
+
 	// Phase 4: Platform ModulesReady=True, Ready=True.
 	wt.Get(gvk.Platform, nn).Eventually().Should(And(
 		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .status == "True"`),
 		jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
 	))
+
+	g.Expect(testutil.ToFloat64(provision.BatchesProcessedTotal)).Should(BeNumerically(">=", 2))
 }
 
 func TestDSCDriven_DisableComponent_Cleanup(t *testing.T) {
@@ -365,14 +390,14 @@ func TestDSCDriven_DisableComponent_Cleanup(t *testing.T) {
 
 	// Disable Dashboard by updating DSC.
 	dsc := &dscv2.DataScienceCluster{}
-	NewWithT(t).Expect(cli.Get(context.Background(),
+	NewWithT(t).Expect(cli.Get(t.Context(),
 		types.NamespacedName{Name: "default-dsc"}, dsc)).Should(Succeed())
 	dsc.Spec.Components.Dashboard.ManagementState = operatorv1.Removed
-	NewWithT(t).Expect(cli.Update(context.Background(), dsc)).Should(Succeed())
+	NewWithT(t).Expect(cli.Update(t.Context(), dsc)).Should(Succeed())
 
 	// Dashboard CR should be deleted.
 	NewWithT(t).Eventually(func() error {
-		return cli.Get(context.Background(),
+		return cli.Get(t.Context(),
 			types.NamespacedName{Name: "default-dashboard"}, &componentApi.Dashboard{})
 	}).Should(MatchError(ContainSubstring("not found")))
 }

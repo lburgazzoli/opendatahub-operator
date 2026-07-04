@@ -84,13 +84,13 @@ func TestPlatformOnly_DAG_Advancement(t *testing.T) {
 	monitoringCR := &unstructured.Unstructured{}
 	monitoringCR.SetGroupVersionKind(testModuleAGVK)
 	monitoringCR.SetName("default-monitoring")
-	NewWithT(t).Expect(cli.Create(context.Background(), monitoringCR)).Should(Succeed())
+	NewWithT(t).Expect(cli.Create(t.Context(), monitoringCR)).Should(Succeed())
 	t.Cleanup(func() { _ = cli.Delete(context.Background(), monitoringCR) })
 
 	aigateCR := &unstructured.Unstructured{}
 	aigateCR.SetGroupVersionKind(testModuleBGVK)
 	aigateCR.SetName("default-aigateway")
-	NewWithT(t).Expect(cli.Create(context.Background(), aigateCR)).Should(Succeed())
+	NewWithT(t).Expect(cli.Create(t.Context(), aigateCR)).Should(Succeed())
 	t.Cleanup(func() { _ = cli.Delete(context.Background(), aigateCR) })
 
 	createPlatform(t, tc, configv1alpha1.PlatformSpec{
@@ -117,9 +117,12 @@ func TestPlatformOnly_DAG_Advancement(t *testing.T) {
 		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .message | contains("monitoring")`),
 	))
 
-	// Metrics: RL10 processed, RL20 blocked.
-	g.Eventually(func() float64 { return rlStatusValue(10, provision.StatusProcessed) }).Should(Equal(float64(1)))
-	g.Eventually(func() float64 { return rlStatusValue(20, provision.StatusBlocked) }).Should(Equal(float64(1)))
+	// Metrics: RL10 processed, RL20 blocked — DAG stuck at runlevel boundary.
+	g.Eventually(rlStatusValue(10, provision.StatusProcessed)).Should(Equal(float64(1)))
+	g.Eventually(rlStatusValue(20, provision.StatusBlocked)).Should(Equal(float64(1)))
+	g.Expect(rlStatusValue(10, provision.StatusBlocked)()).Should(Equal(float64(0)))
+	g.Expect(rlStatusValue(20, provision.StatusProcessed)()).Should(Equal(float64(0)))
+	g.Expect(testutil.ToFloat64(provision.RunlevelCleared)).Should(Equal(float64(10)))
 	g.Expect(testutil.ToFloat64(provision.RunlevelBlocked)).Should(Equal(float64(20)))
 
 	// Step 2: Mark monitoring operand CR Ready → monitoring PlatformModule
@@ -140,6 +143,13 @@ func TestPlatformOnly_DAG_Advancement(t *testing.T) {
 			jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .message == "module CR has no conditions yet"`),
 		))
 
+	// Metrics: RL20 should now be processed (monitoring Ready unblocked it),
+	// even though aigateway operand isn't ready yet — the DAG batch ran.
+	g.Eventually(rlStatusValue(20, provision.StatusProcessed)).Should(Equal(float64(1)))
+	g.Expect(rlStatusValue(20, provision.StatusBlocked)()).Should(Equal(float64(0)))
+	g.Expect(testutil.ToFloat64(provision.RunlevelBlocked)).Should(Equal(float64(0)))
+	g.Expect(testutil.ToFloat64(provision.RunlevelCleared)).Should(Equal(float64(20)))
+
 	// Step 3: Mark aigateway operand CR Ready → aigateway PlatformModule
 	// becomes Ready → ModulesReady=True.
 	setUnstructuredReady(t, cli, aigateCR, true)
@@ -149,8 +159,7 @@ func TestPlatformOnly_DAG_Advancement(t *testing.T) {
 		jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
 	))
 
-	// Metrics: both runlevels processed, DAG fully advanced.
-	g.Eventually(func() float64 { return rlStatusValue(20, provision.StatusProcessed) }).Should(Equal(float64(1)))
+	// Metrics: final state — fully advanced, nothing blocked.
 	g.Expect(testutil.ToFloat64(provision.RunlevelCleared)).Should(Equal(float64(20)))
 	g.Expect(testutil.ToFloat64(provision.RunlevelBlocked)).Should(Equal(float64(0)))
 	g.Expect(testutil.ToFloat64(provision.BatchesProcessedTotal)).Should(BeNumerically(">=", 2))
@@ -182,14 +191,14 @@ func TestPlatformOnly_DisableModule_Cleanup(t *testing.T) {
 
 	// Disable monitoring by updating Platform spec.
 	p := &configv1alpha1.Platform{}
-	NewWithT(t).Expect(cli.Get(context.Background(),
+	NewWithT(t).Expect(cli.Get(t.Context(),
 		types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}, p)).Should(Succeed())
 	p.Spec.Modules.Monitoring = common.ManagementSpec{ManagementState: operatorv1.Removed}
-	NewWithT(t).Expect(cli.Update(context.Background(), p)).Should(Succeed())
+	NewWithT(t).Expect(cli.Update(t.Context(), p)).Should(Succeed())
 
 	// monitoring PlatformModule should be deleted.
 	NewWithT(t).Eventually(func() error {
-		return cli.Get(context.Background(),
+		return cli.Get(t.Context(),
 			types.NamespacedName{Name: "monitoring"}, &configv1alpha1.PlatformModule{})
 	}).Should(MatchError(ContainSubstring("not found")))
 
@@ -228,6 +237,7 @@ func TestPlatformOnly_DAG_Gating_ComponentBlocksModule(t *testing.T) {
 
 	registerModuleCRD(t, et, testModuleAGVK)
 	createGatewayConfig(t, tc)
+	resetDAGMetrics()
 
 	createPlatform(t, tc, configv1alpha1.PlatformSpec{
 		Modules: configv1alpha1.PlatformModules{
@@ -236,6 +246,7 @@ func TestPlatformOnly_DAG_Gating_ComponentBlocksModule(t *testing.T) {
 	})
 
 	wt := tc.NewWithT(t)
+	g := NewWithT(t)
 	cli := tc.Client()
 	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
 
@@ -253,19 +264,33 @@ func TestPlatformOnly_DAG_Gating_ComponentBlocksModule(t *testing.T) {
 		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .message | contains("dashboard")`),
 	))
 
+	// Metrics: RL10 processed, RL20 blocked — DAG stuck at runlevel boundary.
+	g.Eventually(rlStatusValue(10, provision.StatusProcessed)).Should(Equal(float64(1)))
+	g.Eventually(rlStatusValue(20, provision.StatusBlocked)).Should(Equal(float64(1)))
+	g.Expect(rlStatusValue(10, provision.StatusBlocked)()).Should(Equal(float64(0)))
+	g.Expect(rlStatusValue(20, provision.StatusProcessed)()).Should(Equal(float64(0)))
+	g.Expect(testutil.ToFloat64(provision.RunlevelCleared)).Should(Equal(float64(10)))
+	g.Expect(testutil.ToFloat64(provision.RunlevelBlocked)).Should(Equal(float64(20)))
+
 	// Step 2: Create Dashboard CR (no Ready condition) — still blocked.
 	dashboard := &unstructured.Unstructured{}
 	dashboard.SetGroupVersionKind(gvk.Dashboard)
 	dashboard.SetName("default-dashboard")
-	NewWithT(t).Expect(cli.Create(context.Background(), dashboard)).Should(Succeed())
+	g.Expect(cli.Create(t.Context(), dashboard)).Should(Succeed())
 	t.Cleanup(func() { _ = cli.Delete(context.Background(), dashboard) })
 
-	// Step 3: Mark Dashboard Ready=True → RL10 clears.
+	// Step 3: Mark Dashboard Ready=True → RL10 clears, RL20 unblocks.
 	setUnstructuredReady(t, cli, dashboard, true)
 
 	wt.Get(gvk.Platform, nn).Eventually().Should(
 		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .status == "True"`),
 	)
+
+	// Metrics: RL20 transitioned from blocked → processed.
+	g.Eventually(rlStatusValue(20, provision.StatusProcessed)).Should(Equal(float64(1)))
+	g.Expect(rlStatusValue(20, provision.StatusBlocked)()).Should(Equal(float64(0)))
+	g.Expect(testutil.ToFloat64(provision.RunlevelBlocked)).Should(Equal(float64(0)))
+	g.Expect(testutil.ToFloat64(provision.RunlevelCleared)).Should(Equal(float64(20)))
 
 	// Step 4: Mark monitoring PlatformModule Ready → ModulesReady=True.
 	setPlatformModuleReady(t, cli, "monitoring", true)
@@ -274,4 +299,7 @@ func TestPlatformOnly_DAG_Gating_ComponentBlocksModule(t *testing.T) {
 		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .status == "True"`),
 		jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
 	))
+
+	// Metrics: final state — fully advanced.
+	g.Expect(testutil.ToFloat64(provision.BatchesProcessedTotal)).Should(BeNumerically(">=", 2))
 }
