@@ -28,7 +28,7 @@ import (
 
 func TestDSCDriven_ComponentsAndModules_Installed(t *testing.T) {
 	moduleReg := modules.NewRegistry()
-	moduleReg.Add(newTestModuleHandler("aigateway", testModuleAGVK))
+	moduleReg.Add(newAIGatewayModuleHandler(testModuleAGVK))
 
 	componentReg := &cr.Registry{}
 	componentReg.Add(&cr.BaseComponentHandler{
@@ -88,7 +88,7 @@ func TestDSCDriven_ComponentsAndModules_Installed(t *testing.T) {
 
 func TestDSCDriven_StatusAggregation(t *testing.T) {
 	moduleReg := modules.NewRegistry()
-	moduleReg.Add(newTestModuleHandler("aigateway", testModuleAGVK))
+	moduleReg.Add(newAIGatewayModuleHandler(testModuleAGVK))
 
 	componentReg := &cr.Registry{}
 	componentReg.Add(&cr.BaseComponentHandler{
@@ -163,7 +163,7 @@ func TestDSCDriven_StatusAggregation(t *testing.T) {
 
 func TestDSCDriven_DAG_Advancement(t *testing.T) {
 	moduleReg := modules.NewRegistry()
-	moduleReg.Add(newTestModuleHandler("aigateway", testModuleAGVK))
+	moduleReg.Add(newAIGatewayModuleHandler(testModuleAGVK))
 
 	componentReg := &cr.Registry{}
 	componentReg.Add(&cr.BaseComponentHandler{
@@ -424,11 +424,16 @@ func TestDSCDriven_DisableComponent_Cleanup(t *testing.T) {
 }
 
 func TestDSCDriven_PlatformReflectsDSC(t *testing.T) {
-	_, tc := startAllControllers(t, suiteOpts{
-		moduleReg:    modules.NewRegistry(),
+	moduleReg := modules.NewRegistry()
+	moduleReg.Add(newAIGatewayModuleHandler(testModuleAGVK))
+
+	et, tc := startAllControllers(t, suiteOpts{
+		moduleReg:    moduleReg,
 		componentReg: &cr.Registry{},
 		provisionReg: provision.NewRegistry(),
 	})
+
+	registerModuleCRD(t, et, testModuleAGVK)
 
 	createGatewayConfig(t, tc)
 	createDSCI(t, tc)

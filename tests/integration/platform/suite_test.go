@@ -61,6 +61,7 @@ var testModuleBGVK = schema.GroupVersionKind{
 
 type testModuleHandler struct {
 	modules.BaseHandler
+	applyFn func(*modules.PlatformContext, *configv1alpha1.PlatformModules)
 }
 
 func (h *testModuleHandler) BuildModuleCR(
@@ -74,7 +75,11 @@ func (h *testModuleHandler) BuildModuleCR(
 	return u, nil
 }
 
-func (h *testModuleHandler) ApplyManagementState(_ *modules.PlatformContext, _ *configv1alpha1.PlatformModules) {}
+func (h *testModuleHandler) ApplyManagementState(ctx *modules.PlatformContext, spec *configv1alpha1.PlatformModules) {
+	if h.applyFn != nil {
+		h.applyFn(ctx, spec)
+	}
+}
 
 func (h *testModuleHandler) IsEnabled(_ *modules.PlatformContext) bool {
 	return true
@@ -88,6 +93,29 @@ func newTestModuleHandler(name string, gvkVal schema.GroupVersionKind) *testModu
 				GVK:    gvkVal,
 				CRName: "default-" + name,
 			},
+		},
+	}
+}
+
+// newAIGatewayModuleHandler creates a test handler named "aigateway" with an
+// ApplyManagementState implementation that reads from DSC.Spec.Components.AIGateway,
+// mirroring the real aigateway handler's behaviour in integration tests.
+func newAIGatewayModuleHandler(gvkVal schema.GroupVersionKind) *testModuleHandler {
+	return &testModuleHandler{
+		BaseHandler: modules.BaseHandler{
+			Config: modules.ModuleConfig{
+				Name:   "aigateway",
+				GVK:    gvkVal,
+				CRName: "default-aigateway",
+			},
+		},
+		applyFn: func(ctx *modules.PlatformContext, spec *configv1alpha1.PlatformModules) {
+			if ctx == nil || ctx.DSC == nil {
+				return
+			}
+			spec.AIGateway = common.ManagementSpec{
+				ManagementState: ctx.DSC.Spec.Components.AIGateway.ManagementState,
+			}
 		},
 	}
 }
