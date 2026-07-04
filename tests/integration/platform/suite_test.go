@@ -257,23 +257,24 @@ func setUnstructuredReady(t *testing.T, cli client.Client, u *unstructured.Unstr
 	t.Helper()
 	g := NewWithT(t)
 
-	condStatus := string(metav1.ConditionFalse)
+	condStatus := metav1.ConditionFalse
 	if ready {
-		condStatus = string(metav1.ConditionTrue)
+		condStatus = metav1.ConditionTrue
 	}
 
 	g.Eventually(func() error {
 		if err := cli.Get(t.Context(), client.ObjectKeyFromObject(u), u); err != nil {
 			return err
 		}
-		_ = unstructured.SetNestedSlice(u.Object, []any{
-			map[string]any{
-				"type":               status.ConditionTypeReady,
-				"status":             condStatus,
-				"reason":             "Test",
-				"lastTransitionTime": metav1.Now().UTC().Format("2006-01-02T15:04:05Z"),
-			},
-		}, "status", "conditions")
+
+		obj := common.NewUnstructuredPlatformObject(u)
+		obj.SetConditions([]common.Condition{{
+			Type:               status.ConditionTypeReady,
+			Status:             condStatus,
+			Reason:             "Test",
+			LastTransitionTime: metav1.Now(),
+		}})
+
 		return cli.Status().Update(t.Context(), u)
 	}).Should(Succeed())
 }
