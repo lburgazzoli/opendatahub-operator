@@ -3,9 +3,11 @@ package platform_test
 import (
 	"context"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/spf13/viper"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -290,4 +292,21 @@ func registerModuleCRD(t *testing.T, et *envt.EnvT, gvkVal schema.GroupVersionKi
 	)
 	g.Expect(err).NotTo(HaveOccurred())
 	envt.CleanupDelete(t, g, context.Background(), et.Client(), crd)
+}
+
+// ---------------------------------------------------------------------------
+// DAG metric helpers
+// ---------------------------------------------------------------------------
+
+func resetDAGMetrics() {
+	provision.RunlevelStatus.Reset()
+	provision.RunlevelDurationSeconds.Reset()
+	provision.RunlevelCleared.Set(0)
+	provision.RunlevelBlocked.Set(0)
+}
+
+func rlStatusValue(order int, status string) float64 {
+	return testutil.ToFloat64(
+		provision.RunlevelStatus.WithLabelValues(strconv.Itoa(order), status),
+	)
 }

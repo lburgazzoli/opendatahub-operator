@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -74,6 +75,7 @@ func TestPlatformOnly_DAG_Advancement(t *testing.T) {
 	registerModuleCRD(t, et, testModuleAGVK)
 	registerModuleCRD(t, et, testModuleBGVK)
 	createGatewayConfig(t, tc)
+	resetDAGMetrics()
 
 	cli := tc.Client()
 
@@ -99,6 +101,7 @@ func TestPlatformOnly_DAG_Advancement(t *testing.T) {
 	})
 
 	wt := tc.NewWithT(t)
+	g := NewWithT(t)
 	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
 
 	// Step 1: Both PlatformModule CRs created; neither is Ready yet
@@ -113,6 +116,11 @@ func TestPlatformOnly_DAG_Advancement(t *testing.T) {
 		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .reason == "NotReady"`),
 		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .message | contains("monitoring")`),
 	))
+
+	// Metrics: RL10 processed, RL20 blocked.
+	g.Eventually(func() float64 { return rlStatusValue(10, provision.StatusProcessed) }).Should(Equal(float64(1)))
+	g.Eventually(func() float64 { return rlStatusValue(20, provision.StatusBlocked) }).Should(Equal(float64(1)))
+	g.Expect(testutil.ToFloat64(provision.RunlevelBlocked)).Should(Equal(float64(20)))
 
 	// Step 2: Mark monitoring operand CR Ready → monitoring PlatformModule
 	// becomes Ready → walkModuleDAG clears RL10.
@@ -140,6 +148,12 @@ func TestPlatformOnly_DAG_Advancement(t *testing.T) {
 		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .status == "True"`),
 		jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
 	))
+
+	// Metrics: both runlevels processed, DAG fully advanced.
+	g.Eventually(func() float64 { return rlStatusValue(20, provision.StatusProcessed) }).Should(Equal(float64(1)))
+	g.Expect(testutil.ToFloat64(provision.RunlevelCleared)).Should(Equal(float64(20)))
+	g.Expect(testutil.ToFloat64(provision.RunlevelBlocked)).Should(Equal(float64(0)))
+	g.Expect(testutil.ToFloat64(provision.BatchesProcessedTotal)).Should(BeNumerically(">=", 2))
 }
 
 func TestPlatformOnly_DisableModule_Cleanup(t *testing.T) {

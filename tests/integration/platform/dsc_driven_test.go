@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
@@ -185,6 +186,7 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 	registerModuleCRD(t, et, testModuleAGVK)
 	createGatewayConfig(t, tc)
 	createDSCI(t, tc)
+	resetDAGMetrics()
 
 	createDSC(t, tc, dscv2.DataScienceClusterSpec{
 		Components: dscv2.Components{
@@ -197,6 +199,7 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 	})
 
 	wt := tc.NewWithT(t)
+	g := NewWithT(t)
 	cli := tc.Client()
 	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
 
@@ -210,11 +213,16 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .message | contains("dashboard")`),
 	))
 
+	// Metrics: RL10 processed (first batch), RL20 blocked.
+	g.Eventually(func() float64 { return rlStatusValue(10, provision.StatusProcessed) }).Should(Equal(float64(1)))
+	g.Eventually(func() float64 { return rlStatusValue(20, provision.StatusBlocked) }).Should(Equal(float64(1)))
+	g.Expect(testutil.ToFloat64(provision.RunlevelBlocked)).Should(Equal(float64(20)))
+
 	// Step 2: Create Dashboard CR and mark Ready=True → RL10 clears.
 	dashboard := &unstructured.Unstructured{}
 	dashboard.SetGroupVersionKind(gvk.Dashboard)
 	dashboard.SetName("default-dashboard")
-	NewWithT(t).Expect(cli.Create(context.Background(), dashboard)).Should(Succeed())
+	g.Expect(cli.Create(context.Background(), dashboard)).Should(Succeed())
 	t.Cleanup(func() { _ = cli.Delete(context.Background(), dashboard) })
 
 	setUnstructuredReady(t, cli, dashboard, true)
@@ -236,7 +244,7 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 	// Step 5: Mark module operand CR Ready → PlatformModule Ready → ModulesReady=True.
 	moduleCR := &unstructured.Unstructured{}
 	moduleCR.SetGroupVersionKind(testModuleAGVK)
-	NewWithT(t).Eventually(func() error {
+	g.Eventually(func() error {
 		return cli.Get(context.Background(), types.NamespacedName{Name: "default-aigateway"}, moduleCR)
 	}).Should(Succeed())
 
@@ -246,6 +254,12 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 		jq.Match(`.status.conditions[] | select(.type == "ModulesReady") | .status == "True"`),
 		jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
 	))
+
+	// Metrics: both runlevels processed, DAG fully advanced.
+	g.Eventually(func() float64 { return rlStatusValue(20, provision.StatusProcessed) }).Should(Equal(float64(1)))
+	g.Expect(testutil.ToFloat64(provision.RunlevelCleared)).Should(Equal(float64(20)))
+	g.Expect(testutil.ToFloat64(provision.RunlevelBlocked)).Should(Equal(float64(0)))
+	g.Expect(testutil.ToFloat64(provision.BatchesProcessedTotal)).Should(BeNumerically(">=", 2))
 }
 
 func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
