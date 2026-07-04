@@ -748,6 +748,46 @@ func UnsetOwnerReferences(ctx context.Context, cli client.Client, instanceName s
 // Returns:
 //   - string: The gateway domain from GatewayConfig.Status.Domain
 //   - error: An error if the GatewayConfig doesn't exist or domain is empty
+// DeleteAllOwnedBy lists all cluster-scoped resources of the given GVK and
+// deletes those whose controller owner matches owner (checked via
+// metav1.IsControlledBy). The function iterates all CRs of the GVK but only
+// deletes those actually owned by owner — CRs owned by a different controller
+// (e.g. a DSCI-owned Monitoring CR when called from the DSC controller) are
+// left untouched. IsNoMatchError (CRD not installed) and NotFound are handled
+// gracefully so the call is safe to make even when the CRD has not been
+// installed yet.
+func DeleteAllOwnedBy(
+	ctx context.Context,
+	cli client.Client,
+	gvk schema.GroupVersionKind,
+	owner metav1.Object,
+	propagation metav1.DeletionPropagation,
+) error {
+	list := &unstructured.UnstructuredList{}
+	list.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   gvk.Group,
+		Version: gvk.Version,
+		Kind:    gvk.Kind + "List",
+	})
+
+	if err := cli.List(ctx, list); err != nil {
+		if meta.IsNoMatchError(err) {
+			return nil
+		}
+		return err
+	}
+
+	for i := range list.Items {
+		obj := &list.Items[i]
+		if metav1.IsControlledBy(obj, owner) {
+			if err := cli.Delete(ctx, obj, client.PropagationPolicy(propagation)); client.IgnoreNotFound(err) != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func GetGatewayDomain(ctx context.Context, cli client.Client) (string, error) {
 	gatewayConfig := &serviceApi.GatewayConfig{}
 	gatewayConfig.SetName(serviceApi.GatewayConfigName)

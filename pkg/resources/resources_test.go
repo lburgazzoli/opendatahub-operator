@@ -343,6 +343,64 @@ func TestFormatObjectReference(t *testing.T) {
 	}
 }
 
+func TestDeleteAllOwnedBy(t *testing.T) {
+	g := NewWithT(t)
+	ctx := t.Context()
+
+	owner := &dscv2.DataScienceCluster{}
+	owner.SetName("default-dsc")
+	owner.SetUID("dsc-uid-1")
+
+	other := &dsciv2.DSCInitialization{}
+	other.SetName("default-dsci")
+	other.SetUID("dsci-uid-1")
+
+	targetGVK := gvk.AIGateway
+
+	makeResource := func(name string, ctrl metav1.Object) *unstructured.Unstructured {
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(targetGVK)
+		u.SetName(name)
+		if ctrl != nil {
+			refs := []metav1.OwnerReference{{
+				APIVersion: "datasciencecluster.opendatahub.io/v2",
+				Kind:       "DataScienceCluster",
+				Name:       ctrl.GetName(),
+				UID:        ctrl.GetUID(),
+				Controller: func(b bool) *bool { return &b }(true),
+			}}
+			u.SetOwnerReferences(refs)
+		}
+		return u
+	}
+
+	owned := makeResource("owned", owner)
+	notOwned := makeResource("not-owned", other)
+	noOwner := makeResource("no-owner", nil)
+
+	cli, err := fakeclient.New(
+		fakeclient.WithObjects(owned, notOwned, noOwner),
+		fakeclient.WithGVKs(fakeclient.GVKMapping{GVK: targetGVK}),
+	)
+	g.Expect(err).ShouldNot(HaveOccurred())
+
+	err = resources.DeleteAllOwnedBy(ctx, cli, targetGVK, owner, metav1.DeletePropagationForeground)
+	g.Expect(err).ShouldNot(HaveOccurred())
+
+	list := &unstructured.UnstructuredList{}
+	list.SetGroupVersionKind(schema.GroupVersionKind{
+		Group: targetGVK.Group, Version: targetGVK.Version, Kind: targetGVK.Kind + "List",
+	})
+	g.Expect(cli.List(ctx, list)).To(Succeed())
+
+	names := make([]string, 0, len(list.Items))
+	for _, item := range list.Items {
+		names = append(names, item.GetName())
+	}
+
+	g.Expect(names).To(ConsistOf("not-owned", "no-owner"))
+}
+
 func TestHasCRD(t *testing.T) {
 	g := NewWithT(t)
 	ctx := t.Context()

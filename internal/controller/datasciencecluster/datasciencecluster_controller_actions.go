@@ -2,11 +2,10 @@ package datasciencecluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 
-	k8serr "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -21,6 +20,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	odhtype "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
 )
 
 const (
@@ -72,52 +72,41 @@ func (r *Reconciler) checkPreConditions(ctx context.Context, rr *odhtype.Reconci
 }
 
 // cleanupDisabledComponents deletes component CRs for disabled in-tree components.
-// Single-phase: components have no finalizer-based operator keepalive pattern.
+// It iterates all registered components but only deletes CRs that are actually
+// owned by this DSC instance (metav1.IsControlledBy). This prevents accidental
+// deletion of CRs created by a different controller.
 func (r *Reconciler) cleanupDisabledComponents(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
 	instance, ok := rr.Instance.(*dscv2.DataScienceCluster)
 	if !ok {
 		return fmt.Errorf("resource instance %v is not a dscv2.DataScienceCluster)", rr.Instance)
 	}
 
-	log := logf.FromContext(ctx)
+	var errs []error
 
 	_ = r.ComponentRegistry.ForEach(func(h cr.ComponentHandler) error {
 		if h.IsEnabled(instance) {
 			return nil
 		}
-
-		ci, err := h.NewCRObject(ctx, rr.Client, instance)
-		if err != nil {
-			return nil //nolint:nilerr
+		if err := resources.DeleteAllOwnedBy(ctx, rr.Client, h.GroupVersionKind(), instance, r.DeletePropagation); err != nil {
+			errs = append(errs, fmt.Errorf("component %s: %w", h.GetName(), err))
 		}
-		if isNilInterface(ci) {
-			return nil
-		}
-
-		obj, ok := ci.(client.Object)
-		if !ok {
-			return nil
-		}
-
-		if err := rr.Client.Delete(ctx, obj, client.PropagationPolicy(r.DeletePropagation)); client.IgnoreNotFound(err) != nil {
-			log.Error(err, "failed to delete disabled component CR", "component", h.GetName())
-		}
-
 		return nil
 	})
 
+	if len(errs) > 1 {
+		return errors.Join(errs...)
+	}
+	if len(errs) == 1 {
+		return errs[0]
+	}
 	return nil
 }
 
 // cleanupDisabledModules deletes module operand CRs for disabled modules.
-// handler.DeleteModuleCR() is idempotent and handles NotFound/IsNoMatchError.
-// cleanupDisabledModules deletes module operand CRs for disabled modules.
-// handler.DeleteModuleCR() is idempotent and handles NotFound/IsNoMatchError.
-// DSCI is included so that DSCI-owned modules (e.g. Monitoring) evaluate their
-// IsEnabled correctly: if monitoring is enabled in DSCI, IsEnabled returns true
-// and the DSC controller skips deletion, avoiding a reconcile fight with the
-// DSCI controller. Contrast with provisionModuleCRs, which intentionally omits
-// DSCI so DSC never provisions DSCI-owned module CRs in the first place.
+// It iterates all registered modules but only deletes CRs that are actually
+// owned by this DSC instance (metav1.IsControlledBy). DSCI-owned module CRs
+// (e.g. Monitoring) carry DSCI as their controller owner, not DSC, so they
+// are naturally skipped without any DSCI lookup.
 func (r *Reconciler) cleanupDisabledModules(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
 	instance, ok := rr.Instance.(*dscv2.DataScienceCluster)
 	if !ok {
@@ -128,25 +117,26 @@ func (r *Reconciler) cleanupDisabledModules(ctx context.Context, rr *odhtype.Rec
 		return nil
 	}
 
-	dsci, err := cluster.GetDSCI(ctx, rr.Client)
-	if err != nil {
-		if k8serr.IsNotFound(err) || meta.IsNoMatchError(err) {
-			return nil
-		}
-		return fmt.Errorf("failed to get DSCI for module cleanup: %w", err)
-	}
+	platformCtx := &modules.PlatformContext{DSC: instance}
 
-	platformCtx := &modules.PlatformContext{DSC: instance, DSCI: dsci}
+	var errs []error
 
 	_ = r.ModuleRegistry.ForAll(func(h modules.ModuleHandler, _ bool) error {
 		if h.IsEnabled(platformCtx) {
 			return nil
 		}
-		// DeleteModuleCR handles NotFound and IsNoMatchError internally.
-		_ = h.DeleteModuleCR(ctx, rr.Client)
+		if err := resources.DeleteAllOwnedBy(ctx, rr.Client, h.GetGroupVersionKind(), instance, r.DeletePropagation); err != nil {
+			errs = append(errs, fmt.Errorf("module %s: %w", h.GetName(), err))
+		}
 		return nil
 	})
 
+	if len(errs) > 1 {
+		return errors.Join(errs...)
+	}
+	if len(errs) == 1 {
+		return errs[0]
+	}
 	return nil
 }
 
