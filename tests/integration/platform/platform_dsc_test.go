@@ -201,6 +201,7 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 	g := NewWithT(t)
 	cli := tc.Client()
 	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
+	batchesBefore := captureBatchCount()
 
 	// Step 1: PlatformModule created but DAG blocked at RL10 — no Dashboard CR.
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
@@ -213,12 +214,16 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 	))
 
 	// Metrics: RL10 processed, RL20 blocked — DAG stuck at runlevel boundary.
-	g.Eventually(prom.GaugeVecValue(provision.RunlevelStatus, "10", provision.StatusProcessed)).Should(Equal(float64(1)))
-	g.Eventually(prom.GaugeVecValue(provision.RunlevelStatus, "20", provision.StatusBlocked)).Should(Equal(float64(1)))
-	g.Expect(provision.RunlevelStatus).Should(prom.HaveGaugeVecValue(0, "10", provision.StatusBlocked))
-	g.Expect(provision.RunlevelStatus).Should(prom.HaveGaugeVecValue(0, "20", provision.StatusProcessed))
-	g.Expect(provision.RunlevelCleared).Should(prom.HaveValue(10))
-	g.Expect(provision.RunlevelBlocked).Should(prom.HaveValue(20))
+	g.Eventually(func(g Gomega) {
+		g.Expect(provision.RunlevelStatus).To(And(
+			prom.HaveGaugeVecValue(1, "10", provision.StatusProcessed),
+			prom.HaveGaugeVecValue(0, "10", provision.StatusBlocked),
+			prom.HaveGaugeVecValue(1, "20", provision.StatusBlocked),
+			prom.HaveGaugeVecValue(0, "20", provision.StatusProcessed),
+		))
+		g.Expect(provision.RunlevelCleared).To(prom.HaveValue(10))
+		g.Expect(provision.RunlevelBlocked).To(prom.HaveValue(20))
+	}).Should(Succeed())
 
 	// Step 2: Create Dashboard CR and mark Ready=True → RL10 clears.
 	dashboard := &unstructured.Unstructured{}
@@ -235,10 +240,14 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 	)
 
 	// Metrics: RL20 transitioned from blocked → processed.
-	g.Eventually(prom.GaugeVecValue(provision.RunlevelStatus, "20", provision.StatusProcessed)).Should(Equal(float64(1)))
-	g.Expect(provision.RunlevelStatus).Should(prom.HaveGaugeVecValue(0, "20", provision.StatusBlocked))
-	g.Expect(provision.RunlevelBlocked).Should(prom.HaveValue(0))
-	g.Expect(provision.RunlevelCleared).Should(prom.HaveValue(20))
+	g.Eventually(func(g Gomega) {
+		g.Expect(provision.RunlevelStatus).To(And(
+			prom.HaveGaugeVecValue(1, "20", provision.StatusProcessed),
+			prom.HaveGaugeVecValue(0, "20", provision.StatusBlocked),
+		))
+		g.Expect(provision.RunlevelCleared).To(prom.HaveValue(20))
+		g.Expect(provision.RunlevelBlocked).To(prom.HaveValue(0))
+	}).Should(Succeed())
 
 	// Step 4: aigateway PlatformModule still not ready — DSC created the module
 	// operand CR with no conditions → OperandInitializing blocks.
@@ -264,9 +273,11 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 	))
 
 	// Metrics: final state — fully advanced, nothing blocked.
-	g.Expect(provision.RunlevelCleared).Should(prom.HaveValue(20))
-	g.Expect(provision.RunlevelBlocked).Should(prom.HaveValue(0))
-	g.Expect(provision.BatchesProcessedTotal).Should(prom.HaveValueWith(">=", 2))
+	g.Eventually(func(g Gomega) {
+		g.Expect(provision.RunlevelCleared).To(prom.HaveValue(20))
+		g.Expect(provision.RunlevelBlocked).To(prom.HaveValue(0))
+		g.Expect(captureBatchCount() - batchesBefore).To(BeNumerically(">=", 2))
+	}).Should(Succeed())
 }
 
 func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
@@ -301,6 +312,7 @@ func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
 	wt := tc.NewWithT(t)
 	g := NewWithT(t)
 	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
+	batchesBefore := captureBatchCount()
 
 	// Phase 1: Both PlatformModule CRs created.
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).
@@ -309,9 +321,10 @@ func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
 		Eventually().Should(Succeed())
 
 	// Metrics: at least RL10 has been processed (first batch always runs).
-	g.Eventually(prom.GaugeVecValue(provision.RunlevelStatus, "10", provision.StatusProcessed)).Should(Equal(float64(1)))
-	// RL20 may be blocked or pending while RL10 readiness is evaluated.
-	g.Expect(provision.RunlevelStatus).Should(prom.HaveGaugeVecValue(0, "20", provision.StatusProcessed))
+	g.Eventually(func(g Gomega) {
+		g.Expect(provision.RunlevelStatus).To(prom.HaveGaugeVecValue(1, "10", provision.StatusProcessed))
+		g.Expect(provision.RunlevelStatus).To(prom.HaveGaugeVecValue(0, "20", provision.StatusProcessed))
+	}).Should(Succeed())
 
 	// Phase 2: monitoring at RL10 becomes Ready=True (no manifests, module CR
 	// absent → OperandAbsent+Info → Ready=True).
@@ -321,9 +334,11 @@ func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
 			jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "OperandAbsent"`),
 		))
 
-	// Metrics: monitoring Ready unblocks RL20; cleared should be >= 10.
-	g.Expect(provision.RunlevelCleared).Should(prom.HaveValueWith(">=", 10))
-	g.Eventually(prom.GaugeVecValue(provision.RunlevelStatus, "20", provision.StatusPending)).Should(Equal(float64(0)))
+	// Metrics: monitoring Ready unblocks RL20.
+	g.Eventually(func(g Gomega) {
+		g.Expect(provision.RunlevelCleared).To(prom.HaveValueWith(">=", 10))
+		g.Expect(provision.RunlevelStatus).To(prom.HaveGaugeVecValue(0, "20", provision.StatusPending))
+	}).Should(Succeed())
 
 	// Phase 3: aigateway at RL20 unblocked, also becomes Ready=True.
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
@@ -333,9 +348,11 @@ func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
 		))
 
 	// Metrics: RL20 processed, DAG fully cleared.
-	g.Eventually(prom.GaugeVecValue(provision.RunlevelStatus, "20", provision.StatusProcessed)).Should(Equal(float64(1)))
-	g.Expect(provision.RunlevelCleared).Should(prom.HaveValue(20))
-	g.Expect(provision.RunlevelBlocked).Should(prom.HaveValue(0))
+	g.Eventually(func(g Gomega) {
+		g.Expect(provision.RunlevelStatus).To(prom.HaveGaugeVecValue(1, "20", provision.StatusProcessed))
+		g.Expect(provision.RunlevelCleared).To(prom.HaveValue(20))
+		g.Expect(provision.RunlevelBlocked).To(prom.HaveValue(0))
+	}).Should(Succeed())
 
 	// Phase 4: Platform ModulesReady=True, Ready=True.
 	wt.Get(gvk.Platform, nn).Eventually().Should(And(
@@ -343,7 +360,9 @@ func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
 		jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
 	))
 
-	g.Expect(provision.BatchesProcessedTotal).Should(prom.HaveValueWith(">=", 2))
+	g.Eventually(func(g Gomega) {
+		g.Expect(captureBatchCount() - batchesBefore).To(BeNumerically(">=", 2))
+	}).Should(Succeed())
 }
 
 func TestDSCDriven_DisableComponent_Cleanup(t *testing.T) {

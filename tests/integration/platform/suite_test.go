@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/spf13/viper"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -232,46 +233,49 @@ func setPlatformModuleReady(t *testing.T, cli client.Client, name string, ready 
 	t.Helper()
 	g := NewWithT(t)
 
-	pm := &configv1alpha1.PlatformModule{}
-	g.Eventually(func() error {
-		return cli.Get(t.Context(), types.NamespacedName{Name: name}, pm)
-	}).Should(Succeed())
-
 	condStatus := metav1.ConditionFalse
 	if ready {
 		condStatus = metav1.ConditionTrue
 	}
 
-	pm.Status.Conditions = []common.Condition{{
-		Type:               status.ConditionTypeReady,
-		Status:             condStatus,
-		Reason:             "Test",
-		LastTransitionTime: metav1.Now(),
-	}}
-	g.Expect(cli.Status().Update(t.Context(), pm)).Should(Succeed())
+	g.Eventually(func() error {
+		pm := &configv1alpha1.PlatformModule{}
+		if err := cli.Get(t.Context(), types.NamespacedName{Name: name}, pm); err != nil {
+			return err
+		}
+		pm.Status.Conditions = []common.Condition{{
+			Type:               status.ConditionTypeReady,
+			Status:             condStatus,
+			Reason:             "Test",
+			LastTransitionTime: metav1.Now(),
+		}}
+		return cli.Status().Update(t.Context(), pm)
+	}).Should(Succeed())
 }
 
 func setUnstructuredReady(t *testing.T, cli client.Client, u *unstructured.Unstructured, ready bool) {
 	t.Helper()
 	g := NewWithT(t)
 
-	g.Expect(cli.Get(t.Context(), client.ObjectKeyFromObject(u), u)).Should(Succeed())
-
 	condStatus := string(metav1.ConditionFalse)
 	if ready {
 		condStatus = string(metav1.ConditionTrue)
 	}
 
-	_ = unstructured.SetNestedSlice(u.Object, []any{
-		map[string]any{
-			"type":               status.ConditionTypeReady,
-			"status":             condStatus,
-			"reason":             "Test",
-			"lastTransitionTime": metav1.Now().UTC().Format("2006-01-02T15:04:05Z"),
-		},
-	}, "status", "conditions")
-
-	g.Expect(cli.Status().Update(t.Context(), u)).Should(Succeed())
+	g.Eventually(func() error {
+		if err := cli.Get(t.Context(), client.ObjectKeyFromObject(u), u); err != nil {
+			return err
+		}
+		_ = unstructured.SetNestedSlice(u.Object, []any{
+			map[string]any{
+				"type":               status.ConditionTypeReady,
+				"status":             condStatus,
+				"reason":             "Test",
+				"lastTransitionTime": metav1.Now().UTC().Format("2006-01-02T15:04:05Z"),
+			},
+		}, "status", "conditions")
+		return cli.Status().Update(t.Context(), u)
+	}).Should(Succeed())
 }
 
 func registerModuleCRD(t *testing.T, et *envt.EnvT, gvkVal schema.GroupVersionKind) {
@@ -301,4 +305,9 @@ func resetDAGMetrics() {
 	provision.RunlevelDurationSeconds.Reset()
 	provision.RunlevelCleared.Set(0)
 	provision.RunlevelBlocked.Set(0)
+	provision.RunlevelTimeoutTotal.Reset()
+}
+
+func captureBatchCount() float64 {
+	return testutil.ToFloat64(provision.BatchesProcessedTotal)
 }

@@ -236,6 +236,8 @@ func TestWalkBatches_TimeoutDoesNotForgiveNewStuckEntry(t *testing.T) {
 		"alpha timed out at RL31, but bravo is newly stuck at RL33 and should gate charlie")
 	assert.Equal(t, status.AwaitingReadinessReason, conds.last().Reason,
 		"should be awaiting readiness on bravo, not skipped")
+	assert.Equal(t, float64(33), testutil.ToFloat64(provision.RunlevelBlocked),
+		"RunlevelBlocked should reflect RL33 where bravo is stuck")
 }
 
 func TestWalkBatches_ProcessBatchErrorHaltsWalk(t *testing.T) {
@@ -273,6 +275,16 @@ func rlDuration(runlevel string) float64 {
 	return testutil.ToFloat64(provision.RunlevelDurationSeconds.WithLabelValues(runlevel))
 }
 
+func assertRunlevelStatusSum(t *testing.T, runlevel string) {
+	t.Helper()
+	sum := rlStatus(runlevel, provision.StatusPending) +
+		rlStatus(runlevel, provision.StatusProcessed) +
+		rlStatus(runlevel, provision.StatusBlocked) +
+		rlStatus(runlevel, provision.StatusTimedOut)
+	assert.Equal(t, float64(1), sum,
+		"info-style invariant: exactly one status label must be 1 for runlevel %s", runlevel)
+}
+
 func TestWalkBatches_Metrics_AllReady(t *testing.T) {
 	resetDefaultRegistry(t, map[string]dag.Runlevel{
 		"alpha": dag.RL(20),
@@ -294,9 +306,11 @@ func TestWalkBatches_Metrics_AllReady(t *testing.T) {
 	assert.Equal(t, float64(0), rlStatus("20", provision.StatusPending))
 	assert.Equal(t, float64(0), rlStatus("20", provision.StatusBlocked))
 	assert.Equal(t, float64(0), rlStatus("20", provision.StatusTimedOut))
+	assertRunlevelStatusSum(t, "20")
 
 	assert.Equal(t, float64(1), rlStatus("31", provision.StatusProcessed))
 	assert.Equal(t, float64(0), rlStatus("31", provision.StatusBlocked))
+	assertRunlevelStatusSum(t, "31")
 
 	// Aggregate: cleared = 31, blocked = 0.
 	assert.Equal(t, float64(31), testutil.ToFloat64(provision.RunlevelCleared))
@@ -333,6 +347,8 @@ func TestWalkBatches_Metrics_GatingBlocks(t *testing.T) {
 	assert.Equal(t, float64(1), rlStatus("31", provision.StatusBlocked))
 	assert.Equal(t, float64(0), rlStatus("31", provision.StatusProcessed))
 	assert.Equal(t, float64(0), rlStatus("31", provision.StatusPending))
+	assertRunlevelStatusSum(t, "20")
+	assertRunlevelStatusSum(t, "31")
 
 	// Aggregate: cleared = 20, blocked = 31.
 	assert.Equal(t, float64(20), testutil.ToFloat64(provision.RunlevelCleared))
@@ -371,12 +387,14 @@ func TestWalkBatches_Metrics_Timeout(t *testing.T) {
 	// The final status for RL31 is "processed" because after timeout the
 	// batch is still executed.
 	assert.Equal(t, float64(1), rlStatus("31", provision.StatusProcessed))
+	assertRunlevelStatusSum(t, "20")
+	assertRunlevelStatusSum(t, "31")
 
 	// Timeout counter incremented for RL31.
 	assert.Equal(t, float64(1),
 		testutil.ToFloat64(provision.RunlevelTimeoutTotal.WithLabelValues("31")))
 
-	// Both cleared.
+	// Both cleared, nothing blocked.
 	assert.Equal(t, float64(31), testutil.ToFloat64(provision.RunlevelCleared))
 	assert.Equal(t, float64(0), testutil.ToFloat64(provision.RunlevelBlocked))
 }

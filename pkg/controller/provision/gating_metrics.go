@@ -28,9 +28,9 @@ var (
 	)
 
 	// RunlevelDurationSeconds reports how long (in seconds) a runlevel
-	// has been in its current state. For processed runlevels this is the
-	// batch processing time; for blocked runlevels this is the waiting
-	// time sourced from StuckTracker.
+	// has been in the DAG walk, measured from the walk start time. For
+	// processed runlevels this is the elapsed time at completion; for
+	// blocked runlevels this is the elapsed time at the gating check.
 	RunlevelDurationSeconds = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "odh_dag_runlevel_duration_seconds",
