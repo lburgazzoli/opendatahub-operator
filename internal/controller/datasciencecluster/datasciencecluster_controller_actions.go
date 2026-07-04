@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"reflect"
 
+	k8serr "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -109,10 +111,13 @@ func (r *Reconciler) cleanupDisabledComponents(ctx context.Context, rr *odhtype.
 
 // cleanupDisabledModules deletes module operand CRs for disabled modules.
 // handler.DeleteModuleCR() is idempotent and handles NotFound/IsNoMatchError.
-// DSCI is intentionally excluded from the PlatformContext: DSCI-owned modules
-// (e.g. Monitoring) must not be deleted by the DSC controller. Each handler's
-// IsEnabled reads only ctx.DSC, so DSCI-owned handlers return false and are
-// skipped by their own controller's cleanup path.
+// cleanupDisabledModules deletes module operand CRs for disabled modules.
+// handler.DeleteModuleCR() is idempotent and handles NotFound/IsNoMatchError.
+// DSCI is included so that DSCI-owned modules (e.g. Monitoring) evaluate their
+// IsEnabled correctly: if monitoring is enabled in DSCI, IsEnabled returns true
+// and the DSC controller skips deletion, avoiding a reconcile fight with the
+// DSCI controller. Contrast with provisionModuleCRs, which intentionally omits
+// DSCI so DSC never provisions DSCI-owned module CRs in the first place.
 func (r *Reconciler) cleanupDisabledModules(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
 	instance, ok := rr.Instance.(*dscv2.DataScienceCluster)
 	if !ok {
@@ -123,7 +128,15 @@ func (r *Reconciler) cleanupDisabledModules(ctx context.Context, rr *odhtype.Rec
 		return nil
 	}
 
-	platformCtx := &modules.PlatformContext{DSC: instance}
+	dsci, err := cluster.GetDSCI(ctx, rr.Client)
+	if err != nil {
+		if k8serr.IsNotFound(err) || meta.IsNoMatchError(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to get DSCI for module cleanup: %w", err)
+	}
+
+	platformCtx := &modules.PlatformContext{DSC: instance, DSCI: dsci}
 
 	_ = r.ModuleRegistry.ForAll(func(h modules.ModuleHandler, _ bool) error {
 		if h.IsEnabled(platformCtx) {
