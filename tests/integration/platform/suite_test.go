@@ -3,11 +3,9 @@ package platform_test
 import (
 	"context"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/spf13/viper"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -303,11 +301,4 @@ func resetDAGMetrics() {
 	provision.RunlevelDurationSeconds.Reset()
 	provision.RunlevelCleared.Set(0)
 	provision.RunlevelBlocked.Set(0)
-}
-
-func rlStatusValue(order int, status string) func() float64 {
-	rl := strconv.Itoa(order)
-	return func() float64 {
-		return testutil.ToFloat64(provision.RunlevelStatus.WithLabelValues(rl, status))
-	}
 }

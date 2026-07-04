@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
-	"github.com/prometheus/client_golang/prometheus/testutil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
@@ -22,6 +21,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	rrtypes "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/matchers/jq"
+	prom "github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/matchers/prometheus"
 
 	. "github.com/onsi/gomega"
 )
@@ -213,12 +213,12 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 	))
 
 	// Metrics: RL10 processed, RL20 blocked — DAG stuck at runlevel boundary.
-	g.Eventually(rlStatusValue(10, provision.StatusProcessed)).Should(Equal(float64(1)))
-	g.Eventually(rlStatusValue(20, provision.StatusBlocked)).Should(Equal(float64(1)))
-	g.Expect(rlStatusValue(10, provision.StatusBlocked)()).Should(Equal(float64(0)))
-	g.Expect(rlStatusValue(20, provision.StatusProcessed)()).Should(Equal(float64(0)))
-	g.Expect(testutil.ToFloat64(provision.RunlevelCleared)).Should(Equal(float64(10)))
-	g.Expect(testutil.ToFloat64(provision.RunlevelBlocked)).Should(Equal(float64(20)))
+	g.Eventually(prom.GaugeVecValue(provision.RunlevelStatus, "10", provision.StatusProcessed)).Should(Equal(float64(1)))
+	g.Eventually(prom.GaugeVecValue(provision.RunlevelStatus, "20", provision.StatusBlocked)).Should(Equal(float64(1)))
+	g.Expect(provision.RunlevelStatus).Should(prom.HaveGaugeVecValue(0, "10", provision.StatusBlocked))
+	g.Expect(provision.RunlevelStatus).Should(prom.HaveGaugeVecValue(0, "20", provision.StatusProcessed))
+	g.Expect(provision.RunlevelCleared).Should(prom.HaveValue(10))
+	g.Expect(provision.RunlevelBlocked).Should(prom.HaveValue(20))
 
 	// Step 2: Create Dashboard CR and mark Ready=True → RL10 clears.
 	dashboard := &unstructured.Unstructured{}
@@ -235,10 +235,10 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 	)
 
 	// Metrics: RL20 transitioned from blocked → processed.
-	g.Eventually(rlStatusValue(20, provision.StatusProcessed)).Should(Equal(float64(1)))
-	g.Expect(rlStatusValue(20, provision.StatusBlocked)()).Should(Equal(float64(0)))
-	g.Expect(testutil.ToFloat64(provision.RunlevelBlocked)).Should(Equal(float64(0)))
-	g.Expect(testutil.ToFloat64(provision.RunlevelCleared)).Should(Equal(float64(20)))
+	g.Eventually(prom.GaugeVecValue(provision.RunlevelStatus, "20", provision.StatusProcessed)).Should(Equal(float64(1)))
+	g.Expect(provision.RunlevelStatus).Should(prom.HaveGaugeVecValue(0, "20", provision.StatusBlocked))
+	g.Expect(provision.RunlevelBlocked).Should(prom.HaveValue(0))
+	g.Expect(provision.RunlevelCleared).Should(prom.HaveValue(20))
 
 	// Step 4: aigateway PlatformModule still not ready — DSC created the module
 	// operand CR with no conditions → OperandInitializing blocks.
@@ -264,9 +264,9 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 	))
 
 	// Metrics: final state — fully advanced, nothing blocked.
-	g.Expect(testutil.ToFloat64(provision.RunlevelCleared)).Should(Equal(float64(20)))
-	g.Expect(testutil.ToFloat64(provision.RunlevelBlocked)).Should(Equal(float64(0)))
-	g.Expect(testutil.ToFloat64(provision.BatchesProcessedTotal)).Should(BeNumerically(">=", 2))
+	g.Expect(provision.RunlevelCleared).Should(prom.HaveValue(20))
+	g.Expect(provision.RunlevelBlocked).Should(prom.HaveValue(0))
+	g.Expect(provision.BatchesProcessedTotal).Should(prom.HaveValueWith(">=", 2))
 }
 
 func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
@@ -309,9 +309,9 @@ func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
 		Eventually().Should(Succeed())
 
 	// Metrics: at least RL10 has been processed (first batch always runs).
-	g.Eventually(rlStatusValue(10, provision.StatusProcessed)).Should(Equal(float64(1)))
+	g.Eventually(prom.GaugeVecValue(provision.RunlevelStatus, "10", provision.StatusProcessed)).Should(Equal(float64(1)))
 	// RL20 may be blocked or pending while RL10 readiness is evaluated.
-	g.Expect(rlStatusValue(20, provision.StatusProcessed)()).Should(Equal(float64(0)))
+	g.Expect(provision.RunlevelStatus).Should(prom.HaveGaugeVecValue(0, "20", provision.StatusProcessed))
 
 	// Phase 2: monitoring at RL10 becomes Ready=True (no manifests, module CR
 	// absent → OperandAbsent+Info → Ready=True).
@@ -322,8 +322,8 @@ func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
 		))
 
 	// Metrics: monitoring Ready unblocks RL20; cleared should be >= 10.
-	g.Expect(testutil.ToFloat64(provision.RunlevelCleared)).Should(BeNumerically(">=", 10))
-	g.Eventually(rlStatusValue(20, provision.StatusPending)).Should(Equal(float64(0)))
+	g.Expect(provision.RunlevelCleared).Should(prom.HaveValueWith(">=", 10))
+	g.Eventually(prom.GaugeVecValue(provision.RunlevelStatus, "20", provision.StatusPending)).Should(Equal(float64(0)))
 
 	// Phase 3: aigateway at RL20 unblocked, also becomes Ready=True.
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
@@ -333,9 +333,9 @@ func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
 		))
 
 	// Metrics: RL20 processed, DAG fully cleared.
-	g.Eventually(rlStatusValue(20, provision.StatusProcessed)).Should(Equal(float64(1)))
-	g.Expect(testutil.ToFloat64(provision.RunlevelCleared)).Should(Equal(float64(20)))
-	g.Expect(testutil.ToFloat64(provision.RunlevelBlocked)).Should(Equal(float64(0)))
+	g.Eventually(prom.GaugeVecValue(provision.RunlevelStatus, "20", provision.StatusProcessed)).Should(Equal(float64(1)))
+	g.Expect(provision.RunlevelCleared).Should(prom.HaveValue(20))
+	g.Expect(provision.RunlevelBlocked).Should(prom.HaveValue(0))
 
 	// Phase 4: Platform ModulesReady=True, Ready=True.
 	wt.Get(gvk.Platform, nn).Eventually().Should(And(
@@ -343,7 +343,7 @@ func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
 		jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
 	))
 
-	g.Expect(testutil.ToFloat64(provision.BatchesProcessedTotal)).Should(BeNumerically(">=", 2))
+	g.Expect(provision.BatchesProcessedTotal).Should(prom.HaveValueWith(">=", 2))
 }
 
 func TestDSCDriven_DisableComponent_Cleanup(t *testing.T) {
