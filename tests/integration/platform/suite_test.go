@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	operatorv1 "github.com/openshift/api/operator/v1"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/spf13/viper"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -24,14 +25,17 @@ import (
 	serviceApi "github.com/opendatahub-io/opendatahub-operator/v2/api/services/v1alpha1"
 	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/datasciencecluster"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/dscinitialization"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/platform"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/platformmodule"
 	sr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/dag"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/operatorconfig"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/envt"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/testf"
 	"github.com/opendatahub-io/opendatahub-operator/v2/tests/envtestutil"
@@ -61,7 +65,9 @@ var testModuleBGVK = schema.GroupVersionKind{
 
 type testModuleHandler struct {
 	modules.BaseHandler
-	applyFn func(*modules.PlatformContext, *configv1alpha1.PlatformModules)
+
+	applyFn     func(*modules.PlatformContext, *configv1alpha1.PlatformModules)
+	isEnabledFn func(*modules.PlatformContext) bool
 }
 
 func (h *testModuleHandler) BuildModuleCR(
@@ -81,7 +87,10 @@ func (h *testModuleHandler) ApplyManagementState(ctx *modules.PlatformContext, s
 	}
 }
 
-func (h *testModuleHandler) IsEnabled(_ *modules.PlatformContext) bool {
+func (h *testModuleHandler) IsEnabled(ctx *modules.PlatformContext) bool {
+	if h.isEnabledFn != nil {
+		return h.isEnabledFn(ctx)
+	}
 	return true
 }
 
@@ -120,6 +129,29 @@ func newAIGatewayModuleHandler(gvkVal schema.GroupVersionKind) *testModuleHandle
 	}
 }
 
+func newMonitoringModuleHandler() *testModuleHandler {
+	return &testModuleHandler{
+		BaseHandler: modules.BaseHandler{
+			Config: modules.ModuleConfig{
+				Name:   serviceApi.MonitoringServiceName,
+				GVK:    gvk.Monitoring,
+				CRName: serviceApi.MonitoringInstanceName,
+			},
+		},
+		applyFn: func(ctx *modules.PlatformContext, spec *configv1alpha1.PlatformModules) {
+			if ctx == nil || ctx.DSCI == nil {
+				return
+			}
+			spec.Monitoring = common.ManagementSpec{
+				ManagementState: ctx.DSCI.Spec.Monitoring.ManagementState,
+			}
+		},
+		isEnabledFn: func(ctx *modules.PlatformContext) bool {
+			return ctx != nil && ctx.DSCI != nil && ctx.DSCI.Spec.Monitoring.ManagementState == operatorv1.Managed
+		},
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Suite options and controller bootstrap.
 // ---------------------------------------------------------------------------
@@ -128,6 +160,7 @@ type suiteOpts struct {
 	moduleReg    *modules.Registry
 	componentReg *cr.Registry
 	provisionReg *provision.UnifiedRegistry
+	startDSCI    bool
 }
 
 func startAllControllers(t *testing.T, opts suiteOpts) (*envt.EnvT, *testf.TestContext) {
@@ -153,7 +186,10 @@ func startAllControllers(t *testing.T, opts suiteOpts) (*envt.EnvT, *testf.TestC
 	g.Expect(err).NotTo(HaveOccurred())
 
 	et, err := envt.New(
-		envt.WithCRDPaths(filepath.Join(root, "config", "crd", "bases")),
+		envt.WithCRDPaths(
+			filepath.Join(root, "config", "crd", "bases"),
+			filepath.Join(root, "config", "crd", "external"),
+		),
 		envt.WithManager(ctrl.Options{
 			Controller: ctrlconfig.Controller{
 				SkipNameValidation: new(true),
@@ -189,6 +225,20 @@ func startAllControllers(t *testing.T, opts suiteOpts) (*envt.EnvT, *testf.TestC
 				return err
 			}
 
+			if opts.startDSCI {
+				if err := (&dscinitialization.DSCInitializationReconciler{
+					Client:   mgr.GetClient(),
+					Scheme:   mgr.GetScheme(),
+					Recorder: mgr.GetEventRecorder("dscinitialization-controller"),
+					OperatorSettings: operatorconfig.OperatorSettings{
+						ManifestsBasePath: filepath.Join(root, "config"),
+					},
+					ModuleRegistry: opts.moduleReg,
+				}).SetupWithManager(ctx, mgr); err != nil {
+					return err
+				}
+			}
+
 			return nil
 		}),
 	)
@@ -210,13 +260,18 @@ func startAllControllers(t *testing.T, opts suiteOpts) (*envt.EnvT, *testf.TestC
 
 func createDSCI(t *testing.T, tc *testf.TestContext) {
 	t.Helper()
+	createDSCIWithSpec(t, tc, dsciv2.DSCInitializationSpec{
+		ApplicationsNamespace: "default",
+	})
+}
+
+func createDSCIWithSpec(t *testing.T, tc *testf.TestContext, spec dsciv2.DSCInitializationSpec) {
+	t.Helper()
 	g := NewWithT(t)
 
 	dsci := &dsciv2.DSCInitialization{
 		ObjectMeta: metav1.ObjectMeta{Name: "default-dsci"},
-		Spec: dsciv2.DSCInitializationSpec{
-			ApplicationsNamespace: "default",
-		},
+		Spec:       spec,
 	}
 	g.Expect(tc.Client().Create(t.Context(), dsci)).Should(Succeed())
 	t.Cleanup(func() { _ = tc.Client().Delete(context.Background(), dsci) })
@@ -283,7 +338,7 @@ func setPlatformModuleReady(t *testing.T, cli client.Client, name string, ready 
 	}).Should(Succeed())
 }
 
-func setUnstructuredReady(t *testing.T, cli client.Client, u *unstructured.Unstructured, ready bool) {
+func setUnstructuredReady(t *testing.T, cli client.Client, u *unstructured.Unstructured, ready bool) { //nolint:unparam
 	t.Helper()
 	g := NewWithT(t)
 

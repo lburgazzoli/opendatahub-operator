@@ -14,6 +14,7 @@ import (
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
 	serviceApi "github.com/opendatahub-io/opendatahub-operator/v2/api/services/v1alpha1"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 )
 
@@ -76,8 +77,8 @@ func (h *handler) ApplyManagementState(ctx *modules.PlatformContext, spec *confi
 // In DSC mode, the full DSCIMonitoring struct is converted directly.
 // In Platform mode, a minimal spec with ManagementState is projected.
 func (h *handler) BuildModuleCR(
-	_ context.Context,
-	_ client.Client,
+	ctx context.Context,
+	cli client.Client,
 	platform *modules.PlatformContext,
 ) (*unstructured.Unstructured, error) {
 	if platform == nil {
@@ -88,10 +89,45 @@ func (h *handler) BuildModuleCR(
 
 	switch {
 	case platform.DSCI != nil:
+		monitoring := serviceApi.Monitoring{
+			Spec: serviceApi.MonitoringSpec{
+				MonitoringCommonSpec: serviceApi.MonitoringCommonSpec{
+					Namespace: platform.DSCI.Spec.Monitoring.Namespace,
+				},
+			},
+		}
+
+		metricsEnabled := platform.DSCI.Spec.Monitoring.Metrics != nil && platform.DSCI.Spec.Monitoring.Metrics.Storage != nil
+		tracesEnabled := platform.DSCI.Spec.Monitoring.Traces != nil
+
+		if metricsEnabled {
+			monitoring.Spec.Metrics = platform.DSCI.Spec.Monitoring.Metrics
+		}
+
+		if tracesEnabled {
+			monitoring.Spec.Traces = platform.DSCI.Spec.Monitoring.Traces
+			if monitoring.Spec.Traces.TLS != nil && !monitoring.Spec.Traces.TLS.Enabled {
+				monitoring.Spec.Traces.TLS = nil
+			}
+		}
+
+		monitoring.Spec.Alerting = platform.DSCI.Spec.Monitoring.Alerting
+
+		if metricsEnabled || tracesEnabled {
+			if platform.DSCI.Spec.Monitoring.CollectorReplicas != 0 {
+				monitoring.Spec.CollectorReplicas = platform.DSCI.Spec.Monitoring.CollectorReplicas
+			} else {
+				if cluster.IsSingleNodeCluster(ctx, cli) {
+					monitoring.Spec.CollectorReplicas = 1
+				} else {
+					monitoring.Spec.CollectorReplicas = 2
+				}
+			}
+		}
 		var err error
-		spec, err = runtime.DefaultUnstructuredConverter.ToUnstructured(&platform.DSCI.Spec.Monitoring)
+		spec, err = runtime.DefaultUnstructuredConverter.ToUnstructured(&monitoring.Spec)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert DSCIMonitoring to unstructured: %w", err)
+			return nil, fmt.Errorf("failed to convert MonitoringSpec to unstructured: %w", err)
 		}
 	case platform.Platform != nil:
 		spec = map[string]any{
@@ -101,11 +137,7 @@ func (h *handler) BuildModuleCR(
 		return nil, errors.New("neither DSCI nor Platform is available, cannot build monitoring CR")
 	}
 
-	u := &unstructured.Unstructured{
-		Object: map[string]any{
-			"spec": spec,
-		},
-	}
+	u := &unstructured.Unstructured{Object: map[string]any{"spec": spec}}
 	u.SetGroupVersionKind(h.Config.GVK)
 	u.SetName(h.Config.CRName)
 

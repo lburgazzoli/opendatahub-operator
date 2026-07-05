@@ -3,13 +3,14 @@
 ## Goal
 
 Create integration tests in `tests/integration/platform/` that exercise the full
-Platform, PlatformModule, and DataScienceCluster controller pipelines end-to-end
-using envtest. No real modules or components -- only test-only fixtures built from
-the existing `BaseHandler`, `BaseComponentHandler`, and dynamically registered CRDs.
+Platform, PlatformModule, DataScienceCluster, and DSCInitialization controller
+pipelines end-to-end using envtest. No real modules or components -- only test-only
+fixtures built from the existing `BaseHandler`, `BaseComponentHandler`, and dynamically
+registered CRDs.
 
 ## Architecture
 
-Three controllers run in a single envtest manager:
+Four controllers run in a single envtest manager:
 
 - **Platform controller** (`internal/controller/platform/`) -- reconciles Platform CR,
   creates/deletes PlatformModule CRs, walks the module DAG, aggregates status.
@@ -19,6 +20,9 @@ Three controllers run in a single envtest manager:
 - **DSC controller** (`internal/controller/datasciencecluster/`) -- reconciles
   DataScienceCluster CR, creates component CRs, creates module operand CRs,
   SSA-patches Platform.Spec.Modules, aggregates status.
+- **DSCI controller** (`internal/controller/dscinitialization/`) -- reconciles
+  DSCInitialization CR, creates service module CRs, SSA-patches Platform.Spec.Modules,
+  aggregates DSCI service-module status.
 
 ```
 DSC Controller
@@ -38,6 +42,12 @@ PlatformModule Controller
   ├── provision           → renders operator manifests
   ├── deploy              → SSA-applies resources
   └── syncModuleCRStatus  → reflects operand CR health into PlatformModule status
+
+DSCI Controller
+  ├── provisionServiceModuleCRs    → creates service module CRs (test-only)
+  ├── cleanupDisabledServiceModules → deletes disabled DSCI-owned module CRs
+  ├── syncPlatformServices         → SSA-patches Platform.Spec.Modules
+  └── computeServiceModulesStatus  → aggregates DSCI service-module readiness
 ```
 
 ## Test Fixtures
@@ -64,6 +74,10 @@ func (h *testModuleHandler) IsEnabled(_ *modules.PlatformContext) bool { return 
 
 Module CRDs are **dynamic** -- registered at runtime via `et.RegisterCRD()` with
 `envt.WithPermissiveSchema()` so status subresource is available.
+
+For DSCI-driven tests, assume monitoring is already module-backed. Validate behavior
+through injected module handlers and test CRDs, not through the real monitoring
+controller implementation.
 
 ### Test Components
 
@@ -98,6 +112,7 @@ component GVKs).
 | Platform controller + options | `internal/controller/platform/platform_controller.go`, `*_options.go` |
 | PlatformModule controller + options | `internal/controller/platformmodule/platformmodule_controller.go`, `*_options.go` |
 | DSC controller + options | `internal/controller/datasciencecluster/datasciencecluster_controller.go`, `*_options.go` |
+| DSCI controller | `internal/controller/dscinitialization/dscinitialization_controller.go` |
 | Platform types | `api/config/v1alpha1/platform_types.go` |
 | PlatformModule types | `api/config/v1alpha1/platformmodule_types.go` |
 | DSC v2 types | `api/datasciencecluster/v2/datasciencecluster_types.go` |
@@ -132,6 +147,7 @@ component GVKs).
   registers a dynamic watch on GatewayConfig CRs (service registry watches).
   Without it, the controller starts fine but domain-dependent platform config
   keys will be empty.
+- DSCI-specific tests use standard `testing.T` + Gomega, not Ginkgo.
 - The global `provision.GetRunlevelTracker()` must be reset between tests to
   avoid cleared runlevels leaking across test cases. Call
   `provision.GetRunlevelTracker().Reset()` in setup and `t.Cleanup`.
@@ -204,3 +220,48 @@ Reset metrics at the start of each test with `.Reset()`.
 - **03-2 through 03-6** each depend on 03-1 (adds tests to the same file) but are independent of each other.
 - Groups 02 and 03 are independent and can be executed in parallel.
 - **04-1, 04-2** depend on DAG metrics being implemented (Group 04 in the DAG Prometheus Metrics plan) and on Groups 02/03 (existing tests to enhance).
+
+### Group 05: DSCI-Driven and Combined Scenarios
+
+Add DSCI-driven tests that exercise service-module projection and ownership, plus
+combined DSC + DSCI tests that verify both controllers can feed the same Platform
+CR and unified DAG.
+
+| # | Task | Status |
+|---|------|--------|
+| 05-1 | [TestDSCIDriven_PlatformReflectsDSCI](task-05-1-dsci-platform-reflects.md) | pending |
+| 05-2 | [TestDSCIDriven_ServiceModuleCreated](task-05-2-dsci-module-created.md) | pending |
+| 05-3 | [TestDSCIDriven_DisableModule_Cleanup](task-05-3-dsci-disable-cleanup.md) | pending |
+| 05-4 | [TestCombined_DSCAndDSCI_ModulesCombined](task-05-4-combined-modules.md) | pending |
+| 05-5 | [TestCombined_DAG_DSCIModuleGatesDSCModule](task-05-5-combined-dag-gating.md) | pending |
+| 05-6 | [TestCombined_StatusAggregation](task-05-6-combined-status.md) | pending |
+
+**05-1** covers a DSCI-only projection flow:
+- create DSCI with Monitoring=Managed
+- assert `Platform.Spec.Modules.Monitoring.ManagementState == "Managed"`
+
+**05-2** covers DSCI-owned service module CR creation:
+- create DSCI with Monitoring=Managed
+- assert the monitoring operand CR exists and is owned by DSCI
+- assert the Platform controller creates `PlatformModule/monitoring`
+
+**05-3** covers DSCI-owned cleanup:
+- update DSCI Monitoring from Managed to Removed
+- assert the DSCI-owned monitoring operand CR is deleted
+- assert `PlatformModule/monitoring` is deleted
+
+**05-4** covers combined projection:
+- create DSCI with Monitoring=Managed and DSC with AIGateway=Managed
+- assert both `monitoring` and `aigateway` are present in `Platform.Spec.Modules`
+
+**05-5** covers cross-controller DAG gating:
+- put monitoring at RL10 and aigateway at RL20 in the injected provision registry
+- assert monitoring must become ready before aigateway proceeds
+
+**05-6** covers split status ownership:
+- patch monitoring operand CR Ready=True/False and verify DSCI conditions
+- patch aigateway operand CR Ready=True/False and verify DSC conditions
+
+Additional dependencies:
+- **05-1 through 05-3** depend on Group 01 helpers and DSCI controller wiring in `suite_test.go`.
+- **05-4 through 05-6** depend on both DSC and DSCI helpers plus injected monitoring/aigateway module handlers.

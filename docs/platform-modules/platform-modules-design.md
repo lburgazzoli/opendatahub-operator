@@ -31,8 +31,9 @@ OpenShift:
              → provisionModuleCRs         → AIGateway CR (direct)
              → provisionComponents        → Component CRs (Dashboard, KServe, …)
 
-  User → DSCI → syncPlatformMonitoring (SSA) → Platform CR
-              → creates Monitoring CR (direct)
+  User → DSCI → syncPlatformServices       (SSA) → Platform CR
+              → provisionServiceModuleCRs        → Monitoring CR (direct, DSCI-owned)
+              → computeServiceModulesStatus      → DSCI status conditions
 
   Platform CR → Platform Controller → creates/deletes PlatformModule CRs
                                    → walks unified DAG (WalkBatches)
@@ -53,12 +54,12 @@ xKS:
 |---------|-------|
 | Module operator install/remove | Platform controller (creates PlatformModule CRs) + PlatformModule reconciler (deploys) |
 | Module CR create/configure/delete | DSC controller (AIGateway) or DSCI controller (Monitoring) |
-| Module CR status tracking | DSC controller (`ComputeModulesStatus` via injectable `*modules.Registry`) |
+| Module CR status tracking | DSC controller (`ComputeModulesStatus`) or DSCI controller (`computeServiceModulesStatus`) |
 | DAG orchestration | Platform controller — sole orchestrator for components and modules |
 | Cleanup (operator resources) | Owner references on PlatformModule CR + `status.resources` drift cleanup |
 | Cleanup (module CR operands) | Module operator (via its own finalizers/GC) |
 | Cleanup (component CRs) | DSC controller (`cleanupDisabledComponents`) |
-| Cleanup (module operand CRs) | DSC controller (`cleanupDisabledModules`) |
+| Cleanup (module operand CRs) | DSC controller (`cleanupDisabledModules`) or DSCI controller (`cleanupDisabledServiceModules`) |
 
 ## Changes
 
@@ -252,14 +253,42 @@ is the sole DAG orchestrator.
 - `computeComponentsStatus(ctx, rr, r.ComponentRegistry)` — injectable registry
 - `modules.ComputeModulesStatus(ctx, rr, r.ModuleRegistry)` — injectable registry
 
-### 8. ✅ DSCI controller: write to Platform CR
+### 8. ✅ DSCI controller: write to Platform CR + manage service module CRs
 
 **File:** `internal/controller/dscinitialization/dscinitialization_controller.go`
 
-`syncPlatformMonitoring` SSA-patches `Platform.Spec.Modules.Monitoring.ManagementState` from
-`DSCI.Spec.Monitoring.ManagementState`. Field manager: `dsci-controller`.
+The DSCI controller now mirrors the DSC module flow structurally while staying on the
+existing DSCI controller framework:
 
-DSCI already creates the Monitoring CR directly — that path is unchanged.
+1. `syncPlatformServices` — iterates tagged service modules from `DSCI.Spec`, calls
+   `ApplyManagementState`, and SSA-patches `Platform.Spec.Modules` with field manager
+   `dscinitialization`
+2. `provisionServiceModuleCRs` — creates DSCI-owned service module CRs for enabled
+   tagged modules (starting with Monitoring)
+3. `cleanupDisabledServiceModules` — deletes owned service module CRs for disabled
+   tagged modules
+4. `computeServiceModulesStatus` — reads module CR status through the module registry
+   and writes DSCI conditions directly
+
+The implementation intentionally keeps `syncPlatformServices` local to DSCI rather
+than extracting a shared helper with DSC. The overlap is small and the controller
+entry points still differ enough that a common projection helper was not worth
+introducing in this pass.
+
+The Monitoring CR remains owned by the DSCI instance in all cases. Tests for this work
+assume monitoring is already available as a module-backed service and validate behavior
+through injected module handlers and test CRDs rather than the real monitoring controller.
+
+The monitoring module handler also preserves the existing DSCI-specific CR projection
+behavior when building the Monitoring CR:
+- copies `metrics`, `traces`, and `alerting` from `DSCI.Spec.Monitoring`
+- strips disabled traces TLS blocks
+- preserves the collector replica defaulting rule: `1` on single-node clusters,
+  `2` on multi-node clusters, unless the user sets `collectorReplicas`
+
+`GetMonitoringReadyCondition()` is retained as a compatibility wrapper for existing
+monitoring status tests, but the main DSCI reconcile path now uses
+`computeServiceModulesStatus`.
 
 ### 9. ✅ DSC controller: simplified, no DAG
 
@@ -370,7 +399,11 @@ Key design decisions:
 | `internal/controller/datasciencecluster/datasciencecluster_controller_actions.go` | ✅ Done | provisionModuleCRs, syncPlatformModules, cleanupDisabled*, no DAG |
 | `internal/controller/datasciencecluster/datasciencecluster_controller_options.go` | ✅ Done | New — Options/WithXxx pattern |
 | `internal/controller/datasciencecluster/datasciencecluster_controller_test.go` | ✅ Done | New — 5 envtest integration tests |
-| `internal/controller/dscinitialization/dscinitialization_controller.go` | ✅ Done | `syncPlatformMonitoring` SSA write to Platform CR |
+| `internal/controller/dscinitialization/dscinitialization_controller.go` | ✅ Done | DSCI now syncs Platform modules and manages service module CR lifecycle/status |
+| `internal/controller/dscinitialization/dscinitialization_modules.go` | ✅ Done | New — DSCI module sync/provision/cleanup/status helpers |
+| `internal/controller/dscinitialization/dscinitialization_module_test.go` | ✅ Done | New standalone `testing.T` integration tests for DSCI module flow |
+| `tests/integration/platform/platform_dsci_test.go` | ✅ Done | New DSCI-driven Platform integration tests |
+| `tests/integration/platform/platform_combined_test.go` | ✅ Done | New combined DSC + DSCI Platform integration tests |
 | `pkg/utils/test/mocks/types.go` | ✅ Done | `MockModuleHandler`, `NewDefaultMock*` constructors |
 | `cmd/main.go` | ❌ Pending | Still has DSC/Platform mode conditional for module reconciler |
 
@@ -386,8 +419,8 @@ Key design decisions:
 3. **Migrate aigateway handler**: remove `IsEnabled` and `BuildModuleCR`; DSC controller
    creates AIGateway CR from `DSC.Spec.Components.AIGateway` directly.
 
-4. **Migrate monitoring handler**: remove `IsEnabled` and `BuildModuleCR`; DSCI controller
-   already creates Monitoring CR directly.
+4. **Add DSCI-focused tests**: add standalone DSCI controller tests and extend
+   `tests/integration/platform/` with DSCI-driven and combined DSC+DSCI scenarios.
 
 5. **Simplify cmd/main.go**: remove DSC/Platform mode conditional for the module reconciler
    once the module reconciler is removed or reduced to platform-mode only.
@@ -426,7 +459,7 @@ test-only constructs.
 ## Integration Test Plan
 
 See [docs/platform-tests/plan.md](platform-tests/plan.md) for the full envtest
-integration test plan covering Platform, PlatformModule, and DSC controller
+integration test plan covering Platform, PlatformModule, DSC, and DSCI controller
 pipelines. Tests are in `tests/integration/platform/`.
 
 ## Verification
@@ -436,8 +469,10 @@ pipelines. Tests are in `tests/integration/platform/`.
 3. Unit tests: `TestDSCReconciler_*` (5 envtest tests) confirm the full DSC action chain
 4. Unit tests: `TestPlatformReconciler_*` confirm DAG gating and readiness propagation
 5. Unit tests: `TestPlatformModuleReconciler_*` confirm operator deployment and drift cleanup
-6. E2E (OpenShift): DSC+DSCI → Platform CR → module operators installed, module CRs created
-7. E2E (xKS): user writes Platform CR → operators installed; user creates module CRs manually
-8. Verify SSA ownership: `kubectl get platform default -o json | jq '.metadata.managedFields'`
-9. Verify cleanup: remove module from Platform CR → PlatformModule CR deleted → operator resources gone
-10. Verify DAG ordering: RL(20) modules deploy before RL(31); cross-type gating works
+6. Unit tests: `TestDSCIReconciler_*` confirm the DSCI module sync/create/delete/status flow
+7. Unit tests: `TestDSCIDriven_*` and `TestCombined_*` confirm DSCI-driven and combined Platform behavior
+8. E2E (OpenShift): DSC+DSCI → Platform CR → module operators installed, module CRs created
+9. E2E (xKS): user writes Platform CR → operators installed; user creates module CRs manually
+10. Verify SSA ownership: `kubectl get platform default -o json | jq '.metadata.managedFields'`
+11. Verify cleanup: remove module from Platform CR → PlatformModule CR deleted → operator resources gone
+12. Verify DAG ordering: RL(20) modules deploy before RL(31); cross-type gating works

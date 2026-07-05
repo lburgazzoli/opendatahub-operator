@@ -101,6 +101,7 @@ import (
 	dscictrl "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/dscinitialization"
 	mr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	aigatewayModule "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules/aigateway"
+	monitoringModule "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules/monitoring"
 	pmctrl "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/platformmodule"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/auth"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/certconfigmapgenerator"
@@ -193,11 +194,12 @@ var (
 	}
 
 	existingModules = map[string]mr.ModuleHandler{
-		// serviceApi.MonitoringServiceName: monitoringModule.NewHandler(),
+		serviceApi.MonitoringServiceName:    monitoringModule.NewHandler(),
 		componentApi.AIGatewayComponentName: aigatewayModule.NewHandler(),
 	}
 
 	moduleRunlevels = map[string]dag.Runlevel{
+		serviceApi.MonitoringServiceName:    dag.RL(10),
 		componentApi.AIGatewayComponentName: dag.RL(20),
 	}
 )
@@ -529,6 +531,7 @@ func main() { //nolint:funlen,maintidx,gocyclo
 			Scheme:           mgr.GetScheme(),
 			Recorder:         mgr.GetEventRecorder("dscinitialization-controller"),
 			OperatorSettings: oconfig.OperatorSettings,
+			ModuleRegistry:   mr.DefaultRegistry(),
 		}).SetupWithManager(ctx, mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DSCInitiatlization")
 			os.Exit(1)
