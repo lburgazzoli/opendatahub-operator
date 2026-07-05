@@ -71,6 +71,15 @@ func (r *Reconciler) checkPreConditions(ctx context.Context, rr *odhtype.Reconci
 	return nil
 }
 
+func (r *Reconciler) syncComponentDAGState(_ context.Context, rr *odhtype.ReconciliationRequest) error {
+	instance, ok := rr.Instance.(*dscv2.DataScienceCluster)
+	if !ok {
+		return fmt.Errorf("resource instance %v is not a dscv2.DataScienceCluster)", rr.Instance)
+	}
+
+	return syncComponentDAGStateForDSC(instance, r.ComponentRegistry, r.ProvisionRegistry)
+}
+
 // cleanupDisabledComponents deletes component CRs for disabled in-tree components.
 // It iterates all registered components but only deletes CRs that are actually
 // owned by this DSC instance (metav1.IsControlledBy). This prevents accidental

@@ -26,6 +26,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	rrtypes "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/envt"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/matchers/jq"
@@ -56,6 +57,14 @@ func startDSCController(t *testing.T, compReg *cr.Registry, modReg *modules.Regi
 	cluster.SetRelease(common.Release{Name: cluster.OpenDataHub})
 	t.Cleanup(func() { cluster.SetRelease(common.Release{}) })
 
+	provisionReg := provision.NewRegistry()
+	if compReg != nil {
+		compReg.ProvisionRegistry = provisionReg
+	}
+	if modReg != nil {
+		modReg.ProvisionRegistry = provisionReg
+	}
+
 	root, err := envtestutil.FindProjectRoot()
 	g.Expect(err).NotTo(HaveOccurred())
 
@@ -72,6 +81,7 @@ func startDSCController(t *testing.T, compReg *cr.Registry, modReg *modules.Regi
 			return datasciencecluster.NewDataScienceClusterReconciler(ctx, mgr,
 				datasciencecluster.WithComponentRegistry(compReg),
 				datasciencecluster.WithModuleRegistry(modReg),
+				datasciencecluster.WithProvisionRegistry(provisionReg),
 				datasciencecluster.WithDeletePropagationPolicy(metav1.DeletePropagationBackground),
 			)
 		}),

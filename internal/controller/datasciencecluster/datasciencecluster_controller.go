@@ -38,6 +38,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/gates"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/dependent"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/resources"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
 )
 
@@ -53,6 +54,7 @@ func NewDataScienceClusterReconciler(ctx context.Context, mgr ctrl.Manager, opts
 		Options: Options{
 			ComponentRegistry: cr.DefaultRegistry(),
 			ModuleRegistry:    modules.DefaultRegistry(),
+			ProvisionRegistry: provision.DefaultRegistry(),
 			DeletePropagation: metav1.DeletePropagationForeground,
 		},
 	}
@@ -131,6 +133,7 @@ func NewDataScienceClusterReconciler(ctx context.Context, mgr ctrl.Manager, opts
 	_, err := b.
 		WithAction(r.initialize).
 		WithAction(r.checkPreConditions).
+		WithAction(r.syncComponentDAGState).
 		WithAction(r.updateStatus).
 		WithAction(r.provisionComponents).
 		WithAction(r.provisionModuleCRs).

@@ -6,6 +6,7 @@ import (
 
 	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 )
 
 // Option configures the DataScienceCluster reconciler.
@@ -19,6 +20,7 @@ type Option interface {
 type Options struct {
 	ComponentRegistry *cr.Registry
 	ModuleRegistry    *modules.Registry
+	ProvisionRegistry *provision.UnifiedRegistry
 	DeletePropagation metav1.DeletionPropagation
 }
 
@@ -28,6 +30,9 @@ func (o Options) applyOption(target *Options) {
 	}
 	if o.ModuleRegistry != nil {
 		target.ModuleRegistry = o.ModuleRegistry
+	}
+	if o.ProvisionRegistry != nil {
+		target.ProvisionRegistry = o.ProvisionRegistry
 	}
 	if o.DeletePropagation != "" {
 		target.DeletePropagation = o.DeletePropagation
@@ -46,6 +51,11 @@ func WithComponentRegistry(r *cr.Registry) Option {
 // WithModuleRegistry sets a custom module handler registry.
 func WithModuleRegistry(r *modules.Registry) Option {
 	return optionFunc(func(o *Options) { o.ModuleRegistry = r })
+}
+
+// WithProvisionRegistry sets a custom unified DAG registry.
+func WithProvisionRegistry(r *provision.UnifiedRegistry) Option {
+	return optionFunc(func(o *Options) { o.ProvisionRegistry = r })
 }
 
 // WithDeletePropagationPolicy sets the propagation policy used when deleting

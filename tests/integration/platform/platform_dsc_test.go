@@ -26,14 +26,28 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+func unifiedBatchNames(g Gomega, reg *provision.UnifiedRegistry) []string {
+	batches, err := reg.ResolvedBatches()
+	g.Expect(err).ShouldNot(HaveOccurred())
+
+	var names []string
+	for _, batch := range batches {
+		for _, node := range batch {
+			names = append(names, node.GetName())
+		}
+	}
+
+	return names
+}
+
 func TestDSCDriven_ComponentsAndModules_Installed(t *testing.T) {
 	moduleReg := modules.NewRegistry()
 	moduleReg.Add(newAIGatewayModuleHandler(testModuleAGVK))
 
 	componentReg := &cr.Registry{}
 	componentReg.Add(&cr.BaseComponentHandler{
-		Name: "dashboard",
-		GVK:  gvk.Dashboard,
+		Name:        "dashboard",
+		GVK:         gvk.Dashboard,
 		IsEnabledFn: func(_ *dscv2.DataScienceCluster) bool { return true },
 		NewCRObjectFn: func(_ context.Context, _ client.Client, _ *dscv2.DataScienceCluster) (common.PlatformObject, error) {
 			return &componentApi.Dashboard{
@@ -57,6 +71,11 @@ func TestDSCDriven_ComponentsAndModules_Installed(t *testing.T) {
 
 	createDSC(t, tc, dscv2.DataScienceClusterSpec{
 		Components: dscv2.Components{
+			Dashboard: componentApi.DSCDashboard{
+				ManagementSpec: common.ManagementSpec{
+					ManagementState: operatorv1.Managed,
+				},
+			},
 			AIGateway: componentApi.DSCAIGateway{
 				ManagementSpec: common.ManagementSpec{
 					ManagementState: operatorv1.Managed,
@@ -92,8 +111,8 @@ func TestDSCDriven_StatusAggregation(t *testing.T) {
 
 	componentReg := &cr.Registry{}
 	componentReg.Add(&cr.BaseComponentHandler{
-		Name: "dashboard",
-		GVK:  gvk.Dashboard,
+		Name:        "dashboard",
+		GVK:         gvk.Dashboard,
 		IsEnabledFn: func(_ *dscv2.DataScienceCluster) bool { return true },
 		NewCRObjectFn: func(_ context.Context, _ client.Client, _ *dscv2.DataScienceCluster) (common.PlatformObject, error) {
 			return &componentApi.Dashboard{
@@ -117,6 +136,11 @@ func TestDSCDriven_StatusAggregation(t *testing.T) {
 
 	createDSC(t, tc, dscv2.DataScienceClusterSpec{
 		Components: dscv2.Components{
+			Dashboard: componentApi.DSCDashboard{
+				ManagementSpec: common.ManagementSpec{
+					ManagementState: operatorv1.Managed,
+				},
+			},
 			AIGateway: componentApi.DSCAIGateway{
 				ManagementSpec: common.ManagementSpec{
 					ManagementState: operatorv1.Managed,
@@ -169,6 +193,9 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 	componentReg.Add(&cr.BaseComponentHandler{
 		Name: "dashboard",
 		GVK:  gvk.Dashboard,
+		IsEnabledFn: func(dsc *dscv2.DataScienceCluster) bool {
+			return dsc.Spec.Components.Dashboard.ManagementState == operatorv1.Managed
+		},
 	})
 
 	provisionReg := provision.NewRegistry()
@@ -190,6 +217,11 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 
 	createDSC(t, tc, dscv2.DataScienceClusterSpec{
 		Components: dscv2.Components{
+			Dashboard: componentApi.DSCDashboard{
+				ManagementSpec: common.ManagementSpec{
+					ManagementState: operatorv1.Managed,
+				},
+			},
 			AIGateway: componentApi.DSCAIGateway{
 				ManagementSpec: common.ManagementSpec{
 					ManagementState: operatorv1.Managed,
@@ -254,10 +286,10 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 	// operand CR with no conditions → OperandInitializing blocks.
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
 		Eventually().Should(And(
-			jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .status == "False"`),
-			jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "OperandInitializing"`),
-			jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .message == "module CR has no conditions yet"`),
-		))
+		jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .status == "False"`),
+		jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "OperandInitializing"`),
+		jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .message == "module CR has no conditions yet"`),
+	))
 
 	// Step 5: Mark module operand CR Ready → PlatformModule Ready → ModulesReady=True.
 	moduleCR := &unstructured.Unstructured{}
@@ -279,6 +311,118 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 		g.Expect(provision.RunlevelBlocked).To(prom.HaveValue(0))
 		g.Expect(captureBatchCount() - batchesBefore).To(BeNumerically(">=", 2))
 	}).Should(Succeed())
+}
+
+func TestDSCDriven_ComponentDAGSync_ReflectsDSCManagementState(t *testing.T) {
+	moduleReg := modules.NewRegistry()
+	moduleReg.Add(newAIGatewayModuleHandler(testModuleAGVK))
+
+	componentReg := &cr.Registry{}
+	componentReg.Add(&cr.BaseComponentHandler{
+		Name: "dashboard",
+		GVK:  gvk.Dashboard,
+		IsEnabledFn: func(dsc *dscv2.DataScienceCluster) bool {
+			return dsc.Spec.Components.Dashboard.ManagementState == operatorv1.Managed
+		},
+	})
+
+	provisionReg := provision.NewRegistry()
+	provisionReg.Add("dashboard", provision.KindComponent, dag.RL(10))
+	provisionReg.Add("aigateway", provision.KindModule, dag.RL(20))
+
+	et, tc := startAllControllers(t, suiteOpts{
+		moduleReg:    moduleReg,
+		componentReg: componentReg,
+		provisionReg: provisionReg,
+	})
+
+	registerModuleCRD(t, et, testModuleAGVK)
+	createGatewayConfig(t, tc)
+	createDSCI(t, tc)
+	createDSC(t, tc, dscv2.DataScienceClusterSpec{
+		Components: dscv2.Components{
+			AIGateway: componentApi.DSCAIGateway{
+				ManagementSpec: common.ManagementSpec{ManagementState: operatorv1.Managed},
+			},
+		},
+	})
+
+	g := NewWithT(t)
+	cli := tc.Client()
+
+	g.Eventually(func(g Gomega) {
+		g.Expect(unifiedBatchNames(g, provisionReg)).To(ConsistOf("aigateway"))
+	}, "10s").Should(Succeed())
+
+	g.Eventually(func() error {
+		dsc := &dscv2.DataScienceCluster{}
+		if err := cli.Get(t.Context(), types.NamespacedName{Name: "default-dsc"}, dsc); err != nil {
+			return err
+		}
+		dsc.Spec.Components.Dashboard.ManagementState = operatorv1.Managed
+		return cli.Update(t.Context(), dsc)
+	}, "10s").Should(Succeed())
+
+	g.Eventually(func(g Gomega) {
+		g.Expect(unifiedBatchNames(g, provisionReg)).To(ConsistOf("dashboard", "aigateway"))
+	}, "10s").Should(Succeed())
+
+	g.Eventually(func() error {
+		dsc := &dscv2.DataScienceCluster{}
+		if err := cli.Get(t.Context(), types.NamespacedName{Name: "default-dsc"}, dsc); err != nil {
+			return err
+		}
+		dsc.Spec.Components.Dashboard.ManagementState = operatorv1.Removed
+		return cli.Update(t.Context(), dsc)
+	}, "10s").Should(Succeed())
+
+	g.Eventually(func(g Gomega) {
+		g.Expect(unifiedBatchNames(g, provisionReg)).To(ConsistOf("aigateway"))
+	}, "10s").Should(Succeed())
+}
+
+func TestDSCDriven_ComponentDAGSync_RespectsOperatorSuppression(t *testing.T) {
+	moduleReg := modules.NewRegistry()
+	moduleReg.Add(newAIGatewayModuleHandler(testModuleAGVK))
+
+	componentReg := &cr.Registry{}
+	componentReg.Add(&cr.BaseComponentHandler{
+		Name: "dashboard",
+		GVK:  gvk.Dashboard,
+		IsEnabledFn: func(dsc *dscv2.DataScienceCluster) bool {
+			return dsc.Spec.Components.Dashboard.ManagementState == operatorv1.Managed
+		},
+	})
+	componentReg.Disable("dashboard")
+
+	provisionReg := provision.NewRegistry()
+	provisionReg.Add("dashboard", provision.KindComponent, dag.RL(10))
+	provisionReg.Add("aigateway", provision.KindModule, dag.RL(20))
+
+	et, tc := startAllControllers(t, suiteOpts{
+		moduleReg:    moduleReg,
+		componentReg: componentReg,
+		provisionReg: provisionReg,
+	})
+
+	registerModuleCRD(t, et, testModuleAGVK)
+	createGatewayConfig(t, tc)
+	createDSCI(t, tc)
+	createDSC(t, tc, dscv2.DataScienceClusterSpec{
+		Components: dscv2.Components{
+			Dashboard: componentApi.DSCDashboard{
+				ManagementSpec: common.ManagementSpec{ManagementState: operatorv1.Managed},
+			},
+			AIGateway: componentApi.DSCAIGateway{
+				ManagementSpec: common.ManagementSpec{ManagementState: operatorv1.Managed},
+			},
+		},
+	})
+
+	g := NewWithT(t)
+	g.Eventually(func(g Gomega) {
+		g.Expect(unifiedBatchNames(g, provisionReg)).To(ConsistOf("aigateway"))
+	}, "10s").Should(Succeed())
 }
 
 func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
@@ -331,9 +475,9 @@ func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
 	// absent → OperandAbsent+Info → Ready=True).
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).
 		Eventually().Should(And(
-			jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
-			jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "OperandAbsent"`),
-		))
+		jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
+		jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "OperandAbsent"`),
+	))
 
 	// Metrics: monitoring Ready unblocks RL20.
 	g.Eventually(func(g Gomega) {
@@ -344,9 +488,9 @@ func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
 	// Phase 3: aigateway at RL20 unblocked, also becomes Ready=True.
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
 		Eventually().Should(And(
-			jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
-			jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "OperandAbsent"`),
-		))
+		jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
+		jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "OperandAbsent"`),
+	))
 
 	// Metrics: RL20 processed, DAG fully cleared.
 	g.Eventually(func(g Gomega) {

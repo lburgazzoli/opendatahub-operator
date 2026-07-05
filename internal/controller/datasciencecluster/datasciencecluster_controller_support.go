@@ -12,6 +12,7 @@ import (
 	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
 	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 )
 
@@ -86,4 +87,24 @@ func computeComponentsStatus(
 	}
 
 	return nil
+}
+
+func syncComponentDAGStateForDSC(
+	instance *dscv2.DataScienceCluster,
+	reg *cr.Registry,
+	provisionReg *provision.UnifiedRegistry,
+) error {
+	if instance == nil {
+		return errors.New("failed to convert to DataScienceCluster")
+	}
+
+	return reg.ForAll(func(handler cr.ComponentHandler, registryEnabled bool) error {
+		enabled := registryEnabled && handler.IsEnabled(instance)
+		if enabled {
+			provisionReg.Enable(handler.GetName())
+		} else {
+			provisionReg.Disable(handler.GetName())
+		}
+		return nil
+	})
 }

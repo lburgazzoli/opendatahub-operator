@@ -181,6 +181,9 @@ func startAllControllers(t *testing.T, opts suiteOpts) (*envt.EnvT, *testf.TestC
 	if opts.provisionReg != nil && opts.moduleReg != nil {
 		opts.moduleReg.ProvisionRegistry = opts.provisionReg
 	}
+	if opts.provisionReg != nil && opts.componentReg != nil {
+		opts.componentReg.ProvisionRegistry = opts.provisionReg
+	}
 
 	root, err := envtestutil.FindProjectRoot()
 	g.Expect(err).NotTo(HaveOccurred())
@@ -220,6 +223,7 @@ func startAllControllers(t *testing.T, opts suiteOpts) (*envt.EnvT, *testf.TestC
 			if err := datasciencecluster.NewDataScienceClusterReconciler(ctx, mgr,
 				datasciencecluster.WithComponentRegistry(opts.componentReg),
 				datasciencecluster.WithModuleRegistry(opts.moduleReg),
+				datasciencecluster.WithProvisionRegistry(opts.provisionReg),
 				datasciencecluster.WithDeletePropagationPolicy(metav1.DeletePropagationBackground),
 			); err != nil {
 				return err
