@@ -34,7 +34,7 @@ type ComponentHandler interface {
 	// Returning (nil, nil) is valid and indicates the component does not own a CR.
 	// Callers must handle a nil return before dereferencing the result.
 	NewCRObject(ctx context.Context, cli client.Client, dsc *dscv2.DataScienceCluster) (common.PlatformObject, error)
-	NewComponentReconciler(ctx context.Context, mgr ctrl.Manager) error
+	NewComponentReconciler(ctx context.Context, mgr ctrl.Manager, tracker *provision.RunlevelTracker) error
 	// UpdateDSCStatus updates the component specific status part of the DSC
 	UpdateDSCStatus(ctx context.Context, rr *types.ReconciliationRequest) (metav1.ConditionStatus, error)
 	// IsEnabled returns whether the component should be deployed/is active

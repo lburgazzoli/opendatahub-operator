@@ -25,6 +25,7 @@ type Options struct {
 	ComponentRegistry *cr.Registry
 	ServiceRegistry   *sr.Registry
 	StuckTracker      *dag.StuckTracker
+	Tracker           *provision.RunlevelTracker
 	DeletePropagation metav1.DeletionPropagation
 	ProvisionReg      *provision.UnifiedRegistry
 }
@@ -41,6 +42,9 @@ func (o Options) applyOption(target *Options) {
 	}
 	if o.StuckTracker != nil {
 		target.StuckTracker = o.StuckTracker
+	}
+	if o.Tracker != nil {
+		target.Tracker = o.Tracker
 	}
 	if o.DeletePropagation != "" {
 		target.DeletePropagation = o.DeletePropagation
@@ -80,6 +84,13 @@ func WithServiceRegistry(r *sr.Registry) Option {
 func WithStuckTracker(t *dag.StuckTracker) Option {
 	return optionFunc(func(o *Options) {
 		o.StuckTracker = t
+	})
+}
+
+// WithTracker sets a custom RunlevelTracker. Defaults to the shared singleton.
+func WithTracker(t *provision.RunlevelTracker) Option {
+	return optionFunc(func(o *Options) {
+		o.Tracker = t
 	})
 }
 

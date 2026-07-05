@@ -84,11 +84,12 @@ func (r *Reconciler) cleanupDisabledModules(ctx context.Context, rr *odhtype.Rec
 	return nil
 }
 
-// walkModuleDAG walks the unified module DAG in runlevel order and clears
-// runlevels as each batch becomes ready. PlatformModule readiness is
-// determined by reading the PlatformModule status conditions directly —
-// the PlatformModule reconciler has already aggregated operator deployment
-// health and operand CR health into a single Ready condition.
+// walkModuleDAG walks the unified module DAG in runlevel order and advances
+// the shared runlevel admission frontier used by RunlevelGateAction.
+// PlatformModule readiness is determined by reading the PlatformModule status
+// conditions directly — the PlatformModule reconciler has already aggregated
+// operator deployment health and operand CR health into a single Ready
+// condition.
 //
 // When DSC exists (OpenShift mode), a composite checker spans both in-tree
 // components and module operators so the DAG correctly gates across both.
@@ -102,7 +103,11 @@ func (r *Reconciler) walkModuleDAG(ctx context.Context, rr *odhtype.Reconciliati
 	}
 
 	// CompositeChecker spans in-tree components and module operators.
-	// Both use unstructured CR lookups — no DSC dependency.
+	// TODO: This is an architectural compromise. The shared frontier is
+	// currently advanced here, which means Platform needs direct visibility into
+	// DSC-managed component readiness. Ideally Platform should not know about
+	// DSC-owned components and would instead consume a higher-level readiness
+	// signal for DAG advancement.
 	checker := provision.NewCompositeChecker(
 		componentReadinessChecker(rr.Client, r.ComponentRegistry),
 		moduleReadinessChecker(rr.Client, rr.Release.Version.String()),
@@ -115,7 +120,11 @@ func (r *Reconciler) walkModuleDAG(ctx context.Context, rr *odhtype.Reconciliati
 		string(rr.Instance.GetUID()),
 		rr.Conditions,
 		func(batch []provision.UnifiedNode) error {
-			provision.GetRunlevelTracker().MarkCleared(
+			// MarkCleared advances the admission frontier for this runlevel after
+			// all prior runlevels have been observed ready by WalkBatches. Leaf
+			// reconcilers use that frontier to decide whether the current runlevel
+			// may deploy; it does not mean the current batch is already Ready.
+			r.Tracker.MarkCleared(
 				rr.Release.Version.String(),
 				batch[0].GetRunlevel().Order,
 			)

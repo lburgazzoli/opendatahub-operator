@@ -10,6 +10,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/operatorconfig"
 )
@@ -27,7 +28,7 @@ type BaseComponentHandler struct {
 	InitFn                   func(common.Platform, operatorconfig.OperatorSettings) error
 	IsEnabledFn              func(*dscv2.DataScienceCluster) bool
 	NewCRObjectFn            func(context.Context, client.Client, *dscv2.DataScienceCluster) (common.PlatformObject, error)
-	NewComponentReconcilerFn func(context.Context, ctrl.Manager) error
+	NewComponentReconcilerFn func(context.Context, ctrl.Manager, *provision.RunlevelTracker) error
 	UpdateDSCStatusFn        func(context.Context, *types.ReconciliationRequest) (metav1.ConditionStatus, error)
 }
 
@@ -55,9 +56,9 @@ func (h *BaseComponentHandler) NewCRObject(ctx context.Context, cli client.Clien
 	return nil, nil
 }
 
-func (h *BaseComponentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager) error {
+func (h *BaseComponentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager, tracker *provision.RunlevelTracker) error {
 	if h.NewComponentReconcilerFn != nil {
-		return h.NewComponentReconcilerFn(ctx, mgr)
+		return h.NewComponentReconcilerFn(ctx, mgr, tracker)
 	}
 	return nil
 }

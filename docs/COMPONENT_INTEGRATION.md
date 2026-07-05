@@ -275,7 +275,7 @@ This function will be responsible for creating the reconciler for the previously
 
 The example pseudo-implementation should look like as follows:
 ```go
-func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager) error {
+func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager, tracker *provision.RunlevelTracker) error {
 	_, err := reconciler.ReconcilerFor(mgr, &componentApi.ExampleComponent{}).
 		Owns(...).
 		// ... add other necessary resource ownerships

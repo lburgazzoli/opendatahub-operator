@@ -44,12 +44,13 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/component"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/resources"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 )
 
 // NewComponentReconciler creates a ComponentReconciler for the Dashboard API.
-func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager) error {
+func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager, tracker *provision.RunlevelTracker) error {
 	componentName := computeComponentName()
 
 	_, err := reconciler.ReconcilerFor(mgr, &componentApi.Dashboard{}).
@@ -116,7 +117,7 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 			GenericFunc: func(tge event.TypedGenericEvent[client.Object]) bool { return false },
 			DeleteFunc:  func(tde event.TypedDeleteEvent[client.Object]) bool { return false },
 		}), reconciler.Dynamic(reconciler.CrdExists(gvk.DashboardHardwareProfile))).
-		WithAction(precondition.RunlevelGateAction()).
+		WithAction(precondition.RunlevelGateAction(precondition.WithTracker(tracker))).
 		WithAction(initialize).
 		WithAction(deployObservabilityManifests).
 		WithAction(setKustomizedParams).

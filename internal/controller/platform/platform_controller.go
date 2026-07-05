@@ -46,6 +46,7 @@ func New(ctx context.Context, mgr ctrl.Manager, opts ...Option) error {
 			ComponentRegistry: cr.DefaultRegistry(),
 			ServiceRegistry:   sr.DefaultRegistry(),
 			StuckTracker:      dag.NewStuckTracker(),
+			Tracker:           provision.GetRunlevelTracker(),
 			DeletePropagation: metav1.DeletePropagationForeground,
 			ProvisionReg:      provision.DefaultRegistry(),
 		},

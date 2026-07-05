@@ -12,6 +12,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	dsciv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v2"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/registry"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 
 	. "github.com/onsi/gomega"
 )
@@ -28,7 +29,7 @@ func (f *fakeServiceHandler) GroupVersionKind() schema.GroupVersionKind {
 func (f *fakeServiceHandler) GetManagementState(_ common.Platform, _ *dsciv2.DSCInitialization) operatorv1.ManagementState {
 	return operatorv1.Managed
 }
-func (f *fakeServiceHandler) NewReconciler(_ context.Context, _ ctrl.Manager) error {
+func (f *fakeServiceHandler) NewReconciler(_ context.Context, _ ctrl.Manager, _ *provision.RunlevelTracker) error {
 	return nil
 }
 

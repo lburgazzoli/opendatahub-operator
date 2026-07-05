@@ -37,11 +37,12 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/precondition"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/component"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 )
 
-func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager) error {
+func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager, tracker *provision.RunlevelTracker) error {
 	_, err := reconciler.ReconcilerFor(mgr, &componentApi.SparkOperator{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&rbacv1.RoleBinding{}).
@@ -61,7 +62,7 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 			reconciler.WithPredicates(
 				component.ForLabel(labels.ODH.Component(ComponentName), labels.True)),
 		).
-		WithAction(precondition.RunlevelGateAction()).
+		WithAction(precondition.RunlevelGateAction(precondition.WithTracker(tracker))).
 		WithAction(initialize).
 		WithAction(releases.NewAction()).
 		WithAction(kustomize.NewAction(

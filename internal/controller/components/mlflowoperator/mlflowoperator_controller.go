@@ -39,11 +39,12 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/precondition"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/component"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 )
 
-func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager) error {
+func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager, tracker *provision.RunlevelTracker) error {
 	_, err := reconciler.ReconcilerFor(mgr, &componentApi.MLflowOperator{}).
 		// customized Owns() for Component with new predicates
 		Owns(&corev1.ConfigMap{}).
@@ -65,7 +66,7 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 				component.ForLabel(labels.ODH.Component(ComponentName), labels.True)),
 		).
 		Watches(&gwapiv1.HTTPRoute{}).
-		WithAction(precondition.RunlevelGateAction()).
+		WithAction(precondition.RunlevelGateAction(precondition.WithTracker(tracker))).
 		WithAction(initialize).
 		WithAction(setKustomizedParams).
 		WithAction(releases.NewAction()).

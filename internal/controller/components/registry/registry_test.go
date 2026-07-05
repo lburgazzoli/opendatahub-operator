@@ -14,6 +14,7 @@ import (
 	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/dag"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/operatorconfig"
 
@@ -35,7 +36,7 @@ func (f *fakeComponentHandler) GroupVersionKind() schema.GroupVersionKind {
 func (f *fakeComponentHandler) NewCRObject(_ context.Context, _ client.Client, _ *dscv2.DataScienceCluster) (common.PlatformObject, error) {
 	return nil, nil
 }
-func (f *fakeComponentHandler) NewComponentReconciler(_ context.Context, _ ctrl.Manager) error {
+func (f *fakeComponentHandler) NewComponentReconciler(_ context.Context, _ ctrl.Manager, _ *provision.RunlevelTracker) error {
 	return nil
 }
 func (f *fakeComponentHandler) UpdateDSCStatus(_ context.Context, _ *types.ReconciliationRequest) (metav1.ConditionStatus, error) {

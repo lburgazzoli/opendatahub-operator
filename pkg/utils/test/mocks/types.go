@@ -21,6 +21,7 @@ import (
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
 	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	rrtypes "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/operatorconfig"
@@ -54,8 +55,8 @@ func (m *MockComponentHandler) NewCRObject(ctx context.Context, cli client.Clien
 	return args.Get(0).(common.PlatformObject), nil
 }
 
-func (m *MockComponentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager) error {
-	return m.Called(ctx, mgr).Error(0)
+func (m *MockComponentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager, tracker *provision.RunlevelTracker) error {
+	return m.Called(ctx, mgr, tracker).Error(0)
 }
 
 func (m *MockComponentHandler) UpdateDSCStatus(ctx context.Context, rr *rrtypes.ReconciliationRequest) (metav1.ConditionStatus, error) {
@@ -87,7 +88,7 @@ func NewDefaultMockComponentHandler(name string, gvk schema.GroupVersionKind) *M
 	m.On("Init", mock.Anything, mock.Anything).Return(nil).Maybe()
 	m.On("IsEnabled", mock.Anything).Return(true).Maybe()
 	m.On("NewCRObject", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Maybe()
-	m.On("NewComponentReconciler", mock.Anything, mock.Anything).Return(nil).Maybe()
+	m.On("NewComponentReconciler", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 	m.On("UpdateDSCStatus", mock.Anything, mock.Anything).Return(metav1.ConditionTrue, nil).Maybe()
 	return m
 }

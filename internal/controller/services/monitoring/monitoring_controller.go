@@ -45,6 +45,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/status/deployments"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/handlers"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/resources"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
 	odhtypes "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 )
@@ -88,7 +89,7 @@ func monitoringNamespace(_ context.Context, rr *odhtypes.ReconciliationRequest) 
 	return m.Spec.Namespace, nil
 }
 
-func (h *serviceHandler) NewReconciler(ctx context.Context, mgr ctrl.Manager) error {
+func (h *serviceHandler) NewReconciler(ctx context.Context, mgr ctrl.Manager, _ *provision.RunlevelTracker) error {
 	_, err := reconciler.ReconcilerFor(mgr, &serviceApi.Monitoring{}).
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).

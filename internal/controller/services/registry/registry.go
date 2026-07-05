@@ -10,6 +10,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	dsciv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v2"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 )
 
 // ServiceHandler is an interface to manage a service
@@ -22,7 +23,7 @@ type ServiceHandler interface {
 	// CR. Used by the Platform controller to register watches dynamically.
 	GroupVersionKind() schema.GroupVersionKind
 	GetManagementState(platform common.Platform, dsci *dsciv2.DSCInitialization) operatorv1.ManagementState
-	NewReconciler(ctx context.Context, mgr ctrl.Manager) error
+	NewReconciler(ctx context.Context, mgr ctrl.Manager, tracker *provision.RunlevelTracker) error
 }
 
 type handlerEntry struct {

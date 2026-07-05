@@ -23,6 +23,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/precondition"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/envt"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/matchers/jq"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/testf"
@@ -39,7 +40,7 @@ func startKserveController(t *testing.T, ctx context.Context) (*envt.EnvT, *test
 			Controller: ctrlconfig.Controller{SkipNameValidation: ptr.To(true)},
 		}),
 		envt.WithRegisterControllers(func(mgr ctrl.Manager) error {
-			return NewHandler().NewComponentReconciler(ctx, mgr)
+			return NewHandler().NewComponentReconciler(ctx, mgr, provision.GetRunlevelTracker())
 		}),
 	)
 	g.Expect(err).NotTo(HaveOccurred())

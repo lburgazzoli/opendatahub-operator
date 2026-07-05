@@ -554,19 +554,21 @@ func main() { //nolint:funlen,maintidx,gocyclo
 		os.Exit(1)
 	}
 
-	if err = pmctrl.New(ctx, mgr); err != nil {
+	runlevelTracker := provision.GetRunlevelTracker()
+
+	if err = pmctrl.New(ctx, mgr, pmctrl.WithTracker(runlevelTracker)); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PlatformModule")
 		os.Exit(1)
 	}
 
 	// Initialize service reconcilers
-	if err := CreateServiceReconcilers(ctx, mgr); err != nil {
+	if err := CreateServiceReconcilers(ctx, mgr, runlevelTracker); err != nil {
 		setupLog.Error(err, "unable to create service controllers")
 		os.Exit(1)
 	}
 
 	// Initialize component reconcilers
-	if err = CreateComponentReconcilers(ctx, mgr); err != nil {
+	if err = CreateComponentReconcilers(ctx, mgr, runlevelTracker); err != nil {
 		setupLog.Error(err, "unable to create component controllers")
 		os.Exit(1)
 	}
@@ -746,12 +748,12 @@ func fetchTLSProfile(ctx context.Context, scheme *runtime.Scheme, restCfg *rest.
 	return tlsOpts, profile, hasAPI
 }
 
-func CreateComponentReconcilers(ctx context.Context, mgr *manager.Manager) error {
+func CreateComponentReconcilers(ctx context.Context, mgr *manager.Manager, tracker *provision.RunlevelTracker) error {
 	l := logf.FromContext(ctx)
 
 	return cr.ForEach(func(ch cr.ComponentHandler) error {
 		l.Info("creating reconciler", "type", "component", "name", ch.GetName())
-		if err := ch.NewComponentReconciler(ctx, mgr); err != nil {
+		if err := ch.NewComponentReconciler(ctx, mgr, tracker); err != nil {
 			return fmt.Errorf("error creating %s component reconciler: %w", ch.GetName(), err)
 		}
 
@@ -759,12 +761,12 @@ func CreateComponentReconcilers(ctx context.Context, mgr *manager.Manager) error
 	})
 }
 
-func CreateServiceReconcilers(ctx context.Context, mgr *manager.Manager) error {
+func CreateServiceReconcilers(ctx context.Context, mgr *manager.Manager, tracker *provision.RunlevelTracker) error {
 	log := logf.FromContext(ctx)
 
 	return sr.ForEach(func(sh sr.ServiceHandler) error {
 		log.Info("creating reconciler", "type", "service", "name", sh.GetName())
-		if err := sh.NewReconciler(ctx, mgr); err != nil {
+		if err := sh.NewReconciler(ctx, mgr, tracker); err != nil {
 			return fmt.Errorf("error creating %s service reconciler: %w", sh.GetName(), err)
 		}
 		return nil

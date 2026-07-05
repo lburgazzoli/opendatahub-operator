@@ -20,6 +20,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/modelcontroller"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/envt"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/matchers/jq"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/scheme"
@@ -44,7 +45,7 @@ func startModelControllerController(t *testing.T, ctx context.Context) (*envt.En
 			Controller: ctrlconfig.Controller{SkipNameValidation: ptr.To(true)},
 		}),
 		envt.WithRegisterControllers(func(mgr ctrl.Manager) error {
-			return modelcontroller.NewHandler().NewComponentReconciler(ctx, mgr)
+			return modelcontroller.NewHandler().NewComponentReconciler(ctx, mgr, provision.GetRunlevelTracker())
 		}),
 	)
 	g.Expect(err).NotTo(HaveOccurred())

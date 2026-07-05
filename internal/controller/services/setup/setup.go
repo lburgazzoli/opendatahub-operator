@@ -10,6 +10,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	dsciv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v2"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 )
 
 const (
@@ -35,7 +36,7 @@ func (h *serviceHandler) GetManagementState(_ common.Platform, _ *dsciv2.DSCInit
 	return operatorv1.Managed
 }
 
-func (h *serviceHandler) NewReconciler(_ context.Context, mgr ctrl.Manager) error {
+func (h *serviceHandler) NewReconciler(_ context.Context, mgr ctrl.Manager, _ *provision.RunlevelTracker) error {
 	rec := &SetupControllerReconciler{
 		Client: mgr.GetClient(),
 	}

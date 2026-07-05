@@ -48,6 +48,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/dependent"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/hash"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/resources"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
@@ -55,7 +56,7 @@ import (
 )
 
 // NewComponentReconciler creates a ComponentReconciler for the Kserve API.
-func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager) error {
+func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager, tracker *provision.RunlevelTracker) error {
 	versionPrefix := strings.ReplaceAll("v"+cluster.GetRelease().Version.String(), ".", "-")
 
 	_, err := reconciler.ReconcilerFor(mgr, &componentApi.Kserve{}).
@@ -210,7 +211,7 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 		)).
 
 		// actions
-		WithAction(precondition.RunlevelGateAction()).
+		WithAction(precondition.RunlevelGateAction(precondition.WithTracker(tracker))).
 		WithAction(initialize).
 		WithAction(releases.NewAction()).
 		WithAction(removeOwnershipFromUnmanagedResources).

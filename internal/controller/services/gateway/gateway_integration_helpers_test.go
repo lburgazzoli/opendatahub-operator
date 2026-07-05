@@ -77,6 +77,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/gateway"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/manager"
 	metadatalabels "github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/operatorconfig"
@@ -406,7 +407,7 @@ func SetupTestEnvForMain(authMode string, clusterDomain string) *TestEnvContext 
 	mgr := manager.New(ctrlMgr)
 
 	handler := &gateway.ServiceHandler{}
-	if err := handler.NewReconciler(ctx, mgr); err != nil {
+	if err := handler.NewReconciler(ctx, mgr, provision.GetRunlevelTracker()); err != nil {
 		cancel()
 		testEnv.Stop() //nolint:errcheck
 		panic(fmt.Sprintf("Failed to setup controller: %v", err))

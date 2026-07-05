@@ -38,6 +38,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/precondition"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/component"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/metadata/labels"
 	pkgresources "github.com/opendatahub-io/opendatahub-operator/v2/pkg/resources"
@@ -58,7 +59,7 @@ func isInferenceServicesCRD(obj client.Object) bool {
 	return pkgresources.HasLabel(obj, labels.ODH.Component(componentApi.KserveComponentName), labels.True)
 }
 
-func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager) error {
+func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.Manager, tracker *provision.RunlevelTracker) error {
 	_, err := reconciler.ReconcilerFor(mgr, &componentApi.TrustyAI{}).
 		// customized Owns() for Component with new predicates
 		Owns(&corev1.ConfigMap{}).
@@ -97,7 +98,7 @@ func (s *componentHandler) NewComponentReconciler(ctx context.Context, mgr ctrl.
 				},
 			)),
 		).
-		WithAction(precondition.RunlevelGateAction()).
+		WithAction(precondition.RunlevelGateAction(precondition.WithTracker(tracker))).
 		WithAction(checkPreConditions).
 		WithAction(initialize).
 		WithAction(createConfigMap).

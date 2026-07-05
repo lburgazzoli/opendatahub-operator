@@ -35,6 +35,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/render/template"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/handlers"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/resources"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
 )
 
@@ -57,7 +58,7 @@ func (h *ServiceHandler) GetManagementState(platform common.Platform, _ *dsciv2.
 	return operatorv1.Managed
 }
 
-func (h *ServiceHandler) NewReconciler(ctx context.Context, mgr ctrl.Manager) error {
+func (h *ServiceHandler) NewReconciler(ctx context.Context, mgr ctrl.Manager, _ *provision.RunlevelTracker) error {
 	_, err := reconciler.ReconcilerFor(mgr, &serviceApi.Auth{}).
 		// operands - owned
 		Owns(&rbacv1.ClusterRoleBinding{}).

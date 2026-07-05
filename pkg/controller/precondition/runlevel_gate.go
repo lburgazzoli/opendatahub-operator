@@ -45,7 +45,11 @@ func WithRegistry(r *provision.UnifiedRegistry) RunlevelGateOption {
 // WithTracker replaces the default global RunlevelTracker.
 // Useful in tests to inject an isolated tracker without touching global state.
 func WithTracker(t *provision.RunlevelTracker) RunlevelGateOption {
-	return func(c *runlevelGateConfig) { c.tracker = t }
+	return func(c *runlevelGateConfig) {
+		if t != nil {
+			c.tracker = t
+		}
+	}
 }
 
 // InstanceName derives the component name from rr.Instance.GetName().
