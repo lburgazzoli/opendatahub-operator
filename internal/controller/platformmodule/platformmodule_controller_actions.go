@@ -125,12 +125,21 @@ func (r *Reconciler) driftCleanup(ctx context.Context, rr *odhtype.Reconciliatio
 
 	log := logf.FromContext(ctx)
 
-	currentRefs := resourceRefsFrom(rr.Resources)
+	currentRefs := trackedResourceRefsFrom(rr.Resources)
 	savedRefs := sets.New(currentRefs...)
 	stale := sets.New(pm.Status.Resources...).Difference(savedRefs)
 
 	policy := r.DeletePropagation
 	for ref := range stale {
+		if !shouldTrackResourceRef(ref.GroupVersionKind()) {
+			log.Info("skipping protected stale module operator resource",
+				"module", pm.Name,
+				"gvk", ref.GroupVersionKind().String(),
+				"namespace", ref.Namespace,
+				"name", ref.Name)
+			continue
+		}
+
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(ref.GroupVersionKind())
 		u.SetName(ref.Name)

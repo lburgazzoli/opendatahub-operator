@@ -2,6 +2,7 @@ package platformmodule
 
 import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
@@ -27,6 +28,41 @@ func resourceRefsFrom(rs []unstructured.Unstructured) []configv1alpha1.ResourceR
 		})
 	}
 	return refs
+}
+
+func shouldTrackResourceRef(k schema.GroupVersionKind) bool {
+	switch k {
+	case gvk.CustomResourceDefinition:
+		return false
+	case gvk.Namespace:
+		return false
+	default:
+		return true
+	}
+}
+
+func trackedResourceRefsFrom(rs []unstructured.Unstructured) []configv1alpha1.ResourceRef {
+	return filterTrackedResourceRefs(resourceRefsFrom(rs))
+}
+
+func filterTrackedResourceRefs(refs []configv1alpha1.ResourceRef) []configv1alpha1.ResourceRef {
+	if len(refs) == 0 {
+		return nil
+	}
+
+	tracked := make([]configv1alpha1.ResourceRef, 0, len(refs))
+	for _, ref := range refs {
+		if !shouldTrackResourceRef(ref.GroupVersionKind()) {
+			continue
+		}
+		tracked = append(tracked, ref)
+	}
+
+	if len(tracked) == 0 {
+		return nil
+	}
+
+	return tracked
 }
 
 // ensureConfigMap returns the index of the ConfigMap with the given name in

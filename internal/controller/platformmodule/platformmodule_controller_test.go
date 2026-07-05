@@ -323,6 +323,78 @@ func TestPlatformModuleReconciler_DriftCleanup(t *testing.T) {
 	)
 }
 
+func TestPlatformModuleReconciler_DoesNotTrackProtectedResources(t *testing.T) {
+	h := newManifestHandler("testmodule", testModuleGVK, "protectedresources")
+
+	reg := modules.NewRegistry()
+	reg.Add(&h)
+
+	_, wt := startPlatformModuleControllerWith(t, WithRegistry(reg))
+	createPlatformModuleCR(t, wt, "testmodule")
+
+	nn := types.NamespacedName{Name: "testmodule"}
+	serviceKey := types.NamespacedName{Name: "testmodule-operator", Namespace: "default"}
+	namespaceKey := types.NamespacedName{Name: "module-managed"}
+	crdKey := types.NamespacedName{Name: "testmodules.components.platform.opendatahub.io"}
+
+	wt.Get(gvk.Service, serviceKey).Eventually().Should(Not(BeNil()))
+	wt.Get(gvk.Namespace, namespaceKey).Eventually().Should(Not(BeNil()))
+	wt.Get(gvk.CustomResourceDefinition, crdKey).Eventually().Should(Not(BeNil()))
+
+	wt.Get(gvk.PlatformModule, nn).Eventually().Should(And(
+		jq.Match(`[.status.resources[] | select(.kind == "Service" and .name == "testmodule-operator")] | length > 0`),
+		jq.Match(`[.status.resources[] | select(.kind == "CustomResourceDefinition")] | length == 0`),
+		jq.Match(`[.status.resources[] | select(.kind == "Namespace")] | length == 0`),
+	))
+}
+
+func TestPlatformModuleReconciler_DriftCleanup_DoesNotDeleteProtectedResources(t *testing.T) {
+	h := newManifestHandler("testmodule", testModuleGVK, "protectedresources")
+
+	reg := modules.NewRegistry()
+	reg.Add(&h)
+
+	_, wt := startPlatformModuleControllerWith(t, WithRegistry(reg))
+	createPlatformModuleCR(t, wt, "testmodule")
+
+	nn := types.NamespacedName{Name: "testmodule"}
+	serviceKey := types.NamespacedName{Name: "testmodule-operator", Namespace: "default"}
+	namespaceKey := types.NamespacedName{Name: "module-managed"}
+	crdKey := types.NamespacedName{Name: "testmodules.components.platform.opendatahub.io"}
+
+	// Wait for the initial reconcile to complete before mutating status.
+	wt.Get(gvk.PlatformModule, nn).Eventually().Should(And(
+		jq.Match(`[.status.conditions[] | select(.type == "%s")] | length > 0`,
+			status.ConditionDeploymentsAvailable),
+		jq.Match(`[.status.resources[] | select(.kind == "Service" and .name == "testmodule-operator")] | length > 0`),
+	))
+
+	wt.Get(gvk.Namespace, namespaceKey).Eventually().Should(Not(BeNil()))
+	wt.Get(gvk.CustomResourceDefinition, crdKey).Eventually().Should(Not(BeNil()))
+
+	pm := &configv1alpha1.PlatformModule{}
+	wt.Expect(wt.Client().Get(wt.Context(), nn, pm)).Should(Succeed())
+	pm.Status.Resources = []configv1alpha1.ResourceRef{
+		{Group: "apiextensions.k8s.io", Version: "v1", Kind: "CustomResourceDefinition", Name: crdKey.Name},
+		{Version: "v1", Kind: "Namespace", Name: namespaceKey.Name},
+	}
+	wt.Expect(wt.Client().Status().Update(wt.Context(), pm)).Should(Succeed())
+
+	wt.Expect(wt.Client().Get(wt.Context(), nn, pm)).Should(Succeed())
+	pm.Annotations = map[string]string{"trigger": "protected-resource-reconcile"}
+	wt.Expect(wt.Client().Update(wt.Context(), pm)).Should(Succeed())
+
+	wt.Get(gvk.CustomResourceDefinition, crdKey).Eventually().Should(Not(BeNil()))
+	wt.Get(gvk.Namespace, namespaceKey).Eventually().Should(Not(BeNil()))
+	wt.Get(gvk.Service, serviceKey).Eventually().Should(Not(BeNil()))
+
+	wt.Get(gvk.PlatformModule, nn).Eventually().Should(And(
+		jq.Match(`[.status.resources[] | select(.kind == "Service" and .name == "testmodule-operator")] | length > 0`),
+		jq.Match(`[.status.resources[] | select(.kind == "CustomResourceDefinition")] | length == 0`),
+		jq.Match(`[.status.resources[] | select(.kind == "Namespace")] | length == 0`),
+	))
+}
+
 // TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRHasNoConditions: CR exists,
 // no conditions. OperandAvailable=False (no Info — blocks DAG), Ready=False.
 func TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRHasNoConditions(t *testing.T) {

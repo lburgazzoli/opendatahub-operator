@@ -7,6 +7,7 @@ import (
 
 	semver "github.com/blang/semver/v4"
 	libversion "github.com/operator-framework/api/pkg/lib/version"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -55,6 +56,38 @@ func TestResourceRefsFrom_PreservesGVKAndCoordinates(t *testing.T) {
 		Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole",
 		Name: "ai-gateway-operator",
 	}))
+}
+
+func TestResourceRefsFrom_IncludesCRDs(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	resources := []unstructured.Unstructured{
+		makeUnstructured(gvk.CustomResourceDefinition, "", "monitorings.components.platform.opendatahub.io"),
+		makeUnstructured(gvk.Deployment, "opendatahub", "monitoring-operator"),
+	}
+
+	refs := resourceRefsFrom(resources)
+
+	g.Expect(refs).Should(ConsistOf(
+		configv1alpha1.ResourceRef{
+			Group: "apiextensions.k8s.io", Version: "v1", Kind: "CustomResourceDefinition",
+			Name: "monitorings.components.platform.opendatahub.io",
+		},
+		configv1alpha1.ResourceRef{
+			Group: "apps", Version: "v1", Kind: "Deployment",
+			Namespace: "opendatahub", Name: "monitoring-operator",
+		},
+	))
+}
+
+func TestShouldTrackResourceRef_ExcludesProtectedClusterScopedTypes(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	g.Expect(shouldTrackResourceRef(gvk.CustomResourceDefinition)).Should(BeFalse())
+	g.Expect(shouldTrackResourceRef(gvk.Namespace)).Should(BeFalse())
+	g.Expect(shouldTrackResourceRef(gvk.Deployment)).Should(BeTrue())
 }
 
 // --- ensureConfigMap ---
@@ -221,6 +254,90 @@ func TestPlatformModuleDriftCleanup_ToleratesAlreadyGoneResource(t *testing.T) {
 	g.Expect(pm.Status.Resources).Should(BeEmpty())
 }
 
+func TestPlatformModuleDriftCleanup_DoesNotDeleteTrackedCRD(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	crdName := "monitorings.components.platform.opendatahub.io"
+	crd := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "apiextensions.k8s.io/v1",
+			"kind":       "CustomResourceDefinition",
+			"metadata": map[string]any{
+				"name": crdName,
+			},
+		},
+	}
+	crd.SetGroupVersionKind(gvk.CustomResourceDefinition)
+
+	cl, err := fakeclient.New(fakeclient.WithObjects(crd))
+	g.Expect(err).ShouldNot(HaveOccurred())
+
+	pm := newPlatformModule("monitoring", configv1alpha1.ResourceRef{
+		Group: "apiextensions.k8s.io", Version: "v1", Kind: "CustomResourceDefinition",
+		Name: crdName,
+	})
+
+	rr := &odhtype.ReconciliationRequest{
+		Instance:  pm,
+		Client:    cl,
+		Resources: []unstructured.Unstructured{},
+	}
+
+	err = (&Reconciler{}).driftCleanup(context.Background(), rr)
+	g.Expect(err).ShouldNot(HaveOccurred())
+
+	currentCRD := &unstructured.Unstructured{}
+	currentCRD.SetGroupVersionKind(gvk.CustomResourceDefinition)
+	g.Expect(cl.Get(context.Background(), client.ObjectKey{Name: crdName}, currentCRD)).Should(Succeed())
+
+	// CRDs from old status are dropped from the tracked set so they can no longer
+	// participate in future drift cleanup decisions.
+	g.Expect(pm.Status.Resources).Should(BeEmpty())
+}
+
+func TestPlatformModuleDriftCleanup_DoesNotDeleteTrackedNamespace(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	namespaceName := "module-managed"
+	ns := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "v1",
+			"kind":       "Namespace",
+			"metadata": map[string]any{
+				"name": namespaceName,
+			},
+		},
+	}
+	ns.SetGroupVersionKind(gvk.Namespace)
+
+	cl, err := fakeclient.New(
+		fakeclient.WithObjects(ns),
+		fakeclient.WithGVKs(fakeclient.GVKMapping{GVK: gvk.Namespace, Scope: meta.RESTScopeRoot}),
+	)
+	g.Expect(err).ShouldNot(HaveOccurred())
+
+	pm := newPlatformModule("monitoring", configv1alpha1.ResourceRef{
+		Version: "v1", Kind: "Namespace",
+		Name: namespaceName,
+	})
+
+	rr := &odhtype.ReconciliationRequest{
+		Instance:  pm,
+		Client:    cl,
+		Resources: []unstructured.Unstructured{},
+	}
+
+	err = (&Reconciler{}).driftCleanup(context.Background(), rr)
+	g.Expect(err).ShouldNot(HaveOccurred())
+
+	currentNS := &unstructured.Unstructured{}
+	currentNS.SetGroupVersionKind(gvk.Namespace)
+	g.Expect(cl.Get(context.Background(), client.ObjectKey{Name: namespaceName}, currentNS)).Should(Succeed())
+	g.Expect(pm.Status.Resources).Should(BeEmpty())
+}
+
 // --- syncModuleCRStatus ---
 
 func TestSyncModuleCRStatus_NoHandler_SetsOperandReady(t *testing.T) {
@@ -328,7 +445,8 @@ func (noopHandlerWithGVK) BuildModuleCR(_ context.Context, _ client.Client, _ *m
 
 func (noopHandlerWithGVK) IsEnabled(_ *modules.PlatformContext) bool { return true }
 
-func (noopHandlerWithGVK) ApplyManagementState(_ *modules.PlatformContext, _ *configv1alpha1.PlatformModules) {}
+func (noopHandlerWithGVK) ApplyManagementState(_ *modules.PlatformContext, _ *configv1alpha1.PlatformModules) {
+}
 
 func newNoopHandlerWithGVK(name string, k schema.GroupVersionKind) noopHandlerWithGVK {
 	return noopHandlerWithGVK{
