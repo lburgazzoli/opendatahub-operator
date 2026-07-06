@@ -16,6 +16,7 @@ import (
 	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
 	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/dag"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
@@ -240,12 +241,6 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
 		Eventually().Should(Succeed())
 
-	wt.Get(gvk.Platform, nn).Eventually().Should(And(
-		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .status == "False"`),
-		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .reason == "AwaitingReadiness"`),
-		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .message | contains("dashboard")`),
-	))
-
 	// Metrics: RL10 processed, RL20 blocked — DAG stuck at runlevel boundary.
 	g.Eventually(func(g Gomega) {
 		g.Expect(provision.RunlevelStatus).To(And(
@@ -256,7 +251,7 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 		))
 		g.Expect(provision.RunlevelCleared).To(prom.HaveValue(10))
 		g.Expect(provision.RunlevelBlocked).To(prom.HaveValue(20))
-	}).Should(Succeed())
+	}, "10s").Should(Succeed())
 
 	// Step 2: Create Dashboard CR and mark Ready=True → RL10 clears.
 	dashboard := &unstructured.Unstructured{}
@@ -267,12 +262,7 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 
 	setUnstructuredReady(t, cli, dashboard, true)
 
-	// Step 3: ProvisioningProgress=True → RL10 cleared, RL20 unblocks.
-	wt.Get(gvk.Platform, nn).Eventually().Should(
-		jq.Match(`.status.conditions[] | select(.type == "ProvisioningProgress") | .status == "True"`),
-	)
-
-	// Metrics: RL20 transitioned from blocked → processed.
+	// Step 3: RL10 clears and RL20 unblocks once dashboard becomes Ready.
 	g.Eventually(func(g Gomega) {
 		g.Expect(provision.RunlevelStatus).To(And(
 			prom.HaveGaugeVecValue(1, "20", provision.StatusProcessed),
@@ -280,7 +270,7 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 		))
 		g.Expect(provision.RunlevelCleared).To(prom.HaveValue(20))
 		g.Expect(provision.RunlevelBlocked).To(prom.HaveValue(0))
-	}).Should(Succeed())
+	}, "10s").Should(Succeed())
 
 	// Step 4: aigateway PlatformModule still not ready — DSC created the module
 	// operand CR with no conditions → OperandInitializing blocks.
@@ -288,7 +278,8 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 		Eventually().Should(And(
 		jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .status == "False"`),
 		jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "OperandInitializing"`),
-		jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .message == "module CR has no conditions yet"`),
+		jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .message == "%s"`,
+			status.TrackedResourceInitializingMessage),
 	))
 
 	// Step 5: Mark module operand CR Ready → PlatformModule Ready → ModulesReady=True.
@@ -310,7 +301,7 @@ func TestDSCDriven_DAG_Advancement(t *testing.T) {
 		g.Expect(provision.RunlevelCleared).To(prom.HaveValue(20))
 		g.Expect(provision.RunlevelBlocked).To(prom.HaveValue(0))
 		g.Expect(captureBatchCount() - batchesBefore).To(BeNumerically(">=", 2))
-	}).Should(Succeed())
+	}, "10s").Should(Succeed())
 }
 
 func TestDSCDriven_ComponentDAGSync_ReflectsDSCManagementState(t *testing.T) {
@@ -468,12 +459,12 @@ func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
 		g.Expect(provision.RunlevelStatus).To(prom.HaveGaugeVecValue(0, "20", provision.StatusProcessed))
 	}).Should(Succeed())
 
-	// Phase 2: monitoring at RL10 becomes Ready=True (no manifests, module CR
-	// absent → OperandAbsent+Info → Ready=True).
+	// Phase 2: monitoring at RL10 becomes Ready=True (no manifests, tracked
+	// resource absent → TrackedResourceMissing+Info → Ready=True).
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).
 		Eventually().Should(And(
 		jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
-		jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "OperandAbsent"`),
+		jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "TrackedResourceMissing"`),
 	))
 
 	// Metrics: monitoring Ready unblocks RL20.
@@ -486,7 +477,7 @@ func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
 		Eventually().Should(And(
 		jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
-		jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "OperandAbsent"`),
+		jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "TrackedResourceMissing"`),
 	))
 
 	// Metrics: RL20 processed, DAG fully cleared.

@@ -43,23 +43,17 @@ type optionFunc func(*Options)
 func (f optionFunc) applyOption(o *Options) { f(o) }
 
 // WithComponentRegistry sets a custom component handler registry.
-//
-//nolint:ireturn // Option constructors intentionally return the public Option interface.
-func WithComponentRegistry(r *cr.Registry) Option {
+func WithComponentRegistry(r *cr.Registry) Option { //nolint:ireturn // Public option constructors intentionally return the Option interface.
 	return optionFunc(func(o *Options) { o.ComponentRegistry = r })
 }
 
 // WithModuleRegistry sets a custom module handler registry.
-//
-//nolint:ireturn // Option constructors intentionally return the public Option interface.
-func WithModuleRegistry(r *modules.Registry) Option {
+func WithModuleRegistry(r *modules.Registry) Option { //nolint:ireturn // Public option constructors intentionally return the Option interface.
 	return optionFunc(func(o *Options) { o.ModuleRegistry = r })
 }
 
 // WithProvisionRegistry sets a custom unified DAG registry.
-//
-//nolint:ireturn // Option constructors intentionally return the public Option interface.
-func WithProvisionRegistry(r *provision.UnifiedRegistry) Option {
+func WithProvisionRegistry(r *provision.UnifiedRegistry) Option { //nolint:ireturn // Public option constructors intentionally return the Option interface.
 	return optionFunc(func(o *Options) { o.ProvisionRegistry = r })
 }
 

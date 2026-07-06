@@ -213,8 +213,8 @@ func (r *Reconciler) aggregateStatus(ctx context.Context, rr *odhtype.Reconcilia
 					return fmt.Errorf("getting PlatformModule %s for status aggregation: %w", entry.Name, err)
 				}
 				summary.Status = configv1alpha1.PlatformModuleConditionSummary{
-					Reason:  "TrackerMissing",
-					Message: "tracker is not created yet",
+					Reason:  status.OperandMissingReason,
+					Message: status.OperandNotCreatedMessage,
 				}
 				notReady.Insert(entry.Name)
 				break
@@ -233,7 +233,7 @@ func (r *Reconciler) aggregateStatus(ctx context.Context, rr *odhtype.Reconcilia
 			} else {
 				summary.Status = configv1alpha1.PlatformModuleConditionSummary{
 					Reason:  status.NotReadyReason,
-					Message: "tracker has not reported readiness yet",
+					Message: status.OperandReadinessUnknownMessage,
 				}
 				notReady.Insert(entry.Name)
 			}

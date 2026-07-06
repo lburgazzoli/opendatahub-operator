@@ -10,6 +10,7 @@ import (
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
 	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/dag"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
@@ -20,11 +21,20 @@ import (
 )
 
 func TestPlatformOnly_TwoModules_Created(t *testing.T) {
-	_, tc := startAllControllers(t, suiteOpts{
-		moduleReg:    modules.NewRegistry(),
+	moduleReg := modules.NewRegistry()
+	moduleReg.Add(newTestModuleHandler("monitoring", testModuleAGVK))
+	moduleReg.Add(newTestModuleHandler("aigateway", testModuleBGVK))
+
+	provisionReg := provision.NewRegistry()
+
+	et, tc := startAllControllers(t, suiteOpts{
+		moduleReg:    moduleReg,
 		componentReg: &cr.Registry{},
-		provisionReg: provision.NewRegistry(),
+		provisionReg: provisionReg,
 	})
+
+	registerModuleCRD(t, et, testModuleAGVK)
+	registerModuleCRD(t, et, testModuleBGVK)
 
 	createGatewayConfig(t, tc)
 
@@ -137,7 +147,8 @@ func TestPlatformOnly_DAG_Advancement(t *testing.T) {
 		Eventually().Should(And(
 		jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .status == "False"`),
 		jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "OperandInitializing"`),
-		jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .message == "module CR has no conditions yet"`),
+		jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .message == "%s"`,
+			status.TrackedResourceInitializingMessage),
 	))
 
 	// Metrics: RL20 should now be processed (monitoring Ready unblocked it).
@@ -168,11 +179,20 @@ func TestPlatformOnly_DAG_Advancement(t *testing.T) {
 }
 
 func TestPlatformOnly_DisableModule_Cleanup(t *testing.T) {
-	_, tc := startAllControllers(t, suiteOpts{
-		moduleReg:    modules.NewRegistry(),
+	moduleReg := modules.NewRegistry()
+	moduleReg.Add(newTestModuleHandler("monitoring", testModuleAGVK))
+	moduleReg.Add(newTestModuleHandler("aigateway", testModuleBGVK))
+
+	provisionReg := provision.NewRegistry()
+
+	et, tc := startAllControllers(t, suiteOpts{
+		moduleReg:    moduleReg,
 		componentReg: &cr.Registry{},
-		provisionReg: provision.NewRegistry(),
+		provisionReg: provisionReg,
 	})
+
+	registerModuleCRD(t, et, testModuleAGVK)
+	registerModuleCRD(t, et, testModuleBGVK)
 
 	createGatewayConfig(t, tc)
 
@@ -190,11 +210,17 @@ func TestPlatformOnly_DisableModule_Cleanup(t *testing.T) {
 		Eventually().Should(Succeed())
 
 	// Disable monitoring by updating Platform spec.
-	p := &configv1alpha1.Platform{}
-	g.Expect(cli.Get(t.Context(),
-		types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}, p)).Should(Succeed())
-	p.Spec.Modules = managedPlatformEntries("aigateway")
-	g.Expect(cli.Update(t.Context(), p)).Should(Succeed())
+	g.Eventually(func() error {
+		p := &configv1alpha1.Platform{}
+		if err := cli.Get(t.Context(),
+			types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}, p); err != nil {
+			return err
+		}
+
+		p.Spec.Modules = managedPlatformEntries("aigateway")
+
+		return cli.Update(t.Context(), p)
+	}).Should(Succeed())
 
 	// monitoring PlatformModule should be deleted.
 	g.Eventually(func() error {

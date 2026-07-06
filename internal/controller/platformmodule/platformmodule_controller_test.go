@@ -422,7 +422,7 @@ func TestPlatformModuleReconciler_DriftCleanup_DoesNotDeleteProtectedResources(t
 }
 
 // TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRHasNoConditions: CR exists,
-// no conditions. OperandAvailable=False with Info severity, so Ready stays True.
+// no conditions. OperandAvailable=False is blocking, so Ready becomes False.
 func TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRHasNoConditions(t *testing.T) {
 	h := newManifestHandler("testmodule", testModuleGVK, "testmodule")
 
@@ -441,11 +441,9 @@ func TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRHasNoConditions(t
 			status.ConditionTypeOperandAvailable, metav1.ConditionFalse),
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .reason == "OperandInitializing"`,
 			status.ConditionTypeOperandAvailable),
-		jq.Match(`.status.conditions[] | select(.type == "%s") | .severity == "Info"`,
-			status.ConditionTypeOperandAvailable),
-		// Informational condition does not flip Ready.
+		// Missing operand conditions block Ready until the tracked CR reports status.
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
-			status.ConditionTypeReady, metav1.ConditionTrue),
+			status.ConditionTypeReady, metav1.ConditionFalse),
 	))
 }
 
@@ -478,8 +476,8 @@ func TestPlatformModuleReconciler_DynamicWatchActivatesOnCRDCreation(t *testing.
 			status.ConditionTypeOperandAvailable),
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .severity == "Info"`,
 			status.ConditionTypeOperandAvailable),
-		jq.Match(`.status.conditions[] | select(.type == "%s") | .message == "tracked resource CRD is not installed"`,
-			status.ConditionTypeOperandAvailable),
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .message == "%s"`,
+			status.ConditionTypeOperandAvailable, status.TrackedResourceCRDMissingMessage),
 		// Ready
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
 			status.ConditionTypeReady, metav1.ConditionTrue),
@@ -503,8 +501,8 @@ func TestPlatformModuleReconciler_DynamicWatchActivatesOnCRDCreation(t *testing.
 			status.ConditionTypeOperandAvailable),
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .severity == "Info"`,
 			status.ConditionTypeOperandAvailable),
-		jq.Match(`.status.conditions[] | select(.type == "%s") | .message == "tracked resource CR is not created"`,
-			status.ConditionTypeOperandAvailable),
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .message == "%s"`,
+			status.ConditionTypeOperandAvailable, status.TrackedResourceNotCreatedMessage),
 		// Ready
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
 			status.ConditionTypeReady, metav1.ConditionTrue),

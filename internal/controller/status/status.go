@@ -137,6 +137,7 @@ const (
 
 	AvailableReason          = "Available"
 	NotReadyReason           = "NotReady"
+	OperandMissingReason     = "OperandMissing"
 	ProvisioningFailedReason = "ProvisioningFailed"
 	ReadyReason              = "Ready"
 	DeletingReason           = "Deleting"
@@ -147,6 +148,15 @@ const (
 	DAGResolutionFailedReason     = "DAGResolutionFailed"
 	RunlevelTimeoutExceededReason = "RunlevelTimeoutExceeded"
 	AdminAckRequiredReason        = "AdminAckRequired"
+)
+
+const (
+	OperandNotCreatedMessage             = "operand is not created yet"
+	OperandReadinessUnknownMessage       = "operand has not reported readiness yet"
+	TrackedResourceCRDMissingMessage     = "tracked resource CRD is not installed"
+	TrackedResourceNotCreatedMessage     = "tracked resource CR is not created"
+	TrackedResourceInitializingMessage   = "tracked resource has no conditions yet"
+	TrackedResourceReadyConditionMessage = "tracked resource does not report a Ready condition"
 )
 
 const (

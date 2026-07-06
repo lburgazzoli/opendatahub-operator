@@ -276,7 +276,7 @@ func (r *Reconciler) syncModuleCRStatus(ctx context.Context, rr *odhtype.Reconci
 		rr.Conditions.MarkFalse(status.ConditionTypeOperandAvailable,
 			conditions.WithReason("TrackedResourceMissing"),
 			conditions.WithSeverity(common.ConditionSeverityInfo),
-			conditions.WithMessage("tracked resource CRD is not installed"),
+			conditions.WithMessage(status.TrackedResourceCRDMissingMessage),
 		)
 		return nil
 	case k8serr.IsNotFound(err):
@@ -284,7 +284,7 @@ func (r *Reconciler) syncModuleCRStatus(ctx context.Context, rr *odhtype.Reconci
 		rr.Conditions.MarkFalse(status.ConditionTypeOperandAvailable,
 			conditions.WithReason("TrackedResourceMissing"),
 			conditions.WithSeverity(common.ConditionSeverityInfo),
-			conditions.WithMessage("tracked resource CR is not created"),
+			conditions.WithMessage(status.TrackedResourceNotCreatedMessage),
 		)
 		return nil
 	case err != nil:
@@ -314,8 +314,7 @@ func (r *Reconciler) reflectTrackedObjectStatus(
 	case len(conditionsList) == 0:
 		rr.Conditions.MarkFalse(status.ConditionTypeOperandAvailable,
 			conditions.WithReason("OperandInitializing"),
-			conditions.WithSeverity(common.ConditionSeverityInfo),
-			conditions.WithMessage("tracked resource has no conditions yet"),
+			conditions.WithMessage(status.TrackedResourceInitializingMessage),
 		)
 		return nil
 	case !conditions.IsStatusConditionTrue(trackedStatus, status.ConditionTypeReady):
@@ -329,7 +328,7 @@ func (r *Reconciler) reflectTrackedObjectStatus(
 		}
 		rr.Conditions.MarkFalse(status.ConditionTypeOperandAvailable,
 			conditions.WithReason(status.NotReadyReason),
-			conditions.WithMessage("tracked resource does not report a Ready condition"),
+			conditions.WithMessage(status.TrackedResourceReadyConditionMessage),
 		)
 		return nil
 	default:

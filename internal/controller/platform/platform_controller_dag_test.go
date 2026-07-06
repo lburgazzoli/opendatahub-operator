@@ -127,12 +127,12 @@ func setUnstructuredReady(t *testing.T, tc *testf.TestContext, u *unstructured.U
 // composite checker (componentReadinessChecker + moduleReadinessChecker) gates
 // DAG advancement correctly when components and modules are at different runlevels.
 //
-// Setup: Dashboard component/tracker at RL10, monitoring module at RL20.
+// Setup: Dashboard operand at RL10, monitoring module at RL20.
 //
 // Expected behaviour:
-//  1. No component CR → dashboard tracker not ready, DAG blocked
+//  1. No component CR → dashboard operand not ready, DAG blocked
 //  2. Component CR exists but Ready=False → still blocked
-//  3. Component CR Ready=True → dashboard tracker becomes ready, RL10 clears
+//  3. Component CR Ready=True → dashboard operand becomes ready, RL10 clears
 //  4. Monitoring PlatformModule Ready=True → ModulesReady=True
 func TestPlatformReconciler_DAGGating_ComponentBlocksModule(t *testing.T) {
 	// Provision registry: Dashboard at RL10, monitoring at RL20.
@@ -170,21 +170,21 @@ func TestPlatformReconciler_DAGGating_ComponentBlocksModule(t *testing.T) {
 	wt := tc.NewWithT(t)
 	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
 
-	// Step 1: No Dashboard CR → dashboard tracker is not ready, so DAG stays blocked at RL10.
+	// Step 1: No Dashboard CR → dashboard operand is not ready, so DAG stays blocked at RL10.
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "dashboard"}).
 		Eventually().Should(Succeed())
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).
 		Eventually().Should(Succeed())
 
 	wt.Get(gvk.Platform, nn).Eventually().Should(And(
-		// ModulesReady blocked — dashboard tracker cannot report readiness yet.
+		// ModulesReady blocked — dashboard operand cannot report readiness yet.
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
 			status.ConditionTypeModulesReady, metav1.ConditionFalse),
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .message | contains("monitoring")`,
 			status.ConditionTypeModulesReady),
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .message | contains("dashboard")`,
 			status.ConditionTypeModulesReady),
-		// ProvisioningProgress blocked — dashboard tracker at RL10 not ready.
+		// ProvisioningProgress blocked — dashboard operand at RL10 not ready.
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
 			status.ConditionTypeProvisioningProgress, metav1.ConditionFalse),
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .reason == "%s"`,
@@ -203,7 +203,7 @@ func TestPlatformReconciler_DAGGating_ComponentBlocksModule(t *testing.T) {
 	NewWithT(t).Expect(cli.Create(ctx, dashboard)).Should(Succeed())
 	t.Cleanup(func() { _ = cli.Delete(context.Background(), dashboard) })
 
-	// Dashboard exists but has no conditions → tracker still not ready → still blocked.
+	// Dashboard exists but has no conditions → operand still not ready → still blocked.
 	wt.Get(gvk.Platform, nn).Eventually().Should(And(
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
 			status.ConditionTypeModulesReady, metav1.ConditionFalse),
@@ -213,7 +213,7 @@ func TestPlatformReconciler_DAGGating_ComponentBlocksModule(t *testing.T) {
 			status.ConditionTypeProvisioningProgress),
 	))
 
-	// Step 3: Mark Dashboard Ready=True → dashboard tracker becomes ready and RL10 clears.
+	// Step 3: Mark Dashboard Ready=True → dashboard operand becomes ready and RL10 clears.
 	// ProvisioningProgress flips to True.
 	setUnstructuredReady(t, tc, dashboard, true)
 

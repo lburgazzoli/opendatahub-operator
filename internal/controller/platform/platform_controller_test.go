@@ -219,7 +219,11 @@ func TestPlatformReconciler_ReportsEnabledModulesInStatus(t *testing.T) {
 
 	// status.modules must include the "monitoring" summary row.
 	wt.Get(gvk.Platform, nn).Eventually().Should(
-		jq.Match(`.status.modules[] | select(.name == "monitoring") | .name == "monitoring"`),
+		And(
+			jq.Match(`.status.modules[] | select(.name == "monitoring") | .name == "monitoring"`),
+			jq.Match(`.status.modules[] | select(.name == "monitoring") | .status.message == "%s"`,
+				status.OperandReadinessUnknownMessage),
+		),
 	)
 
 	// Disable monitoring by removing the entry — status.modules must become empty.
