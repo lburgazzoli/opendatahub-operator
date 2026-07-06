@@ -249,7 +249,11 @@ func TestPlatformModuleDriftCleanup_ToleratesAlreadyGoneResource(t *testing.T) {
 		Resources: []unstructured.Unstructured{},
 	}
 
-	err = (&Reconciler{}).driftCleanup(context.Background(), rr)
+	reg := modules.NewRegistry()
+	h := newNoopHandlerWithGVK("aigateway", gvk.AIGateway)
+	reg.Add(&h)
+
+	err = (&Reconciler{Options: Options{Registry: reg}}).driftCleanup(context.Background(), rr)
 	g.Expect(err).ShouldNot(HaveOccurred()) // NotFound must be tolerated
 	g.Expect(pm.Status.Resources).Should(BeEmpty())
 }
@@ -284,7 +288,11 @@ func TestPlatformModuleDriftCleanup_DoesNotDeleteTrackedCRD(t *testing.T) {
 		Resources: []unstructured.Unstructured{},
 	}
 
-	err = (&Reconciler{}).driftCleanup(context.Background(), rr)
+	reg := modules.NewRegistry()
+	h := newNoopHandlerWithGVK("monitoring", gvk.Monitoring)
+	reg.Add(&h)
+
+	err = (&Reconciler{Options: Options{Registry: reg}}).driftCleanup(context.Background(), rr)
 	g.Expect(err).ShouldNot(HaveOccurred())
 
 	currentCRD := &unstructured.Unstructured{}
@@ -329,7 +337,11 @@ func TestPlatformModuleDriftCleanup_DoesNotDeleteTrackedNamespace(t *testing.T) 
 		Resources: []unstructured.Unstructured{},
 	}
 
-	err = (&Reconciler{}).driftCleanup(context.Background(), rr)
+	reg := modules.NewRegistry()
+	h := newNoopHandlerWithGVK("monitoring", gvk.Monitoring)
+	reg.Add(&h)
+
+	err = (&Reconciler{Options: Options{Registry: reg}}).driftCleanup(context.Background(), rr)
 	g.Expect(err).ShouldNot(HaveOccurred())
 
 	currentNS := &unstructured.Unstructured{}
@@ -340,7 +352,7 @@ func TestPlatformModuleDriftCleanup_DoesNotDeleteTrackedNamespace(t *testing.T) 
 
 // --- syncModuleCRStatus ---
 
-func TestSyncModuleCRStatus_NoHandler_SetsOperandReady(t *testing.T) {
+func TestSyncModuleCRStatus_NoHandler_ReturnsError(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
@@ -351,11 +363,8 @@ func TestSyncModuleCRStatus_NoHandler_SetsOperandReady(t *testing.T) {
 	rr := &odhtype.ReconciliationRequest{Instance: pm, Conditions: conds}
 
 	err := r.syncModuleCRStatus(context.Background(), rr)
-	g.Expect(err).ShouldNot(HaveOccurred())
-	// OperandReady must be True when no handler is registered.
-	cond := conds.GetCondition(status.ConditionTypeOperandAvailable)
-	g.Expect(cond).ShouldNot(BeNil())
-	g.Expect(cond.Status).Should(Equal(metav1.ConditionFalse))
+	g.Expect(err).Should(HaveOccurred())
+	g.Expect(err.Error()).Should(ContainSubstring(`platform entry "unknown-module" is not registered`))
 }
 
 func TestSyncModuleCRStatus_CRAbsent_MovesForward(t *testing.T) {
@@ -377,11 +386,11 @@ func TestSyncModuleCRStatus_CRAbsent_MovesForward(t *testing.T) {
 
 	err = r.syncModuleCRStatus(context.Background(), rr)
 	g.Expect(err).ShouldNot(HaveOccurred())
-	// CR absent → OperandAvailable=False with OperandAbsent reason.
+	// CR absent → OperandAvailable=False with shared tracked-resource-missing reason.
 	cond := conds.GetCondition(status.ConditionTypeOperandAvailable)
 	g.Expect(cond).ShouldNot(BeNil())
 	g.Expect(cond.Status).Should(Equal(metav1.ConditionFalse))
-	g.Expect(cond.Reason).Should(Equal("OperandAbsent"))
+	g.Expect(cond.Reason).Should(Equal("TrackedResourceMissing"))
 	// When CR is absent, release reflects the platform release (rr.Release)
 	// since there's no module CR to handshake with.
 	g.Expect(pm.Status.Release).Should(Equal(release))
@@ -462,7 +471,7 @@ func newNoopHandlerWithGVK(name string, k schema.GroupVersionKind) noopHandlerWi
 
 // newManifestHandler creates a handler that returns Kustomize manifests from the
 // given ManifestDir. BaseHandler.GetOperatorManifests joins ManifestsBasePath + ManifestDir.
-func newManifestHandler(name string, k schema.GroupVersionKind, manifestDir string) noopHandlerWithGVK { //nolint:unparam
+func newManifestHandler(name string, k schema.GroupVersionKind, manifestDir string) noopHandlerWithGVK {
 	return noopHandlerWithGVK{
 		BaseHandler: modules.BaseHandler{
 			Config: modules.ModuleConfig{

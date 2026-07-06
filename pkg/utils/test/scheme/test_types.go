@@ -28,13 +28,27 @@ type TestPlatformObject struct {
 	Status common.Status `json:"status"`
 }
 
-// GetStatus implements common.WithStatus.
-func (o *TestPlatformObject) GetStatus() *common.Status { return &o.Status }
+// GetStatus implements common.StatusAccessor.
+func (o *TestPlatformObject) GetStatus() common.Status {
+	if copied := o.Status.DeepCopy(); copied != nil {
+		return *copied
+	}
+	return common.Status{}
+}
 
-// GetConditions implements common.ConditionsAccessor.
+// SetStatus implements common.StatusAccessor.
+func (o *TestPlatformObject) SetStatus(status common.Status) {
+	if copied := status.DeepCopy(); copied != nil {
+		o.Status = *copied
+		return
+	}
+	o.Status = common.Status{}
+}
+
+// GetConditions returns the status conditions.
 func (o *TestPlatformObject) GetConditions() []common.Condition { return o.Status.GetConditions() }
 
-// SetConditions implements common.ConditionsAccessor.
+// SetConditions updates the status conditions.
 func (o *TestPlatformObject) SetConditions(c []common.Condition) { o.Status.SetConditions(c) }
 
 //nolint:ireturn,nolintlint // DeepCopyObject must return runtime.Object; nolintlint flags ireturn as unused in some configs.

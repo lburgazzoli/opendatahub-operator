@@ -3,7 +3,9 @@ package dscinitialization
 import (
 	"context"
 	"fmt"
+	"reflect"
 
+	operatorv1 "github.com/openshift/api/operator/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -53,9 +55,6 @@ func (r *DSCInitializationReconciler) syncPlatformServices(
 		return nil
 	}
 
-	managed := modules.ManagedModuleNames(instance.Spec)
-	platformCtx := r.buildServicePlatformContext(ctx, instance)
-
 	platform := &configv1alpha1.Platform{}
 	platform.Name = configv1alpha1.PlatformInstanceName
 	platform.TypeMeta = metav1.TypeMeta{
@@ -63,16 +62,7 @@ func (r *DSCInitializationReconciler) syncPlatformServices(
 		Kind:       configv1alpha1.PlatformKind,
 	}
 
-	if err := reg.ForAll(func(h modules.ModuleHandler, _ bool) error {
-		if !managed.Has(h.GetName()) {
-			return nil
-		}
-
-		h.ApplyManagementState(platformCtx, &platform.Spec.Modules)
-		return nil
-	}); err != nil {
-		return fmt.Errorf("failed to project DSCI services into Platform spec: %w", err)
-	}
+	platform.Spec.Modules = projectPlatformModulesFromTaggedSpec(instance.Spec)
 
 	if err := resources.Apply(
 		ctx,
@@ -234,6 +224,42 @@ func (r *DSCInitializationReconciler) computeMonitoringStatus(
 	}
 
 	return monitoringConditionsFromModuleStatus(moduleStatus)
+}
+
+func projectPlatformModulesFromTaggedSpec(spec any) configv1alpha1.PlatformModules {
+	var projected configv1alpha1.PlatformModules
+
+	value := reflect.ValueOf(spec)
+	if value.Kind() == reflect.Ptr {
+		value = value.Elem()
+	}
+	if value.Kind() != reflect.Struct {
+		return projected
+	}
+
+	valueType := value.Type()
+	for i := range value.NumField() {
+		field := valueType.Field(i)
+		name := field.Tag.Get("module")
+		if name == "" {
+			continue
+		}
+
+		managementStateField := value.Field(i).FieldByName("ManagementState")
+		managementState := operatorv1.Removed
+		if managementStateField.IsValid() {
+			if state, ok := managementStateField.Interface().(operatorv1.ManagementState); ok && state != "" {
+				managementState = state
+			}
+		}
+
+		projected.Set(configv1alpha1.PlatformModuleConfig{
+			Name:            name,
+			ManagementState: managementState,
+		})
+	}
+
+	return projected
 }
 
 func monitoringConditionsFromModuleStatus(moduleStatus *modules.ModuleStatus) []DSCInitializationCondition {

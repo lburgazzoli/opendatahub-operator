@@ -157,7 +157,6 @@ func (b *BaseHandler) GetRelatedImages() []string {
 	return b.Config.RelatedImages
 }
 
-
 func (b *BaseHandler) GetOperatorManifests(platform *PlatformContext) OperatorManifests {
 	var result OperatorManifests
 
@@ -204,13 +203,13 @@ func (b *BaseHandler) GetOperatorManifests(platform *PlatformContext) OperatorMa
 	return result
 }
 
-// GetModuleStatus reads the module CR by GVK+CRName and extracts status
-// conditions and generation metadata for staleness detection.
+// GetModuleObject reads the module CR by GVK+CRName and returns it wrapped as
+// a release-aware unstructured PlatformObject.
 //
 // This default implementation performs a cluster-scoped Get (no namespace),
 // which is correct for the required cluster-scoped module CRDs. Modules
 // with namespace-scoped CRs would need to override this method.
-func (b *BaseHandler) GetModuleStatus(ctx context.Context, cli client.Client) (*ModuleStatus, error) {
+func (b *BaseHandler) GetModuleObject(ctx context.Context, cli client.Client) (*common.UnstructuredModule, error) {
 	u := &unstructured.Unstructured{}
 	u.SetGroupVersionKind(b.Config.GVK)
 	u.SetName(b.Config.CRName)
@@ -219,44 +218,38 @@ func (b *BaseHandler) GetModuleStatus(ctx context.Context, cli client.Client) (*
 		return nil, err
 	}
 
-	conditions, err := ParseConditions(u)
+	return common.NewUnstructuredModule(u), nil
+}
+
+// GetModuleStatus reads the module CR and extracts status conditions and
+// generation metadata for staleness detection.
+func (b *BaseHandler) GetModuleStatus(ctx context.Context, cli client.Client) (*ModuleStatus, error) {
+	obj, err := b.GetModuleObject(ctx, cli)
 	if err != nil {
 		return nil, err
 	}
 
-	observedGen, _, _ := unstructured.NestedInt64(u.Object, "status", "observedGeneration")
-	releaseVersion := extractPlatformReleaseVersion(u)
+	releaseVersion := ""
+	if releases := obj.GetReleaseStatus(); releases != nil {
+		for _, release := range *releases {
+			if release.Name == platformReleaseName {
+				releaseVersion = release.Version
+				break
+			}
+		}
+	}
+
+	observedGen, _, _ := unstructured.NestedInt64(obj.Object, "status", "observedGeneration")
 
 	return &ModuleStatus{
-		Conditions:         conditions,
+		Conditions:         obj.GetConditions(),
 		ObservedGeneration: observedGen,
-		Generation:         u.GetGeneration(),
+		Generation:         obj.GetGeneration(),
 		ReleaseVersion:     releaseVersion,
 	}, nil
 }
 
 const platformReleaseName = "platform"
-
-func extractPlatformReleaseVersion(u *unstructured.Unstructured) string {
-	releases, found, _ := unstructured.NestedSlice(u.Object, "status", "releases")
-	if !found {
-		return ""
-	}
-
-	for _, item := range releases {
-		entry, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		name, _, _ := unstructured.NestedString(entry, "name")
-		if name == platformReleaseName {
-			ver, _, _ := unstructured.NestedString(entry, "version")
-			return ver
-		}
-	}
-
-	return ""
-}
 
 // GetModuleCRState returns the lifecycle state of the module CR. It
 // distinguishes between absent, alive, and being-deleted (has

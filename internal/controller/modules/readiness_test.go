@@ -31,7 +31,8 @@ func (m *statusMockHandler) BuildModuleCR(_ context.Context, _ client.Client, _ 
 	return nil, nil
 }
 
-func (m *statusMockHandler) ApplyManagementState(_ *modules.PlatformContext, _ *configv1alpha1.PlatformModules) {}
+func (m *statusMockHandler) ApplyManagementState(_ *modules.PlatformContext, _ *configv1alpha1.PlatformModules) {
+}
 
 func (m *statusMockHandler) GetModuleStatus(_ context.Context, _ client.Client) (*modules.ModuleStatus, error) {
 	if m.err != nil {

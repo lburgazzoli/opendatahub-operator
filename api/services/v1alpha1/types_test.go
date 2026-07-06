@@ -94,12 +94,10 @@ func TestServiceTypesConformToPlatformObject(t *testing.T) {
 
 			// Test GetStatus method
 			status := tt.instance.GetStatus()
-			g.Expect(status).ToNot(BeNil())
 			g.Expect(status.Phase).To(Equal("Ready"))
 
-			// Test condition methods
-			conditions := tt.instance.GetConditions()
-			g.Expect(conditions).To(BeEmpty()) // Initially empty
+			// Test status round-trip through the value-based accessor.
+			g.Expect(status.GetConditions()).To(BeEmpty()) // Initially empty
 
 			// Set conditions and verify
 			testConditions := []common.Condition{
@@ -108,9 +106,10 @@ func TestServiceTypesConformToPlatformObject(t *testing.T) {
 					Status: "True",
 				},
 			}
-			tt.instance.SetConditions(testConditions)
+			status.SetConditions(testConditions)
+			tt.instance.SetStatus(status)
 
-			retrievedConditions := tt.instance.GetConditions()
+			retrievedConditions := tt.instance.GetStatus().GetConditions()
 			g.Expect(retrievedConditions).To(HaveLen(1))
 			g.Expect(retrievedConditions[0].Type).To(Equal("Ready"))
 			g.Expect(string(retrievedConditions[0].Status)).To(Equal("True"))

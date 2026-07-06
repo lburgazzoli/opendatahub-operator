@@ -97,7 +97,7 @@ func TestDSCDriven_ComponentsAndModules_Installed(t *testing.T) {
 
 	// Platform CR synced with aigateway=Managed.
 	wt.Get(gvk.Platform, platformKey).Eventually().Should(
-		jq.Match(`.spec.modules.aigateway.managementState == "Managed"`),
+		jq.Match(`.spec.modules[] | select(.name == "aigateway") | .managementState == "Managed"`),
 	)
 
 	// PlatformModule CR created by Platform controller.
@@ -448,10 +448,7 @@ func TestDSCDriven_DAG_Gating_ModuleBlocksModule(t *testing.T) {
 	resetDAGMetrics()
 
 	createPlatform(t, tc, configv1alpha1.PlatformSpec{
-		Modules: configv1alpha1.PlatformModules{
-			Monitoring: common.ManagementSpec{ManagementState: operatorv1.Managed},
-			AIGateway:  common.ManagementSpec{ManagementState: operatorv1.Managed},
-		},
+		Modules: managedPlatformEntries("monitoring", "aigateway"),
 	})
 
 	wt := tc.NewWithT(t)
@@ -596,6 +593,6 @@ func TestDSCDriven_PlatformReflectsDSC(t *testing.T) {
 	platformKey := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
 
 	wt.Get(gvk.Platform, platformKey).Eventually().Should(
-		jq.Match(`.spec.modules.aigateway.managementState == "Managed"`),
+		jq.Match(`.spec.modules[] | select(.name == "aigateway") | .managementState == "Managed"`),
 	)
 }

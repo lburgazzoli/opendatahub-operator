@@ -55,21 +55,15 @@ DSCI Controller
 ### Test Modules
 
 Use `modules.BaseHandler` with `ModuleConfig` (same pattern as
-`internal/controller/platformmodule/platformmodule_controller_test.go`):
+`internal/controller/platformmodule/platformmodule_controller_test.go`).
+For the follow-up architecture, keep the fixture guidance aligned with the simplified
+`ModuleHandler` interface: test fixtures should avoid relying on higher-level projection
+methods such as `BuildModuleCR()` / `IsEnabled()` once those are removed.
 
 ```go
 type testModuleHandler struct {
     modules.BaseHandler
 }
-
-func (h *testModuleHandler) BuildModuleCR(...) (*unstructured.Unstructured, error) {
-    u := &unstructured.Unstructured{}
-    u.SetGroupVersionKind(h.Config.GVK)
-    u.SetName(h.Config.CRName)
-    return u, nil
-}
-
-func (h *testModuleHandler) IsEnabled(_ *modules.PlatformContext) bool { return true }
 ```
 
 Module CRDs are **dynamic** -- registered at runtime via `et.RegisterCRD()` with
@@ -265,3 +259,69 @@ CR and unified DAG.
 Additional dependencies:
 - **05-1 through 05-3** depend on Group 01 helpers and DSCI controller wiring in `suite_test.go`.
 - **05-4 through 05-6** depend on both DSC and DSCI helpers plus injected monitoring/aigateway module handlers.
+
+### Group 06: Platform Inventory Follow-Up
+
+Track the follow-up refactor where `Platform.spec.modules` becomes the low-level list-based
+inventory, `PlatformModule` gains tracker-only mode, and release reporting is standardized.
+
+| # | Task | Status |
+|---|------|--------|
+| 06-1 | [List-based Platform spec/status summary](task-06-1-platform-list-status.md) | pending |
+| 06-2 | [PlatformModule tracker-only mode](task-06-2-platformmodule-tracker-only.md) | pending |
+| 06-3 | [Reflection-based projection of name and managementState](task-06-3-projection-name-managementstate.md) | pending |
+| 06-4 | [Tracked components publish platform release entry](task-06-4-component-platform-release.md) | pending |
+| 06-5 | [DSC release aggregation filters internal platform release](task-06-5-dsc-release-filter.md) | pending |
+| 06-6 | [Unknown or unregistered PlatformModule handling](task-06-6-unknown-platformmodule.md) | pending |
+| 06-7 | [Concurrent DSC and DSCI SSA writes on list-based Platform spec](task-06-7-concurrent-ssa-list.md) | pending |
+
+**06-1** covers the new low-level Platform list contract:
+- `Platform.spec.modules` is a `listType=map` keyed by `name`
+- `managementState` defaults to `Removed` inside an existing list item
+- `Platform.status.modules` mirrors the list shape and reports `name`, `runlevel`, `version`,
+  and nested `status.{ready,reason,message}`
+- status rows are sorted by runlevel then name
+
+**06-2** covers tracker-only `PlatformModule` behavior:
+- internal-controller-backed entries create a `PlatformModule`
+- the reconciler reads the underlying CR status to compute readiness/version
+- tracker-only entries create no resources and skip config-map injection
+- the implementation may keep a single `PlatformModule` action chain by wrapping deploy-only
+  actions and invoking them only for module-backed entries
+
+**06-3** covers higher-level projection rules:
+- DSC and DSCI use reflection on `module:"..."` tags only to derive canonical names
+- they project only `{name, managementState}` into `Platform.spec.modules`
+- they do not populate per-entry `config`
+
+**06-4** covers consistent version reporting from tracked component CRs:
+- all Platform-tracked component-backed entries publish `status.releases[name="platform"]`
+- tracker-only `PlatformModule` can read the same version contract used for modules
+
+**06-5** covers downstream status compatibility:
+- DSC aggregated release reporting filters out the internal `name="platform"` release row
+- Dashboard-facing DSC status remains unchanged from a consumer perspective
+
+**06-6** covers unknown-module handling:
+- if `Platform.spec.modules` references an entry that does not exist in the registry,
+  `Platform` becomes Degraded / `Ready=False`
+- the user must fix the bad desired state entry
+- `Platform` still deletes tracker instances for entries removed from `Platform.spec.modules`
+- existing tracker CRs for names unknown to the registry are otherwise left alone
+
+**06-7** covers concurrent list-based SSA ownership:
+- DSC and DSCI both write list entries into `Platform.spec.modules`
+- `+listType=map` / `+listMapKey=name` semantics allow concurrent writes without clobbering
+- combined tests validate that both field managers retain their own entries
+
+Additional dependencies:
+- **06-1** depends on the Platform API refactor landing first.
+- **06-2** depends on the unified inventory metadata and `PlatformModule` mode split.
+- **06-3** depends on the list-based `Platform.spec.modules` API shape.
+- **06-4** depends on tracked component CRs embedding/maintaining `common.ComponentReleaseStatus`.
+- **06-5** depends on DSC status aggregation logic and should land together with, or before, broad
+  rollout of **06-4** to avoid exposing the internal `platform` release row to Dashboard-facing
+  consumers.
+- **06-6** depends on the `Platform` controller using registry-backed entry metadata.
+- **06-7** depends on the list-based `Platform.spec.modules` API shape and combined DSC+DSCI
+  controller coverage.

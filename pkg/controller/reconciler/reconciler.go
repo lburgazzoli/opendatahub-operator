@@ -64,7 +64,7 @@ type ReconcilerOpt func(*Reconciler)
 
 func WithConditionsManagerFactory(happy string, dependents ...string) ReconcilerOpt {
 	return func(reconciler *Reconciler) {
-		reconciler.conditionsManagerFactory = func(accessor common.ConditionsAccessor) *conditions.Manager {
+		reconciler.conditionsManagerFactory = func(accessor common.StatusAccessor) *conditions.Manager {
 			return conditions.NewManager(accessor, happy, dependents...)
 		}
 	}
@@ -120,7 +120,7 @@ type Reconciler struct {
 	name                        string
 	preConditions               []precondition.PreCondition
 	instanceFactory             func() (common.PlatformObject, error)
-	conditionsManagerFactory    func(common.ConditionsAccessor) *conditions.Manager
+	conditionsManagerFactory    func(common.StatusAccessor) *conditions.Manager
 	gvks                        map[schema.GroupVersionKind]gvkInfo
 	dynamicGvks                 sync.Map
 	dynamicOwnershipEnabled     bool
@@ -159,7 +159,7 @@ func NewReconciler[T common.PlatformObject](mgr manager.Manager, name string, ob
 
 			return res, nil
 		},
-		conditionsManagerFactory: func(accessor common.ConditionsAccessor) *conditions.Manager {
+		conditionsManagerFactory: func(accessor common.StatusAccessor) *conditions.Manager {
 			return conditions.NewManager(accessor, status.ConditionTypeReady)
 		},
 		gvks:                        make(map[schema.GroupVersionKind]gvkInfo),
@@ -464,6 +464,8 @@ func (r *Reconciler) apply(ctx context.Context, res common.PlatformObject) (time
 		is.Phase = ""
 		is.ObservedGeneration = 0
 	}
+
+	rr.Instance.SetStatus(is)
 
 	err := resources.ApplyStatus(
 		ctx,

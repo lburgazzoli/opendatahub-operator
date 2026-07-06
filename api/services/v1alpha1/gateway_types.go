@@ -212,8 +212,19 @@ type GatewayConfigList struct {
 	Items           []GatewayConfig `json:"items"`
 }
 
-func (m *GatewayConfig) GetStatus() *common.Status {
-	return &m.Status.Status
+func (m *GatewayConfig) GetStatus() common.Status {
+	if copied := m.Status.Status.DeepCopy(); copied != nil {
+		return *copied
+	}
+	return common.Status{}
+}
+
+func (m *GatewayConfig) SetStatus(status common.Status) {
+	if copied := status.DeepCopy(); copied != nil {
+		m.Status.Status = *copied
+		return
+	}
+	m.Status.Status = common.Status{}
 }
 
 func (c *GatewayConfig) GetConditions() []common.Condition {

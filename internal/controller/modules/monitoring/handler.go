@@ -10,7 +10,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
 	serviceApi "github.com/opendatahub-io/opendatahub-operator/v2/api/services/v1alpha1"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
@@ -59,7 +58,8 @@ func (h *handler) IsEnabled(platform *modules.PlatformContext) bool {
 		return platform.DSCI.Spec.Monitoring.ManagementState == operatorv1.Managed
 	}
 	if platform.Platform != nil {
-		return platform.Platform.Spec.Modules.Monitoring.ManagementState == operatorv1.Managed
+		entry, ok := platform.Platform.Spec.Modules.Lookup(moduleName)
+		return ok && entry.ManagementState == operatorv1.Managed
 	}
 	return false
 }
@@ -68,9 +68,10 @@ func (h *handler) ApplyManagementState(ctx *modules.PlatformContext, spec *confi
 	if ctx == nil || ctx.DSCI == nil {
 		return
 	}
-	spec.Monitoring = common.ManagementSpec{
+	spec.Set(configv1alpha1.PlatformModuleConfig{
+		Name:            moduleName,
 		ManagementState: ctx.DSCI.Spec.Monitoring.ManagementState,
-	}
+	})
 }
 
 // BuildModuleCR projects platform monitoring configuration onto the module CR.
@@ -117,7 +118,7 @@ func (h *handler) BuildModuleCR(
 			if platform.DSCI.Spec.Monitoring.CollectorReplicas != 0 {
 				monitoring.Spec.CollectorReplicas = platform.DSCI.Spec.Monitoring.CollectorReplicas
 			} else {
-				if cluster.IsSingleNodeCluster(ctx, cli) {
+				if cli != nil && cluster.IsSingleNodeCluster(ctx, cli) {
 					monitoring.Spec.CollectorReplicas = 1
 				} else {
 					monitoring.Spec.CollectorReplicas = 2
@@ -130,9 +131,7 @@ func (h *handler) BuildModuleCR(
 			return nil, fmt.Errorf("failed to convert MonitoringSpec to unstructured: %w", err)
 		}
 	case platform.Platform != nil:
-		spec = map[string]any{
-			"managementState": string(platform.Platform.Spec.Modules.Monitoring.ManagementState),
-		}
+		spec = map[string]any{}
 	default:
 		return nil, errors.New("neither DSCI nor Platform is available, cannot build monitoring CR")
 	}

@@ -348,7 +348,10 @@ func TestDSCReconciler_PlatformCRSyncedWithEnabledModules(t *testing.T) {
 			if ctx != nil && ctx.DSC != nil {
 				state = ctx.DSC.Spec.Components.AIGateway.ManagementState
 			}
-			spec.AIGateway = common.ManagementSpec{ManagementState: state}
+			spec.Set(configv1alpha1.PlatformModuleConfig{
+				Name:            "aigateway",
+				ManagementState: state,
+			})
 		},
 	})
 
@@ -370,7 +373,7 @@ func TestDSCReconciler_PlatformCRSyncedWithEnabledModules(t *testing.T) {
 
 	// Platform CR must be created with aigateway=Managed.
 	wt.Get(gvk.Platform, platformKey).Eventually().Should(
-		jq.Match(`.spec.modules.aigateway.managementState == "Managed"`),
+		jq.Match(`.spec.modules[] | select(.name == "aigateway") | .managementState == "Managed"`),
 	)
 }
 

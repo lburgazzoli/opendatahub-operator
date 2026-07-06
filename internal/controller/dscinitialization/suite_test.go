@@ -51,6 +51,8 @@ import (
 	infrav1 "github.com/opendatahub-io/opendatahub-operator/v2/api/infrastructure/v1"
 	serviceApi "github.com/opendatahub-io/opendatahub-operator/v2/api/services/v1alpha1"
 	dscictrl "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/dscinitialization"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
+	monitoringModule "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules/monitoring"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/operatorconfig"
 	"github.com/opendatahub-io/opendatahub-operator/v2/tests/envtestutil"
 
@@ -160,6 +162,9 @@ var _ = BeforeSuite(func() {
 
 	Expect(err).NotTo(HaveOccurred())
 
+	moduleRegistry := modules.NewRegistry()
+	moduleRegistry.Add(monitoringModule.NewHandler())
+
 	err = (&dscictrl.DSCInitializationReconciler{
 		Client:   k8sClient,
 		Scheme:   testScheme,
@@ -167,6 +172,7 @@ var _ = BeforeSuite(func() {
 		OperatorSettings: operatorconfig.OperatorSettings{
 			ManifestsBasePath: "",
 		},
+		ModuleRegistry: moduleRegistry,
 	}).SetupWithManager(gCtx, mgr)
 
 	Expect(err).ToNot(HaveOccurred())

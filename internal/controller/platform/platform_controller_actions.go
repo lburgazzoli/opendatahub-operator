@@ -3,11 +3,13 @@ package platform
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	odherrors "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/errors"
@@ -15,6 +17,17 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	odhtype "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 )
+
+const maxPlatformRunlevel = int(^uint32(0) >> 1)
+
+func toPlatformRunlevel(order int, name string) (int32, error) {
+	if order > maxPlatformRunlevel {
+		return 0, fmt.Errorf("runlevel %d for %q exceeds int32 range", order, name)
+	}
+
+	//nolint:gosec // The explicit bounds check above guarantees this conversion is safe.
+	return int32(order), nil
+}
 
 // enableModules syncs the module registry's enabled set to match the Platform
 // spec. Must run before any action that checks registry enablement (e.g.
@@ -41,6 +54,10 @@ func (r *Reconciler) syncPlatformModuleCRs(_ context.Context, rr *odhtype.Reconc
 	}
 
 	for _, name := range platform.Spec.Modules.EnabledModules() {
+		if !r.isTrackedEntry(name) {
+			continue
+		}
+
 		pm := &configv1alpha1.PlatformModule{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
@@ -98,20 +115,16 @@ func (r *Reconciler) cleanupDisabledModules(ctx context.Context, rr *odhtype.Rec
 // When a batch is not yet ready, the action schedules a requeue after the
 // remaining gating timeout so the check fires even without external events.
 func (r *Reconciler) walkModuleDAG(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
-	if !r.ModuleRegistry.HasEntries() {
+	platform, ok := rr.Instance.(*configv1alpha1.Platform)
+	if !ok {
+		return fmt.Errorf("expected *Platform, got %T", rr.Instance)
+	}
+
+	if len(platform.Spec.Modules.EnabledModules()) == 0 {
 		return nil
 	}
 
-	// CompositeChecker spans in-tree components and module operators.
-	// TODO: This is an architectural compromise. The shared frontier is
-	// currently advanced here, which means Platform needs direct visibility into
-	// DSC-managed component readiness. Ideally Platform should not know about
-	// DSC-owned components and would instead consume a higher-level readiness
-	// signal for DAG advancement.
-	checker := provision.NewCompositeChecker(
-		componentReadinessChecker(rr.Client, r.ComponentRegistry),
-		moduleReadinessChecker(rr.Client, rr.Release.Version.String()),
-	)
+	checker := moduleReadinessChecker(rr.Client, rr.Release.Version.String())
 
 	requeueAfter, walkErr := provision.WalkBatches(
 		ctx,
@@ -152,41 +165,128 @@ func (r *Reconciler) aggregateStatus(ctx context.Context, rr *odhtype.Reconcilia
 		return fmt.Errorf("expected *Platform, got %T", rr.Instance)
 	}
 
-	// Always reflect enabled modules into status so operators can observe
-	// which modules are active without reading the spec.
-	platform.Status.Modules = platform.Spec.Modules.EnabledModules()
+	platform.Status.Modules = nil
 
-	// No modules enabled — nothing to wait for.
-	if len(platform.Status.Modules) == 0 {
+	// No entries declared — nothing to wait for.
+	if len(platform.Spec.Modules) == 0 {
+		rr.Conditions.MarkFalse(status.ConditionTypeDegraded,
+			conditions.WithReason(status.ConfiguredReason),
+			conditions.WithMessage("all platform entries are registered"),
+			conditions.WithSeverity(common.ConditionSeverityInfo),
+		)
 		rr.Conditions.MarkTrue(status.ConditionTypeModulesReady)
 		return nil
 	}
 
-	existing := &configv1alpha1.PlatformModuleList{}
-	if err := rr.Client.List(ctx, existing); err != nil {
-		return fmt.Errorf("listing PlatformModule CRs for status aggregation: %w", err)
-	}
+	notReady := sets.New[string]()
+	unknown := sets.New[string]()
 
-	// Index the ready set from existing PlatformModule CRs.
-	readyModules := sets.New[string]()
-	for i := range existing.Items {
-		if conditions.IsStatusConditionTrue(&existing.Items[i], status.ConditionTypeReady) {
-			readyModules.Insert(existing.Items[i].Name)
+	for _, entry := range platform.Spec.Modules {
+		summary := configv1alpha1.PlatformModuleSummary{
+			Name: entry.Name,
 		}
+
+		if order, ok := r.ProvisionReg.LookupOrder(entry.Name); ok {
+			runlevel, err := toPlatformRunlevel(order, entry.Name)
+			if err != nil {
+				return err
+			}
+			summary.Runlevel = runlevel
+		}
+
+		switch {
+		case !r.isTrackedEntry(entry.Name):
+			summary.Status = configv1alpha1.PlatformModuleConditionSummary{
+				Reason:  "UnknownEntry",
+				Message: fmt.Sprintf("platform entry %q is not registered", entry.Name),
+			}
+			unknown.Insert(entry.Name)
+		case !entry.IsManaged():
+			summary.Status = configv1alpha1.PlatformModuleConditionSummary{
+				Reason:  status.RemovedReason,
+				Message: "entry is not managed",
+			}
+		default:
+			pm := &configv1alpha1.PlatformModule{}
+			if err := rr.Client.Get(ctx, client.ObjectKey{Name: entry.Name}, pm); err != nil {
+				if client.IgnoreNotFound(err) != nil {
+					return fmt.Errorf("getting PlatformModule %s for status aggregation: %w", entry.Name, err)
+				}
+				summary.Status = configv1alpha1.PlatformModuleConditionSummary{
+					Reason:  "TrackerMissing",
+					Message: "tracker is not created yet",
+				}
+				notReady.Insert(entry.Name)
+				break
+			}
+
+			summary.Version = pm.Status.Release.Version.String()
+			if ready := conditions.FindStatusCondition(pm, status.ConditionTypeReady); ready != nil {
+				summary.Status = configv1alpha1.PlatformModuleConditionSummary{
+					Ready:   ready.Status == metav1.ConditionTrue,
+					Reason:  ready.Reason,
+					Message: ready.Message,
+				}
+				if ready.Status != metav1.ConditionTrue {
+					notReady.Insert(entry.Name)
+				}
+			} else {
+				summary.Status = configv1alpha1.PlatformModuleConditionSummary{
+					Reason:  status.NotReadyReason,
+					Message: "tracker has not reported readiness yet",
+				}
+				notReady.Insert(entry.Name)
+			}
+		}
+
+		platform.Status.Modules = append(platform.Status.Modules, summary)
 	}
 
-	// Any enabled module not yet Ready (or not yet created) blocks aggregation.
-	notReady := sets.New(platform.Status.Modules...).Difference(readyModules)
+	sort.Slice(platform.Status.Modules, func(i int, j int) bool {
+		left := platform.Status.Modules[i]
+		right := platform.Status.Modules[j]
 
-	if notReady.Len() > 0 {
+		switch left.Runlevel {
+		case right.Runlevel:
+			return left.Name < right.Name
+		default:
+			return left.Runlevel < right.Runlevel
+		}
+	})
+
+	switch {
+	case len(platform.Spec.Modules) == 0:
+		rr.Conditions.MarkFalse(status.ConditionTypeDegraded,
+			conditions.WithReason(status.ConfiguredReason),
+			conditions.WithMessage("no platform modules are configured"),
+			conditions.WithSeverity(common.ConditionSeverityInfo),
+		)
+	case unknown.Len() > 0:
+		rr.Conditions.MarkTrue(status.ConditionTypeDegraded,
+			conditions.WithReason("UnknownEntry"),
+			conditions.WithMessage("%d platform entrie(s) are not registered: %v", unknown.Len(), sets.List(unknown)),
+		)
+	default:
+		rr.Conditions.MarkFalse(status.ConditionTypeDegraded,
+			conditions.WithReason(status.ConfiguredReason),
+			conditions.WithMessage("all platform entries are recognized by the registries"),
+			conditions.WithSeverity(common.ConditionSeverityInfo),
+		)
+	}
+
+	switch {
+	case notReady.Len() > 0:
 		rr.Conditions.MarkFalse(status.ConditionTypeModulesReady,
 			conditions.WithReason(status.NotReadyReason),
-			conditions.WithMessage("%d module(s) not ready: %v", notReady.Len(), sets.List(notReady)),
+			conditions.WithMessage("%d managed entrie(s) not ready: %v", notReady.Len(), sets.List(notReady)),
 		)
-		return nil
+	default:
+		rr.Conditions.MarkTrue(status.ConditionTypeModulesReady)
 	}
 
-	rr.Conditions.MarkTrue(status.ConditionTypeModulesReady)
-
 	return nil
+}
+
+func (r *Reconciler) isTrackedEntry(name string) bool {
+	return r.ModuleRegistry.Lookup(name) != nil || r.ComponentRegistry.Lookup(name) != nil
 }

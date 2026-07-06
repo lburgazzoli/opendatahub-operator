@@ -91,7 +91,7 @@ func TestDeployNodeMetricsEndpoint(t *testing.T) {
 			assert.Len(t, rr.Templates, tt.expectedTemplateCount)
 
 			// Verify condition
-			condition := conditions.FindStatusCondition(rr.Instance, status.ConditionNodeMetricsEndpointAvailable)
+			condition := conditions.FindStatusCondition(rr.Instance.GetStatus(), status.ConditionNodeMetricsEndpointAvailable)
 			require.NotNil(t, condition)
 
 			if tt.expectedCondition {

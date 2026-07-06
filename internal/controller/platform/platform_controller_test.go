@@ -23,6 +23,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/envt"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/matchers/jq"
+	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/mocks"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/testf"
 	"github.com/opendatahub-io/opendatahub-operator/v2/tests/envtestutil"
 
@@ -37,6 +38,13 @@ func startPlatformController(t *testing.T, moduleReg *modules.Registry) *testf.W
 	g := NewWithT(t)
 
 	ctx := t.Context()
+
+	if moduleReg.Lookup("monitoring") == nil {
+		moduleReg.Add(mocks.NewDefaultMockModuleHandler("monitoring", gvk.Monitoring))
+	}
+	if moduleReg.Lookup("aigateway") == nil {
+		moduleReg.Add(mocks.NewDefaultMockModuleHandler("aigateway", gvk.AIGateway))
+	}
 
 	cluster.SetRelease(common.Release{Name: cluster.OpenDataHub})
 	t.Cleanup(func() { cluster.SetRelease(common.Release{}) })
@@ -80,6 +88,17 @@ func createPlatform(t *testing.T, wt *testf.WithT, spec configv1alpha1.PlatformS
 	envt.CleanupDelete(t, NewWithT(t), context.Background(), wt.Client(), p)
 }
 
+func managedPlatformModules(names ...string) configv1alpha1.PlatformModules {
+	modules := make(configv1alpha1.PlatformModules, 0, len(names))
+	for _, name := range names {
+		modules = append(modules, configv1alpha1.PlatformModuleConfig{
+			Name:            name,
+			ManagementState: operatorv1.Managed,
+		})
+	}
+	return modules
+}
+
 // setPlatformModuleReady patches a PlatformModule's Ready condition via the
 // status subresource so Platform's aggregateStatus can read it.
 func setPlatformModuleReady(t *testing.T, wt *testf.WithT, name string, ready bool) {
@@ -112,9 +131,7 @@ func TestPlatformReconciler_CreatesPlatformModuleCRs(t *testing.T) {
 	wt := startPlatformController(t, modules.NewRegistry())
 
 	createPlatform(t, wt, configv1alpha1.PlatformSpec{
-		Modules: configv1alpha1.PlatformModules{
-			Monitoring: common.ManagementSpec{ManagementState: operatorv1.Managed},
-		},
+		Modules: managedPlatformModules("monitoring"),
 	})
 
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).
@@ -128,18 +145,16 @@ func TestPlatformReconciler_DeletesDisabledModuleCRs(t *testing.T) {
 	wt := startPlatformController(t, modules.NewRegistry())
 
 	createPlatform(t, wt, configv1alpha1.PlatformSpec{
-		Modules: configv1alpha1.PlatformModules{
-			Monitoring: common.ManagementSpec{ManagementState: operatorv1.Managed},
-		},
+		Modules: managedPlatformModules("monitoring"),
 	})
 
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).
 		Eventually().Should(Succeed())
 
-	// Disable monitoring by clearing management state.
+	// Disable monitoring by removing the entry entirely.
 	p := &configv1alpha1.Platform{}
 	wt.Expect(wt.Client().Get(wt.Context(), types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}, p)).Should(Succeed())
-	p.Spec.Modules.Monitoring = common.ManagementSpec{}
+	p.Spec.Modules = nil
 	wt.Expect(wt.Client().Update(wt.Context(), p)).Should(Succeed())
 
 	// PlatformModule CR must be gone (client.Get returns IsNotFound).
@@ -168,9 +183,7 @@ func TestPlatformReconciler_AggregatesModuleStatus(t *testing.T) {
 	wt := startPlatformController(t, modules.NewRegistry())
 
 	createPlatform(t, wt, configv1alpha1.PlatformSpec{
-		Modules: configv1alpha1.PlatformModules{
-			Monitoring: common.ManagementSpec{ManagementState: operatorv1.Managed},
-		},
+		Modules: managedPlatformModules("monitoring"),
 	})
 
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).
@@ -199,22 +212,20 @@ func TestPlatformReconciler_ReportsEnabledModulesInStatus(t *testing.T) {
 	wt := startPlatformController(t, modules.NewRegistry())
 
 	createPlatform(t, wt, configv1alpha1.PlatformSpec{
-		Modules: configv1alpha1.PlatformModules{
-			Monitoring: common.ManagementSpec{ManagementState: operatorv1.Managed},
-		},
+		Modules: managedPlatformModules("monitoring"),
 	})
 
 	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
 
-	// status.modules must list "monitoring".
+	// status.modules must include the "monitoring" summary row.
 	wt.Get(gvk.Platform, nn).Eventually().Should(
-		jq.Match(`.status.modules | contains(["monitoring"])`),
+		jq.Match(`.status.modules[] | select(.name == "monitoring") | .name == "monitoring"`),
 	)
 
-	// Disable monitoring — status.modules must become empty.
+	// Disable monitoring by removing the entry — status.modules must become empty.
 	p := &configv1alpha1.Platform{}
 	wt.Expect(wt.Client().Get(wt.Context(), nn, p)).Should(Succeed())
-	p.Spec.Modules.Monitoring = common.ManagementSpec{}
+	p.Spec.Modules = nil
 	wt.Expect(wt.Client().Update(wt.Context(), p)).Should(Succeed())
 
 	wt.Get(gvk.Platform, nn).Eventually().Should(
@@ -229,10 +240,7 @@ func TestPlatformReconciler_ModulesReadyReflectsAllModules(t *testing.T) {
 	wt := startPlatformController(t, modules.NewRegistry())
 
 	createPlatform(t, wt, configv1alpha1.PlatformSpec{
-		Modules: configv1alpha1.PlatformModules{
-			Monitoring: common.ManagementSpec{ManagementState: operatorv1.Managed},
-			AIGateway:  common.ManagementSpec{ManagementState: operatorv1.Managed},
-		},
+		Modules: managedPlatformModules("monitoring", "aigateway"),
 	})
 
 	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}

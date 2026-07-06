@@ -20,12 +20,12 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
 	serviceApi "github.com/opendatahub-io/opendatahub-operator/v2/api/services/v1alpha1"
+	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/dag"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/precondition"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	opmanager "github.com/opendatahub-io/opendatahub-operator/v2/pkg/manager"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/envt"
@@ -176,6 +176,28 @@ func TestPlatformModuleReconciler_UnknownHandler(t *testing.T) {
 	)
 }
 
+func TestPlatformModuleReconciler_TrackerOnly_DeploymentsAvailableNotApplicable(t *testing.T) {
+	componentReg := &cr.Registry{}
+	componentReg.Add(&cr.BaseComponentHandler{
+		Name: "dashboard",
+		GVK:  gvk.Dashboard,
+	})
+
+	_, wt := startPlatformModuleControllerWith(t, WithComponentRegistry(componentReg))
+
+	createPlatformModuleCR(t, wt, "dashboard")
+
+	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "dashboard"}).
+		Eventually().Should(And(
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
+			status.ConditionDeploymentsAvailable, metav1.ConditionFalse),
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .severity == "Info"`,
+			status.ConditionDeploymentsAvailable),
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .reason == "NotApplicable"`,
+			status.ConditionDeploymentsAvailable),
+	))
+}
+
 // TestPlatformModuleReconciler_OperandAvailableWhenCRAbsent: handler registered but
 // no module CR exists (fresh install — not yet created by DSC/DSCI).
 // OperandAvailable=False+Info (non-blocking), Ready=True (Info conditions don't block).
@@ -195,7 +217,7 @@ func TestPlatformModuleReconciler_OperandAvailableWhenCRAbsent(t *testing.T) {
 			status.ConditionTypeOperandAvailable, metav1.ConditionFalse),
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .severity == "Info"`,
 			status.ConditionTypeOperandAvailable),
-		jq.Match(`.status.conditions[] | select(.type == "%s") | .reason == "OperandAbsent"`,
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .reason == "TrackedResourceMissing"`,
 			status.ConditionTypeOperandAvailable),
 		// Info severity doesn't block Ready.
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
@@ -250,7 +272,7 @@ func TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRNotReady(t *testi
 	wt.Get(gvk.PlatformModule, nn).Eventually().Should(And(
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
 			status.ConditionTypeOperandAvailable, metav1.ConditionFalse),
-		jq.Match(`.status.conditions[] | select(.type == "%s") | .reason == "OperandNotReady"`,
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .reason == "Reconciling"`,
 			status.ConditionTypeOperandAvailable),
 		// No Info severity — this is a real problem that blocks the DAG.
 		jq.Match(`[.status.conditions[] | select(.type == "%s" and .severity == "Info")] | length == 0`,
@@ -294,7 +316,11 @@ func TestPlatformModuleReconciler_ReleaseReflectsModuleCRVersion(t *testing.T) {
 }
 
 func TestPlatformModuleReconciler_DriftCleanup(t *testing.T) {
-	_, wt := startPlatformModuleControllerWith(t)
+	h := newManifestHandler("drift-test-module", testModuleGVK, "testmodule")
+	reg := modules.NewRegistry()
+	reg.Add(&h)
+
+	_, wt := startPlatformModuleControllerWith(t, WithRegistry(reg))
 
 	createPlatformModuleCR(t, wt, "drift-test-module")
 
@@ -319,7 +345,7 @@ func TestPlatformModuleReconciler_DriftCleanup(t *testing.T) {
 	wt.Expect(wt.Client().Update(wt.Context(), pm)).Should(Succeed())
 
 	wt.Get(gvk.PlatformModule, nn).Eventually().Should(
-		jq.Match(`[.status.resources[] | select(.kind == "Deployment")] | length == 0`),
+		jq.Match(`.status.resources == null or ([.status.resources[] | select(.kind == "Deployment")] | length == 0)`),
 	)
 }
 
@@ -396,7 +422,7 @@ func TestPlatformModuleReconciler_DriftCleanup_DoesNotDeleteProtectedResources(t
 }
 
 // TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRHasNoConditions: CR exists,
-// no conditions. OperandAvailable=False (no Info — blocks DAG), Ready=False.
+// no conditions. OperandAvailable=False with Info severity, so Ready stays True.
 func TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRHasNoConditions(t *testing.T) {
 	h := newManifestHandler("testmodule", testModuleGVK, "testmodule")
 
@@ -415,16 +441,16 @@ func TestPlatformModuleReconciler_OperandAvailable_WhenModuleCRHasNoConditions(t
 			status.ConditionTypeOperandAvailable, metav1.ConditionFalse),
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .reason == "OperandInitializing"`,
 			status.ConditionTypeOperandAvailable),
-		jq.Match(`[.status.conditions[] | select(.type == "%s" and .severity == "Info")] | length == 0`,
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .severity == "Info"`,
 			status.ConditionTypeOperandAvailable),
-		// Blocks Ready.
+		// Informational condition does not flip Ready.
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
-			status.ConditionTypeReady, metav1.ConditionFalse),
+			status.ConditionTypeReady, metav1.ConditionTrue),
 	))
 }
 
 // TestPlatformModuleReconciler_DynamicWatchActivatesOnCRDCreation: CRD absent at startup,
-// then installed dynamically. OperandAbsent+Info initially, then OperandAvailable=True
+// then installed dynamically. TrackedResourceMissing+Info initially, then OperandAvailable=True
 // after module CR with Ready=True is created.
 func TestPlatformModuleReconciler_DynamicWatchActivatesOnCRDCreation(t *testing.T) {
 	dynamicGVK := schema.GroupVersionKind{
@@ -445,14 +471,14 @@ func TestPlatformModuleReconciler_DynamicWatchActivatesOnCRDCreation(t *testing.
 	createPlatformModuleCR(t, wt, "dynamictestmodule")
 	nn := types.NamespacedName{Name: "dynamictestmodule"}
 
-	// Step 1: CRD does not exist → OperandAbsent+Info, message says CRD not installed.
+	// Step 1: CRD does not exist → TrackedResourceMissing+Info, message says CRD not installed.
 	wt.Get(gvk.PlatformModule, nn).Eventually().Should(And(
 		// OperandAvailable
-		jq.Match(`.status.conditions[] | select(.type == "%s") | .reason == "OperandAbsent"`,
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .reason == "TrackedResourceMissing"`,
 			status.ConditionTypeOperandAvailable),
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .severity == "Info"`,
 			status.ConditionTypeOperandAvailable),
-		jq.Match(`.status.conditions[] | select(.type == "%s") | .message == "module CRD not installed"`,
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .message == "tracked resource CRD is not installed"`,
 			status.ConditionTypeOperandAvailable),
 		// Ready
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
@@ -460,7 +486,7 @@ func TestPlatformModuleReconciler_DynamicWatchActivatesOnCRDCreation(t *testing.
 	))
 
 	// Step 2: Install the CRD dynamically. After the CRD watch fires and the
-	// reconciler re-evaluates, the state should remain OperandAbsent+Info
+	// reconciler re-evaluates, the state should remain TrackedResourceMissing+Info
 	// (CRD now exists but CR still doesn't).
 	crd, err := et.RegisterCRD(wt.Context(), dynamicGVK,
 		"dynamictestmodules", "dynamictestmodule",
@@ -470,14 +496,14 @@ func TestPlatformModuleReconciler_DynamicWatchActivatesOnCRDCreation(t *testing.
 	wt.Expect(err).NotTo(HaveOccurred())
 	envt.CleanupDelete(t, NewWithT(t), context.Background(), wt.Client(), crd)
 
-	// Still OperandAbsent+Info — CRD installed but no CR yet. Message changes.
+	// Still TrackedResourceMissing+Info — CRD installed but no CR yet. Message changes.
 	wt.Get(gvk.PlatformModule, nn).Eventually().Should(And(
 		// OperandAvailable
-		jq.Match(`.status.conditions[] | select(.type == "%s") | .reason == "OperandAbsent"`,
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .reason == "TrackedResourceMissing"`,
 			status.ConditionTypeOperandAvailable),
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .severity == "Info"`,
 			status.ConditionTypeOperandAvailable),
-		jq.Match(`.status.conditions[] | select(.type == "%s") | .message == "module CR not yet created"`,
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .message == "tracked resource CR is not created"`,
 			status.ConditionTypeOperandAvailable),
 		// Ready
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
@@ -513,8 +539,8 @@ func TestPlatformModuleReconciler_DynamicWatchActivatesOnCRDCreation(t *testing.
 }
 
 // TestPlatformModuleReconciler_RunlevelGate_BlocksDeployment: when a module's
-// runlevel is not yet cleared, no resources are deployed and PlatformReady=False.
-// Once the runlevel is cleared, resources appear and PlatformReady=True.
+// runlevel is not yet cleared, no resources are deployed. Once the runlevel is
+// cleared, resources appear.
 func TestPlatformModuleReconciler_RunlevelGate_BlocksDeployment(t *testing.T) {
 	// Fully isolated: custom provision registry and tracker — no global state touched.
 	provReg := provision.NewRegistry()
@@ -534,12 +560,10 @@ func TestPlatformModuleReconciler_RunlevelGate_BlocksDeployment(t *testing.T) {
 
 	operatorSvc := types.NamespacedName{Name: "testmodule-operator", Namespace: "default"}
 
-	// Gate fires: PlatformReady=False, no resources recorded, operator Service absent.
-	wt.Get(gvk.PlatformModule, nn).Eventually().Should(And(
-		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "False"`,
-			precondition.PlatformReadyConditionType),
+	// Gate fires: no resources recorded, operator Service absent.
+	wt.Get(gvk.PlatformModule, nn).Eventually().Should(
 		jq.Match(`.status.resources == null or (.status.resources | length == 0)`),
-	))
+	)
 	wt.Get(gvk.Service, operatorSvc).Eventually().Should(BeNil())
 
 	// Advance tracker — gate should clear on next reconcile.
@@ -550,12 +574,10 @@ func TestPlatformModuleReconciler_RunlevelGate_BlocksDeployment(t *testing.T) {
 	pm.Annotations = map[string]string{"trigger": "reconcile"}
 	wt.Expect(wt.Client().Update(wt.Context(), pm)).Should(Succeed())
 
-	// Gate lifted: PlatformReady=True, operator Service deployed, tracked in status.
-	wt.Get(gvk.PlatformModule, nn).Eventually().Should(And(
-		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "True"`,
-			precondition.PlatformReadyConditionType),
+	// Gate lifted: operator Service deployed and tracked in status.
+	wt.Get(gvk.PlatformModule, nn).Eventually().Should(
 		jq.Match(`[.status.resources[] | select(.kind == "Service" and .name == "testmodule-operator")] | length > 0`),
-	))
+	)
 	wt.Get(gvk.Service, operatorSvc).Eventually().Should(Not(BeNil()))
 }
 
@@ -587,46 +609,52 @@ func TestPlatformModuleReconciler_RunlevelGate_ProgressesByRunlevel(t *testing.T
 
 	// Phase 1: no runlevel cleared — both modules gated.
 	wt.Get(gvk.PlatformModule, nn1).Eventually().Should(
-		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "False"`,
-			precondition.PlatformReadyConditionType),
+		jq.Match(`.status.resources == null or (.status.resources | length == 0)`),
 	)
 	wt.Get(gvk.PlatformModule, nn2).Eventually().Should(
-		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "False"`,
-			precondition.PlatformReadyConditionType),
+		jq.Match(`.status.resources == null or (.status.resources | length == 0)`),
 	)
 
 	// Phase 2: clear runlevel 20 — testmodule1 deploys, testmodule2 stays gated.
 	tracker.MarkCleared("2.20.0", 20)
 
 	pm1 := &configv1alpha1.PlatformModule{}
-	wt.Expect(wt.Client().Get(wt.Context(), nn1, pm1)).Should(Succeed())
-	pm1.Annotations = map[string]string{"trigger": "phase2"}
-	wt.Expect(wt.Client().Update(wt.Context(), pm1)).Should(Succeed())
+	wt.Eventually(func() error {
+		if err := wt.Client().Get(wt.Context(), nn1, pm1); err != nil {
+			return err
+		}
+		pm1.Annotations = map[string]string{"trigger": "phase2"}
+		return wt.Client().Update(wt.Context(), pm1)
+	}).Should(Succeed())
 
 	pm2 := &configv1alpha1.PlatformModule{}
-	wt.Expect(wt.Client().Get(wt.Context(), nn2, pm2)).Should(Succeed())
-	pm2.Annotations = map[string]string{"trigger": "phase2"}
-	wt.Expect(wt.Client().Update(wt.Context(), pm2)).Should(Succeed())
+	wt.Eventually(func() error {
+		if err := wt.Client().Get(wt.Context(), nn2, pm2); err != nil {
+			return err
+		}
+		pm2.Annotations = map[string]string{"trigger": "phase2"}
+		return wt.Client().Update(wt.Context(), pm2)
+	}).Should(Succeed())
 
 	wt.Get(gvk.PlatformModule, nn1).Eventually().Should(And(
-		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "True"`,
-			precondition.PlatformReadyConditionType),
 		jq.Match(`.status.resources | length > 0`),
 	))
 	wt.Get(gvk.PlatformModule, nn2).Eventually().Should(
-		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "False"`,
-			precondition.PlatformReadyConditionType),
+		jq.Match(`.status.resources == null or (.status.resources | length == 0)`),
 	)
 
 	// Phase 3: clear runlevel 31 — testmodule2 deploys.
 	tracker.MarkCleared("2.20.0", 31)
 
-	wt.Expect(wt.Client().Get(wt.Context(), nn2, pm2)).Should(Succeed())
-	pm2.Annotations = map[string]string{"trigger": "phase3"}
-	wt.Expect(wt.Client().Update(wt.Context(), pm2)).Should(Succeed())
+	wt.Eventually(func() error {
+		if err := wt.Client().Get(wt.Context(), nn2, pm2); err != nil {
+			return err
+		}
+		pm2.Annotations = map[string]string{"trigger": "phase3"}
+		return wt.Client().Update(wt.Context(), pm2)
+	}).Should(Succeed())
 
 	wt.Get(gvk.PlatformModule, nn2).Eventually().Should(
-		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "True"`,
-			precondition.PlatformReadyConditionType),
+		jq.Match(`.status.resources | length > 0`),
 	)
 }

@@ -17,19 +17,14 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"reflect"
-	"strings"
+	"sort"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 )
-
-// moduleTagKey is the struct tag used on PlatformModules fields to declare
-// the canonical module handler name. EnabledModules() uses reflection on
-// this tag to avoid manual enumeration.
-const moduleTagKey = "module"
 
 const (
 	PlatformKind         = "Platform"
@@ -40,48 +35,75 @@ var _ common.PlatformObject = (*Platform)(nil)
 
 // PlatformSpec defines the desired state of Platform.
 type PlatformSpec struct {
-	// Modules declares the set of modules managed by this Platform instance.
-	// Each field corresponds to a registered module handler. Modules follow
-	// the same Managed/Removed/empty convention as DSC components: Managed
-	// deploys the module, Removed tears it down, empty means not managed.
+	// Modules declares the low-level desired inventory managed by this Platform
+	// instance.
 	// +optional
 	Modules PlatformModules `json:"modules,omitempty"`
 }
 
-// PlatformModules declares per-module management state for Platform mode.
-// Each field maps to a registered module handler by name. Add new module
-// fields here when onboarding additional modules.
-//
-// On OpenShift, DSC and DSCI controllers own individual fields via SSA:
-//   - DSCI controller owns .monitoring
-//   - DSC controller owns .aigateway
-//
-// On xKS, the user owns all fields directly.
-//
-// The "module" struct tag on each field declares the canonical handler name.
-// EnabledModules() uses reflection on this tag so new modules don't require
-// updating EnabledModules() manually — only adding a new field here suffices.
+// PlatformModuleConfig describes one desired Platform inventory entry.
 // +kubebuilder:object:generate=true
-type PlatformModules struct {
-	// Monitoring controls the monitoring module operator lifecycle.
-	// On OpenShift this field is managed by the DSCI controller via SSA.
-	// +optional
-	Monitoring common.ManagementSpec `json:"monitoring,omitempty" module:"monitoring"`
+type PlatformModuleConfig struct {
+	// Name is the canonical inventory entry name.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
 
-	// AIGateway controls the AI Gateway module operator lifecycle.
-	// On OpenShift this field is managed by the DSC controller via SSA.
+	// ManagementState declares whether this entry is actively managed.
+	// +kubebuilder:default=Removed
+	// +kubebuilder:validation:Enum=Managed;Removed
+	ManagementState operatorv1.ManagementState `json:"managementState,omitempty"`
+
+	// Config carries optional low-level opaque configuration reserved for
+	// future direct Platform consumers.
 	// +optional
-	AIGateway common.ManagementSpec `json:"aigateway,omitempty" module:"aigateway"`
+	Config *runtime.RawExtension `json:"config,omitempty"`
 }
+
+func (c PlatformModuleConfig) IsManaged() bool {
+	return c.ManagementState == operatorv1.Managed
+}
+
+// PlatformModules is the keyed list of desired Platform inventory entries.
+// +listType=map
+// +listMapKey=name
+// +kubebuilder:object:generate=true
+type PlatformModules []PlatformModuleConfig
+
+// PlatformModuleConditionSummary is the compact status payload reported per
+// inventory entry.
+// +kubebuilder:object:generate=true
+type PlatformModuleConditionSummary struct {
+	Ready   bool   `json:"ready"`
+	Reason  string `json:"reason,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+// PlatformModuleSummary reports the aggregated observed state of one inventory
+// entry.
+// +kubebuilder:object:generate=true
+type PlatformModuleSummary struct {
+	Name string `json:"name"`
+	// +optional
+	Runlevel int32 `json:"runlevel,omitempty"`
+	// +optional
+	Version string                         `json:"version,omitempty"`
+	Status  PlatformModuleConditionSummary `json:"status"`
+}
+
+// PlatformModuleSummaries is the keyed list of aggregated inventory statuses.
+// +listType=map
+// +listMapKey=name
+// +kubebuilder:object:generate=true
+type PlatformModuleSummaries []PlatformModuleSummary
 
 // PlatformStatus defines the observed state of Platform.
 type PlatformStatus struct {
 	common.Status `json:",inline"`
-	// Modules lists the names of module operators currently enabled on this
-	// Platform instance. Populated by the Platform controller from spec.modules.
+	// Modules reports a compact summary for each declared Platform inventory
+	// entry.
 	// +optional
-	// +listType=atomic
-	Modules []string `json:"modules,omitempty"`
+	Modules PlatformModuleSummaries `json:"modules,omitempty"`
 }
 
 //+kubebuilder:object:root=true
@@ -103,8 +125,19 @@ type Platform struct {
 	Status PlatformStatus `json:"status,omitempty"`
 }
 
-func (p *Platform) GetStatus() *common.Status {
-	return &p.Status.Status
+func (p *Platform) GetStatus() common.Status {
+	if copied := p.Status.Status.DeepCopy(); copied != nil {
+		return *copied
+	}
+	return common.Status{}
+}
+
+func (p *Platform) SetStatus(status common.Status) {
+	if copied := status.DeepCopy(); copied != nil {
+		p.Status.Status = *copied
+		return
+	}
+	p.Status.Status = common.Status{}
 }
 
 func (p *Platform) GetConditions() []common.Condition {
@@ -124,30 +157,59 @@ type PlatformList struct {
 	Items           []Platform `json:"items"`
 }
 
-// EnabledModules returns the names of modules whose ManagementState is Managed.
-// It uses reflection over PlatformModules fields so new module fields are
-// automatically included without editing this function. The module name comes
-// from the "module" struct tag when set; otherwise the lowercased field name.
-func (m *PlatformModules) EnabledModules() []string {
-	v := reflect.ValueOf(*m)
-	t := reflect.TypeOf(*m)
-
+// EnabledModules returns the names of entries whose ManagementState is Managed.
+func (m PlatformModules) EnabledModules() []string {
 	var enabled []string
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-		name := field.Tag.Get(moduleTagKey)
-		if name == "" {
-			name = strings.ToLower(field.Name)
-		}
-		spec, ok := v.Field(i).Interface().(common.ManagementSpec)
-		if !ok {
-			continue
-		}
-		if spec.ManagementState == operatorv1.Managed {
-			enabled = append(enabled, name)
+	for _, entry := range m {
+		if entry.ManagementState == operatorv1.Managed {
+			enabled = append(enabled, entry.Name)
 		}
 	}
+	sort.Strings(enabled)
 	return enabled
+}
+
+// AllModuleNames returns all declared entry names in sorted order.
+func (m PlatformModules) AllModuleNames() []string {
+	names := make([]string, 0, len(m))
+	for _, entry := range m {
+		if entry.Name == "" {
+			continue
+		}
+		names = append(names, entry.Name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// Lookup returns the declared entry for the provided name.
+func (m PlatformModules) Lookup(name string) (PlatformModuleConfig, bool) {
+	for _, entry := range m {
+		if entry.Name == name {
+			return entry, true
+		}
+	}
+	return PlatformModuleConfig{}, false
+}
+
+// Set inserts or replaces the entry keyed by name and keeps deterministic order.
+func (m *PlatformModules) Set(entry PlatformModuleConfig) {
+	if m == nil || entry.Name == "" {
+		return
+	}
+	for i := range *m {
+		if (*m)[i].Name == entry.Name {
+			(*m)[i] = entry
+			sort.Slice(*m, func(i int, j int) bool {
+				return (*m)[i].Name < (*m)[j].Name
+			})
+			return
+		}
+	}
+	*m = append(*m, entry)
+	sort.Slice(*m, func(i int, j int) bool {
+		return (*m)[i].Name < (*m)[j].Name
+	})
 }
 
 func init() {

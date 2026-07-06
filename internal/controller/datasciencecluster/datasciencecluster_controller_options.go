@@ -1,4 +1,3 @@
-//nolint:ireturn
 package datasciencecluster
 
 import (
@@ -44,16 +43,22 @@ type optionFunc func(*Options)
 func (f optionFunc) applyOption(o *Options) { f(o) }
 
 // WithComponentRegistry sets a custom component handler registry.
+//
+//nolint:ireturn // Option constructors intentionally return the public Option interface.
 func WithComponentRegistry(r *cr.Registry) Option {
 	return optionFunc(func(o *Options) { o.ComponentRegistry = r })
 }
 
 // WithModuleRegistry sets a custom module handler registry.
+//
+//nolint:ireturn // Option constructors intentionally return the public Option interface.
 func WithModuleRegistry(r *modules.Registry) Option {
 	return optionFunc(func(o *Options) { o.ModuleRegistry = r })
 }
 
 // WithProvisionRegistry sets a custom unified DAG registry.
+//
+//nolint:ireturn // Option constructors intentionally return the public Option interface.
 func WithProvisionRegistry(r *provision.UnifiedRegistry) Option {
 	return optionFunc(func(o *Options) { o.ProvisionRegistry = r })
 }
@@ -61,6 +66,8 @@ func WithProvisionRegistry(r *provision.UnifiedRegistry) Option {
 // WithDeletePropagationPolicy sets the propagation policy used when deleting
 // disabled component and module CRs. Defaults to Foreground.
 // Pass Background in tests (envtest has no GC controller).
+//
+//nolint:ireturn // Option constructors intentionally return the public Option interface.
 func WithDeletePropagationPolicy(p metav1.DeletionPropagation) Option {
 	return optionFunc(func(o *Options) { o.DeletePropagation = p })
 }

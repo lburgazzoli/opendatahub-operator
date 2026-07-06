@@ -57,8 +57,19 @@ type SparkOperator struct {
 }
 
 // GetStatus retrieves the status
-func (c *SparkOperator) GetStatus() *common.Status {
-	return &c.Status.Status
+func (c *SparkOperator) GetStatus() common.Status {
+	if copied := c.Status.Status.DeepCopy(); copied != nil {
+		return *copied
+	}
+	return common.Status{}
+}
+
+func (c *SparkOperator) SetStatus(status common.Status) {
+	if copied := status.DeepCopy(); copied != nil {
+		c.Status.Status = *copied
+		return
+	}
+	c.Status.Status = common.Status{}
 }
 
 func (c *SparkOperator) GetConditions() []common.Condition {

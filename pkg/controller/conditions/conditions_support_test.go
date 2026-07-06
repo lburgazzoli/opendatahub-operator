@@ -13,7 +13,7 @@ import (
 
 func TestSetStatusCondition_LastTransitionTime(t *testing.T) {
 	a := fakeAccessor{}
-	a.conditions = make([]common.Condition, 0)
+	a.status.SetConditions([]common.Condition{})
 
 	ref := common.Condition{
 		Type:   "foo",
@@ -27,7 +27,7 @@ func TestSetStatusCondition_LastTransitionTime(t *testing.T) {
 		g.Expect(pre).Should(BeNil())
 
 		g.Expect(conditions.SetStatusCondition(&a, ref)).Should(BeTrue())
-		g.Expect(a.conditions).Should(HaveLen(1))
+		g.Expect(a.GetConditions()).Should(HaveLen(1))
 
 		post := conditions.FindStatusCondition(&a, "foo")
 		g.Expect(post).Should(And(
@@ -46,7 +46,7 @@ func TestSetStatusCondition_LastTransitionTime(t *testing.T) {
 		))
 
 		g.Expect(conditions.SetStatusCondition(&a, ref)).ShouldNot(BeTrue())
-		g.Expect(a.conditions).Should(HaveLen(1))
+		g.Expect(a.GetConditions()).Should(HaveLen(1))
 
 		post := conditions.FindStatusCondition(&a, "foo")
 		g.Expect(post).Should(And(
@@ -70,7 +70,7 @@ func TestSetStatusCondition_LastTransitionTime(t *testing.T) {
 		}
 
 		g.Expect(conditions.SetStatusCondition(&a, nc)).Should(BeTrue())
-		g.Expect(a.conditions).Should(HaveLen(1))
+		g.Expect(a.GetConditions()).Should(HaveLen(1))
 
 		post := conditions.FindStatusCondition(&a, "foo")
 		g.Expect(post).Should(And(
@@ -85,7 +85,7 @@ func TestSetStatusCondition_Update(t *testing.T) {
 	g := NewWithT(t)
 
 	a := fakeAccessor{}
-	a.conditions = make([]common.Condition, 0)
+	a.status.SetConditions([]common.Condition{})
 
 	ref := common.Condition{
 		Type:               "foo",
@@ -97,7 +97,7 @@ func TestSetStatusCondition_Update(t *testing.T) {
 	}
 
 	g.Expect(conditions.SetStatusCondition(&a, ref)).Should(BeTrue())
-	g.Expect(a.conditions).Should(HaveLen(1))
+	g.Expect(a.GetConditions()).Should(HaveLen(1))
 
 	pre := conditions.FindStatusCondition(&a, "foo")
 	g.Expect(pre).Should(And(
@@ -113,7 +113,7 @@ func TestSetStatusCondition_Update(t *testing.T) {
 	}
 
 	g.Expect(conditions.SetStatusCondition(&a, nc)).Should(BeTrue())
-	g.Expect(a.conditions).Should(HaveLen(1))
+	g.Expect(a.GetConditions()).Should(HaveLen(1))
 
 	post := conditions.FindStatusCondition(&a, "foo")
 	g.Expect(post).Should(And(

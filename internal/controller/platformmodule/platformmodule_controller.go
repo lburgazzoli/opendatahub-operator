@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
+	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	sr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
@@ -21,7 +22,6 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/deploy"
 	helmrender "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/render/helm"
 	kustomizerender "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/render/kustomize"
-	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/precondition"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/predicates/dependent"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/reconciler"
@@ -60,6 +60,7 @@ func New(ctx context.Context, mgr ctrl.Manager, fns ...Option) error {
 	r := &Reconciler{
 		Options: Options{
 			Registry:          modules.DefaultRegistry(),
+			ComponentRegistry: cr.DefaultRegistry(),
 			ServiceRegistry:   sr.DefaultRegistry(),
 			ProvisionReg:      provision.DefaultRegistry(),
 			Tracker:           provision.GetRunlevelTracker(),
@@ -81,26 +82,22 @@ func New(ctx context.Context, mgr ctrl.Manager, fns ...Option) error {
 		WithConditions(
 			status.ConditionDeploymentsAvailable,
 			status.ConditionTypeOperandAvailable,
-			precondition.PlatformReadyConditionType,
 		).
 		WithPeriodicSync(1 * time.Minute).
 		// Actions
-		WithAction(precondition.RunlevelGateAction(
-			precondition.WithNameFunc(precondition.InstanceName),
-			precondition.WithRegistry(r.ProvisionReg),
-			precondition.WithTracker(r.Tracker),
-		)).
-		WithAction(r.provision).
-		WithAction(helmrender.NewAction()).
-		WithAction(kustomizerender.NewAction()).
-		WithAction(modules.InjectModuleEnv).
-		WithAction(r.injectPlatformConfig).
-		WithAction(deploy.NewAction(
+		WithAction(r.validateMode).
+		WithAction(r.gateEntryRunlevel).
+		WithAction(r.onDeployer(r.provision)).
+		WithAction(r.onDeployer(helmrender.NewAction())).
+		WithAction(r.onDeployer(kustomizerender.NewAction())).
+		WithAction(r.onDeployer(modules.InjectModuleEnv)).
+		WithAction(r.onDeployer(r.injectPlatformConfig)).
+		WithAction(r.onDeployer(deploy.NewAction(
 			deploy.WithCache(),
 			deploy.WithApplyOrder(),
 			deploy.WithContinueOnError(),
-		)).
-		WithAction(r.driftCleanup).
+		))).
+		WithAction(r.onDeployer(r.driftCleanup)).
 		WithAction(r.checkOperatorDeployments).
 		WithAction(r.syncModuleCRStatus)
 
@@ -118,6 +115,12 @@ func New(ctx context.Context, mgr ctrl.Manager, fns ...Option) error {
 				reqs = append(reqs, reconcile.Request{
 					NamespacedName: types.NamespacedName{Name: h.GetName()},
 				})
+			})
+			_ = r.ComponentRegistry.ForEach(func(h cr.ComponentHandler) error {
+				reqs = append(reqs, reconcile.Request{
+					NamespacedName: types.NamespacedName{Name: h.GetName()},
+				})
+				return nil
 			})
 			return reqs
 		}),
@@ -162,6 +165,25 @@ func New(ctx context.Context, mgr ctrl.Manager, fns ...Option) error {
 			}),
 			reconciler.Dynamic(reconciler.CrdExists(moduleGVK)),
 		)
+		return nil
+	})
+
+	// Component CR watches drive tracker-only PlatformModule entries.
+	_ = r.ComponentRegistry.ForEach(func(h cr.ComponentHandler) error {
+		componentGVK := h.GroupVersionKind()
+		componentName := h.GetName()
+
+		b = b.WatchesGVK(
+			componentGVK,
+			reconciler.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+			reconciler.WithEventMapper(func(_ context.Context, _ client.Object) []reconcile.Request {
+				return []reconcile.Request{{
+					NamespacedName: types.NamespacedName{Name: componentName},
+				}}
+			}),
+			reconciler.Dynamic(reconciler.CrdExists(componentGVK)),
+		)
+
 		return nil
 	})
 

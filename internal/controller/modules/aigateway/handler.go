@@ -98,9 +98,10 @@ func (h *handler) ApplyManagementState(ctx *modules.PlatformContext, spec *confi
 	if ctx == nil || ctx.DSC == nil {
 		return
 	}
-	spec.AIGateway = common.ManagementSpec{
+	spec.Set(configv1alpha1.PlatformModuleConfig{
+		Name:            moduleName,
 		ManagementState: ctx.DSC.Spec.Components.AIGateway.ManagementState,
-	}
+	})
 }
 
 // BuildModuleCR projects the DSC AIGateway configuration onto the

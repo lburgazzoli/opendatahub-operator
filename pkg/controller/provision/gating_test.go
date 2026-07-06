@@ -236,7 +236,7 @@ func TestWalkBatches_TimeoutDoesNotForgiveNewStuckEntry(t *testing.T) {
 		"alpha timed out at RL31, but bravo is newly stuck at RL33 and should gate charlie")
 	assert.Equal(t, status.AwaitingReadinessReason, conds.last().Reason,
 		"should be awaiting readiness on bravo, not skipped")
-	assert.Equal(t, float64(33), testutil.ToFloat64(provision.RunlevelBlocked),
+	assert.InDelta(t, float64(33), testutil.ToFloat64(provision.RunlevelBlocked), 0.000001,
 		"RunlevelBlocked should reflect RL33 where bravo is stuck")
 }
 
@@ -281,7 +281,7 @@ func assertRunlevelStatusSum(t *testing.T, runlevel string) {
 		rlStatus(runlevel, provision.StatusProcessed) +
 		rlStatus(runlevel, provision.StatusBlocked) +
 		rlStatus(runlevel, provision.StatusTimedOut)
-	assert.Equal(t, float64(1), sum,
+	assert.InDelta(t, float64(1), sum, 0.000001,
 		"info-style invariant: exactly one status label must be 1 for runlevel %s", runlevel)
 }
 
@@ -302,19 +302,19 @@ func TestWalkBatches_Metrics_AllReady(t *testing.T) {
 	require.NoError(t, err)
 
 	// Both runlevels processed.
-	assert.Equal(t, float64(1), rlStatus("20", provision.StatusProcessed))
-	assert.Equal(t, float64(0), rlStatus("20", provision.StatusPending))
-	assert.Equal(t, float64(0), rlStatus("20", provision.StatusBlocked))
-	assert.Equal(t, float64(0), rlStatus("20", provision.StatusTimedOut))
+	assert.InDelta(t, float64(1), rlStatus("20", provision.StatusProcessed), 0.000001)
+	assert.InDelta(t, float64(0), rlStatus("20", provision.StatusPending), 0.000001)
+	assert.InDelta(t, float64(0), rlStatus("20", provision.StatusBlocked), 0.000001)
+	assert.InDelta(t, float64(0), rlStatus("20", provision.StatusTimedOut), 0.000001)
 	assertRunlevelStatusSum(t, "20")
 
-	assert.Equal(t, float64(1), rlStatus("31", provision.StatusProcessed))
-	assert.Equal(t, float64(0), rlStatus("31", provision.StatusBlocked))
+	assert.InDelta(t, float64(1), rlStatus("31", provision.StatusProcessed), 0.000001)
+	assert.InDelta(t, float64(0), rlStatus("31", provision.StatusBlocked), 0.000001)
 	assertRunlevelStatusSum(t, "31")
 
 	// Aggregate: cleared = 31, blocked = 0.
-	assert.Equal(t, float64(31), testutil.ToFloat64(provision.RunlevelCleared))
-	assert.Equal(t, float64(0), testutil.ToFloat64(provision.RunlevelBlocked))
+	assert.InDelta(t, float64(31), testutil.ToFloat64(provision.RunlevelCleared), 0.000001)
+	assert.InDelta(t, float64(0), testutil.ToFloat64(provision.RunlevelBlocked), 0.000001)
 
 	// Two batches processed.
 	assert.GreaterOrEqual(t, testutil.ToFloat64(provision.BatchesProcessedTotal), float64(2))
@@ -341,18 +341,18 @@ func TestWalkBatches_Metrics_GatingBlocks(t *testing.T) {
 	require.NoError(t, err)
 
 	// RL20 processed (first batch, never gated).
-	assert.Equal(t, float64(1), rlStatus("20", provision.StatusProcessed))
+	assert.InDelta(t, float64(1), rlStatus("20", provision.StatusProcessed), 0.000001)
 
 	// RL31 blocked (alpha not ready).
-	assert.Equal(t, float64(1), rlStatus("31", provision.StatusBlocked))
-	assert.Equal(t, float64(0), rlStatus("31", provision.StatusProcessed))
-	assert.Equal(t, float64(0), rlStatus("31", provision.StatusPending))
+	assert.InDelta(t, float64(1), rlStatus("31", provision.StatusBlocked), 0.000001)
+	assert.InDelta(t, float64(0), rlStatus("31", provision.StatusProcessed), 0.000001)
+	assert.InDelta(t, float64(0), rlStatus("31", provision.StatusPending), 0.000001)
 	assertRunlevelStatusSum(t, "20")
 	assertRunlevelStatusSum(t, "31")
 
 	// Aggregate: cleared = 20, blocked = 31.
-	assert.Equal(t, float64(20), testutil.ToFloat64(provision.RunlevelCleared))
-	assert.Equal(t, float64(31), testutil.ToFloat64(provision.RunlevelBlocked))
+	assert.InDelta(t, float64(20), testutil.ToFloat64(provision.RunlevelCleared), 0.000001)
+	assert.InDelta(t, float64(31), testutil.ToFloat64(provision.RunlevelBlocked), 0.000001)
 
 	// Duration > 0 for blocked runlevel.
 	assert.GreaterOrEqual(t, rlDuration("31"), float64(0))
@@ -381,20 +381,20 @@ func TestWalkBatches_Metrics_Timeout(t *testing.T) {
 	require.NoError(t, err)
 
 	// RL20 processed (first batch).
-	assert.Equal(t, float64(1), rlStatus("20", provision.StatusProcessed))
+	assert.InDelta(t, float64(1), rlStatus("20", provision.StatusProcessed), 0.000001)
 
 	// RL31 timed out then processed (timeout advances, then batch runs).
 	// The final status for RL31 is "processed" because after timeout the
 	// batch is still executed.
-	assert.Equal(t, float64(1), rlStatus("31", provision.StatusProcessed))
+	assert.InDelta(t, float64(1), rlStatus("31", provision.StatusProcessed), 0.000001)
 	assertRunlevelStatusSum(t, "20")
 	assertRunlevelStatusSum(t, "31")
 
 	// Timeout counter incremented for RL31.
-	assert.Equal(t, float64(1),
-		testutil.ToFloat64(provision.RunlevelTimeoutTotal.WithLabelValues("31")))
+	assert.InDelta(t, float64(1),
+		testutil.ToFloat64(provision.RunlevelTimeoutTotal.WithLabelValues("31")), 0.000001)
 
 	// Both cleared, nothing blocked.
-	assert.Equal(t, float64(31), testutil.ToFloat64(provision.RunlevelCleared))
-	assert.Equal(t, float64(0), testutil.ToFloat64(provision.RunlevelBlocked))
+	assert.InDelta(t, float64(31), testutil.ToFloat64(provision.RunlevelCleared), 0.000001)
+	assert.InDelta(t, float64(0), testutil.ToFloat64(provision.RunlevelBlocked), 0.000001)
 }

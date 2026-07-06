@@ -44,7 +44,8 @@ func (m *mockHandler) BuildModuleCR(_ context.Context, _ client.Client, _ *modul
 	return nil, nil
 }
 
-func (m *mockHandler) ApplyManagementState(_ *modules.PlatformContext, _ *configv1alpha1.PlatformModules) {}
+func (m *mockHandler) ApplyManagementState(_ *modules.PlatformContext, _ *configv1alpha1.PlatformModules) {
+}
 
 // Verify mockHandler satisfies ModuleHandler at compile time.
 var _ modules.ModuleHandler = (*mockHandler)(nil)

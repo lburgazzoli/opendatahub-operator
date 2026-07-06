@@ -4,6 +4,7 @@ package platformmodule
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	sr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
@@ -21,6 +22,7 @@ type Option interface {
 // Options{} and tests override only what they need.
 type Options struct {
 	Registry          *modules.Registry
+	ComponentRegistry *cr.Registry
 	ServiceRegistry   *sr.Registry
 	ProvisionReg      *provision.UnifiedRegistry
 	Tracker           *provision.RunlevelTracker
@@ -30,6 +32,9 @@ type Options struct {
 func (o Options) applyOption(target *Options) {
 	if o.Registry != nil {
 		target.Registry = o.Registry
+	}
+	if o.ComponentRegistry != nil {
+		target.ComponentRegistry = o.ComponentRegistry
 	}
 	if o.ServiceRegistry != nil {
 		target.ServiceRegistry = o.ServiceRegistry
@@ -53,6 +58,13 @@ func (f optionFunc) applyOption(o *Options) { f(o) }
 func WithRegistry(r *modules.Registry) Option {
 	return optionFunc(func(o *Options) {
 		o.Registry = r
+	})
+}
+
+// WithComponentRegistry sets a custom component handler registry.
+func WithComponentRegistry(r *cr.Registry) Option {
+	return optionFunc(func(o *Options) {
+		o.ComponentRegistry = r
 	})
 }
 

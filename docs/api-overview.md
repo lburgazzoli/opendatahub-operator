@@ -2424,6 +2424,43 @@ Platform.Spec.Modules; the PlatformModule reconciler deploys the operator.
 | `status` _[PlatformModuleStatus](#platformmodulestatus)_ |  |  |  |
 
 
+#### PlatformModuleConditionSummary
+
+
+
+PlatformModuleConditionSummary is the compact status payload reported per
+inventory entry.
+
+
+
+_Appears in:_
+- [PlatformModuleSummary](#platformmodulesummary)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `ready` _boolean_ |  |  |  |
+| `reason` _string_ |  |  |  |
+| `message` _string_ |  |  |  |
+
+
+#### PlatformModuleConfig
+
+
+
+PlatformModuleConfig describes one desired Platform inventory entry.
+
+
+
+_Appears in:_
+- [PlatformModules](#platformmodules)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name is the canonical inventory entry name. |  | MinLength: 1 <br />Required: \{\} <br /> |
+| `managementState` _[ManagementState](https://pkg.go.dev/github.com/openshift/api@v0.0.0-20250812222054-88b2b21555f3/operator/v1#ManagementState)_ | ManagementState declares whether this entry is actively managed. | Removed | Enum: [Managed Removed] <br /> |
+| `config` _[RawExtension](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#rawextension-runtime-pkg)_ | Config carries optional low-level opaque configuration reserved for<br />future direct Platform consumers. |  |  |
+
+
 #### PlatformModuleSpec
 
 
@@ -2459,23 +2496,50 @@ _Appears in:_
 | `resources` _[ResourceRef](#resourceref) array_ | Resources lists every resource deployed by the PlatformModule reconciler.<br />Used for drift cleanup: resources present here but absent from the current<br />render are deleted on the next reconcile. |  |  |
 
 
+#### PlatformModuleSummaries
+
+_Underlying type:_ _[PlatformModuleSummary](#platformmodulesummary)_
+
+PlatformModuleSummaries is the keyed list of aggregated inventory statuses.
+
+
+
+_Appears in:_
+- [PlatformStatus](#platformstatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ |  |  |  |
+| `runlevel` _integer_ |  |  |  |
+| `version` _string_ |  |  |  |
+| `status` _[PlatformModuleConditionSummary](#platformmoduleconditionsummary)_ |  |  |  |
+
+
+#### PlatformModuleSummary
+
+
+
+PlatformModuleSummary reports the aggregated observed state of one inventory
+entry.
+
+
+
+_Appears in:_
+- [PlatformModuleSummaries](#platformmodulesummaries)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ |  |  |  |
+| `runlevel` _integer_ |  |  |  |
+| `version` _string_ |  |  |  |
+| `status` _[PlatformModuleConditionSummary](#platformmoduleconditionsummary)_ |  |  |  |
+
+
 #### PlatformModules
 
+_Underlying type:_ _[PlatformModuleConfig](#platformmoduleconfig)_
 
-
-PlatformModules declares per-module management state for Platform mode.
-Each field maps to a registered module handler by name. Add new module
-fields here when onboarding additional modules.
-
-On OpenShift, DSC and DSCI controllers own individual fields via SSA:
-  - DSCI controller owns .monitoring
-  - DSC controller owns .aigateway
-
-On xKS, the user owns all fields directly.
-
-The "module" struct tag on each field declares the canonical handler name.
-EnabledModules() uses reflection on this tag so new modules don't require
-updating EnabledModules() manually — only adding a new field here suffices.
+PlatformModules is the keyed list of desired Platform inventory entries.
 
 
 
@@ -2484,8 +2548,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `monitoring` _[ManagementSpec](#managementspec)_ | Monitoring controls the monitoring module operator lifecycle.<br />On OpenShift this field is managed by the DSCI controller via SSA. |  |  |
-| `aigateway` _[ManagementSpec](#managementspec)_ | AIGateway controls the AI Gateway module operator lifecycle.<br />On OpenShift this field is managed by the DSC controller via SSA. |  |  |
+| `name` _string_ | Name is the canonical inventory entry name. |  | MinLength: 1 <br />Required: \{\} <br /> |
+| `managementState` _[ManagementState](https://pkg.go.dev/github.com/openshift/api@v0.0.0-20250812222054-88b2b21555f3/operator/v1#ManagementState)_ | ManagementState declares whether this entry is actively managed. | Removed | Enum: [Managed Removed] <br /> |
+| `config` _[RawExtension](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#rawextension-runtime-pkg)_ | Config carries optional low-level opaque configuration reserved for<br />future direct Platform consumers. |  |  |
 
 
 #### PlatformSpec
@@ -2501,7 +2566,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `modules` _[PlatformModules](#platformmodules)_ | Modules declares the set of modules managed by this Platform instance.<br />Each field corresponds to a registered module handler. Modules follow<br />the same Managed/Removed/empty convention as DSC components: Managed<br />deploys the module, Removed tears it down, empty means not managed. |  |  |
+| `modules` _[PlatformModules](#platformmodules)_ | Modules declares the low-level desired inventory managed by this Platform<br />instance. |  |  |
 
 
 #### PlatformStatus
@@ -2520,7 +2585,7 @@ _Appears in:_
 | `phase` _string_ |  |  |  |
 | `observedGeneration` _integer_ | The generation observed by the resource controller. |  |  |
 | `conditions` _[Condition](#condition) array_ |  |  |  |
-| `modules` _string array_ | Modules lists the names of module operators currently enabled on this<br />Platform instance. Populated by the Platform controller from spec.modules. |  |  |
+| `modules` _[PlatformModuleSummaries](#platformmodulesummaries)_ | Modules reports a compact summary for each declared Platform inventory<br />entry. |  |  |
 
 
 #### ResourceRef

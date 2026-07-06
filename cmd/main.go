@@ -556,7 +556,12 @@ func main() { //nolint:funlen,maintidx,gocyclo
 
 	runlevelTracker := provision.GetRunlevelTracker()
 
-	if err = pmctrl.New(ctx, mgr, pmctrl.WithTracker(runlevelTracker)); err != nil {
+	if err = pmctrl.New(
+		ctx,
+		mgr,
+		pmctrl.WithTracker(runlevelTracker),
+		pmctrl.WithComponentRegistry(cr.DefaultRegistry()),
+	); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PlatformModule")
 		os.Exit(1)
 	}

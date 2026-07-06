@@ -4,11 +4,9 @@ import (
 	"context"
 	"testing"
 
-	operatorv1 "github.com/openshift/api/operator/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
 	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
@@ -31,10 +29,7 @@ func TestPlatformOnly_TwoModules_Created(t *testing.T) {
 	createGatewayConfig(t, tc)
 
 	createPlatform(t, tc, configv1alpha1.PlatformSpec{
-		Modules: configv1alpha1.PlatformModules{
-			Monitoring: common.ManagementSpec{ManagementState: operatorv1.Managed},
-			AIGateway:  common.ManagementSpec{ManagementState: operatorv1.Managed},
-		},
+		Modules: managedPlatformEntries("monitoring", "aigateway"),
 	})
 
 	wt := tc.NewWithT(t)
@@ -47,7 +42,7 @@ func TestPlatformOnly_TwoModules_Created(t *testing.T) {
 		Eventually().Should(jq.Match(`.metadata.name == "aigateway"`))
 
 	wt.Get(gvk.Platform, nn).Eventually().Should(
-		jq.Match(`.status.modules | sort == ["aigateway","monitoring"]`),
+		jq.Match(`(.status.modules | map(.name) | sort) == ["aigateway","monitoring"]`),
 	)
 }
 
@@ -98,10 +93,7 @@ func TestPlatformOnly_DAG_Advancement(t *testing.T) {
 	t.Cleanup(func() { _ = cli.Delete(context.Background(), aigateCR) })
 
 	createPlatform(t, tc, configv1alpha1.PlatformSpec{
-		Modules: configv1alpha1.PlatformModules{
-			Monitoring: common.ManagementSpec{ManagementState: operatorv1.Managed},
-			AIGateway:  common.ManagementSpec{ManagementState: operatorv1.Managed},
-		},
+		Modules: managedPlatformEntries("monitoring", "aigateway"),
 	})
 	batchesBefore := captureBatchCount()
 
@@ -136,17 +128,17 @@ func TestPlatformOnly_DAG_Advancement(t *testing.T) {
 
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).
 		Eventually().Should(
-			jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
-		)
+		jq.Match(`.status.conditions[] | select(.type == "Ready") | .status == "True"`),
+	)
 
 	// aigateway PlatformModule should still NOT be Ready: its operand CR
 	// has no conditions → OperandInitializing blocks Ready.
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "aigateway"}).
 		Eventually().Should(And(
-			jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .status == "False"`),
-			jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "OperandInitializing"`),
-			jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .message == "module CR has no conditions yet"`),
-		))
+		jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .status == "False"`),
+		jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .reason == "OperandInitializing"`),
+		jq.Match(`.status.conditions[] | select(.type == "OperandAvailable") | .message == "module CR has no conditions yet"`),
+	))
 
 	// Metrics: RL20 should now be processed (monitoring Ready unblocked it).
 	g.Eventually(func(g Gomega) {
@@ -185,10 +177,7 @@ func TestPlatformOnly_DisableModule_Cleanup(t *testing.T) {
 	createGatewayConfig(t, tc)
 
 	createPlatform(t, tc, configv1alpha1.PlatformSpec{
-		Modules: configv1alpha1.PlatformModules{
-			Monitoring: common.ManagementSpec{ManagementState: operatorv1.Managed},
-			AIGateway:  common.ManagementSpec{ManagementState: operatorv1.Managed},
-		},
+		Modules: managedPlatformEntries("monitoring", "aigateway"),
 	})
 
 	wt := tc.NewWithT(t)
@@ -204,7 +193,7 @@ func TestPlatformOnly_DisableModule_Cleanup(t *testing.T) {
 	p := &configv1alpha1.Platform{}
 	g.Expect(cli.Get(t.Context(),
 		types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}, p)).Should(Succeed())
-	p.Spec.Modules.Monitoring = common.ManagementSpec{ManagementState: operatorv1.Removed}
+	p.Spec.Modules = managedPlatformEntries("aigateway")
 	g.Expect(cli.Update(t.Context(), p)).Should(Succeed())
 
 	// monitoring PlatformModule should be deleted.
@@ -220,8 +209,8 @@ func TestPlatformOnly_DisableModule_Cleanup(t *testing.T) {
 	// Platform status.modules should only contain aigateway.
 	wt.Get(gvk.Platform, types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}).
 		Eventually().Should(
-			jq.Match(`.status.modules == ["aigateway"]`),
-		)
+		jq.Match(`(.status.modules | map(.name)) == ["aigateway"]`),
+	)
 }
 
 func TestPlatformOnly_DAG_Gating_ComponentBlocksModule(t *testing.T) {
@@ -251,9 +240,7 @@ func TestPlatformOnly_DAG_Gating_ComponentBlocksModule(t *testing.T) {
 	resetDAGMetrics()
 
 	createPlatform(t, tc, configv1alpha1.PlatformSpec{
-		Modules: configv1alpha1.PlatformModules{
-			Monitoring: common.ManagementSpec{ManagementState: operatorv1.Managed},
-		},
+		Modules: managedPlatformEntries("dashboard", "monitoring"),
 	})
 
 	wt := tc.NewWithT(t)
@@ -262,11 +249,9 @@ func TestPlatformOnly_DAG_Gating_ComponentBlocksModule(t *testing.T) {
 	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
 	batchesBefore := captureBatchCount()
 
-	// Step 1: PlatformModule created but DAG blocked at RL10 — no Dashboard CR.
-	// Note: ModulesReady and Ready may already be True because the gating
-	// condition (PlatformReady) uses Info severity, which does not block the
-	// PlatformModule's Ready computation. Only ProvisioningProgress reflects
-	// the DAG gating state on the Platform CR.
+	// Step 1: PlatformModules created but DAG blocked at RL10 — no Dashboard CR.
+	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "dashboard"}).
+		Eventually().Should(Succeed())
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).
 		Eventually().Should(Succeed())
 

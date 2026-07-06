@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,17 +26,6 @@ const (
 	// TODO: remove after https://issues.redhat.com/browse/RHOAIENG-15920
 	finalizerName = "datasciencecluster.opendatahub.io/finalizer"
 )
-
-// persistAPI is implemented by component CRs that expose an alternative object
-// for the deploy action to persist (e.g. when the "public" CR wraps an inner
-// object that should actually be applied to the cluster).
-type persistAPI interface {
-	APIPersistObject() client.Object
-}
-
-func isNilInterface(v any) bool {
-	return v == nil || (reflect.ValueOf(v).Kind() == reflect.Ptr && reflect.ValueOf(v).IsNil())
-}
 
 func watchDataScienceClusters(ctx context.Context, cli client.Client) []reconcile.Request {
 	return cluster.WatchDataScienceClusters(ctx, cli)
@@ -161,55 +149,37 @@ func (r *Reconciler) provisionComponents(ctx context.Context, rr *odhtype.Reconc
 
 	rr.Generated = true
 
-	log := logf.FromContext(ctx)
-
-	var failedComponents []string
+	var errs []error
 
 	_ = r.ComponentRegistry.ForEach(func(handler cr.ComponentHandler) error {
 		if !handler.IsEnabled(instance) {
 			return nil
 		}
 
-		name := handler.GetName()
+		ci, newObjErr := handler.NewCRObject(ctx, rr.Client, instance)
+		if newObjErr != nil {
+			errs = append(errs, fmt.Errorf("failed to create component %s CR: %w", handler.GetName(), newObjErr))
+			return nil
+		}
 
-		ci, err := handler.NewCRObject(ctx, rr.Client, instance)
-		if err != nil {
-			log.Error(err, "NewCRObject failed", "component", name)
-			failedComponents = append(failedComponents, name)
-			return nil
-		}
-		if isNilInterface(ci) {
-			return nil
-		}
-		obj, ok := ci.(client.Object)
-		if !ok {
-			log.Error(nil, "component CR does not implement client.Object",
-				"component", name, "type", fmt.Sprintf("%T", ci))
-			failedComponents = append(failedComponents, name)
-			return nil
-		}
-		if p, ok := ci.(persistAPI); ok {
-			if inner := p.APIPersistObject(); !isNilInterface(inner) {
-				obj = inner
-			}
-		}
-		if err := rr.AddResources(obj); err != nil {
-			log.Error(err, "AddResources failed", "component", name)
-			failedComponents = append(failedComponents, name)
+		if err := rr.AddResources(ci); err != nil {
+			errs = append(errs, fmt.Errorf("failed to add component %s object: %w", handler.GetName(), err))
 		}
 
 		return nil
 	})
 
-	if len(failedComponents) > 0 {
+	if len(errs) > 0 {
+		err := errors.Join(errs...)
+
 		rr.Conditions.SetCondition(common.Condition{
 			Type:    status.ConditionTypeComponentsReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  status.ProvisioningFailedReason,
-			Message: fmt.Sprintf("Provisioning failed for: %v", failedComponents),
+			Message: err.Error(),
 		})
 
-		return fmt.Errorf("provisioning failed for components: %v", failedComponents)
+		return err
 	}
 
 	return nil
@@ -273,10 +243,8 @@ func (r *Reconciler) provisionModuleCRs(ctx context.Context, rr *odhtype.Reconci
 	return nil
 }
 
-// syncPlatformModules SSA-patches Platform.Spec.Modules with the management
-// state of modules declared in DSC.Spec.Components (via module:"name" tags).
-// Only DSC-managed modules are written; DSCI-managed fields are left to the
-// DSCI controller so SSA field ownership stays correct.
+// syncPlatformModules SSA-patches Platform.Spec.Modules with the low-level
+// inventory projected from DSC.Spec.Components.
 func (r *Reconciler) syncPlatformModules(_ context.Context, rr *odhtype.ReconciliationRequest) error {
 	instance, ok := rr.Instance.(*dscv2.DataScienceCluster)
 	if !ok {
@@ -290,15 +258,7 @@ func (r *Reconciler) syncPlatformModules(_ context.Context, rr *odhtype.Reconcil
 		Kind:       configv1alpha1.PlatformKind,
 	}
 
-	managed := modules.ManagedModuleNames(instance.Spec.Components)
-	platformCtx := &modules.PlatformContext{DSC: instance}
-	_ = r.ModuleRegistry.ForAll(func(h modules.ModuleHandler, _ bool) error {
-		if !managed.Has(h.GetName()) {
-			return nil
-		}
-		h.ApplyManagementState(platformCtx, &platform.Spec.Modules)
-		return nil
-	})
+	platform.Spec.Modules = projectPlatformModulesFromComponents(instance.Spec.Components)
 
 	return rr.AddResources(platform)
 }
@@ -314,6 +274,7 @@ func (r *Reconciler) updateStatus(ctx context.Context, rr *odhtype.Reconciliatio
 	if err := computeComponentsStatus(ctx, rr, r.ComponentRegistry); err != nil {
 		return err
 	}
+	filterInternalPlatformReleases(&instance.Status.Components)
 
 	if err := modules.ComputeModulesStatus(ctx, rr, r.ModuleRegistry); err != nil {
 		return err

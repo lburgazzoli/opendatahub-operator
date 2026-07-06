@@ -71,8 +71,19 @@ type AuthList struct {
 	Items           []Auth `json:"items"`
 }
 
-func (m *Auth) GetStatus() *common.Status {
-	return &m.Status.Status
+func (m *Auth) GetStatus() common.Status {
+	if copied := m.Status.Status.DeepCopy(); copied != nil {
+		return *copied
+	}
+	return common.Status{}
+}
+
+func (m *Auth) SetStatus(status common.Status) {
+	if copied := status.DeepCopy(); copied != nil {
+		m.Status.Status = *copied
+		return
+	}
+	m.Status.Status = common.Status{}
 }
 
 func (c *Auth) GetConditions() []common.Condition {

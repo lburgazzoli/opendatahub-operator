@@ -33,6 +33,10 @@ func (r *Reconciler) provision(ctx context.Context, rr *odhtype.ReconciliationRe
 		return fmt.Errorf("expected *PlatformModule, got %T", rr.Instance)
 	}
 
+	if r.modeFor(pm.Name) != entryModeDeployer {
+		return nil
+	}
+
 	handler := r.Registry.Lookup(pm.Name)
 	if handler == nil {
 		// No handler registered — module may have been unregistered after CR was
@@ -181,6 +185,16 @@ func (r *Reconciler) checkOperatorDeployments(ctx context.Context, rr *odhtype.R
 		return fmt.Errorf("expected *PlatformModule, got %T", rr.Instance)
 	}
 
+	if r.modeFor(pm.Name) == entryModeTrackerOnly {
+		rr.Conditions.MarkFalse(status.ConditionDeploymentsAvailable,
+			conditions.WithReason("NotApplicable"),
+			conditions.WithSeverity(common.ConditionSeverityInfo),
+			conditions.WithMessage("entry does not manage operator deployments"),
+		)
+
+		return nil
+	}
+
 	var notReady []string
 	deployments := make([]string, 0, len(pm.Status.Resources))
 
@@ -246,85 +260,80 @@ func (r *Reconciler) syncModuleCRStatus(ctx context.Context, rr *odhtype.Reconci
 		return fmt.Errorf("expected *PlatformModule, got %T", rr.Instance)
 	}
 
-	handler := r.Registry.Lookup(pm.Name)
-	if handler == nil {
-		// No handler — unknown module, nothing to reflect. Info severity so the
-		// DAG is not blocked.
-		rr.Conditions.MarkFalse(status.ConditionTypeOperandAvailable,
-			conditions.WithReason("UnknownModule"),
-			conditions.WithSeverity(common.ConditionSeverityInfo),
-		)
-		return nil
+	trackedGVK, mode, found := r.trackedGVKFor(pm.Name)
+	if !found {
+		return fmt.Errorf("platform entry %q is not registered in the module/component registries", pm.Name)
 	}
 
-	moduleStatus, err := handler.GetModuleStatus(ctx, rr.Client)
+	if mode == entryModeTrackerOnly {
+		pm.Status.Resources = nil
+	}
 
+	tracked, err := getTrackedSingletonObject(ctx, rr.Client, trackedGVK)
 	switch {
 	case meta.IsNoMatchError(err):
-		// CRD not installed — module operator has not run yet.
-		//
-		// Reflect platform release; no module CR to handshake with.
 		pm.Status.Release = rr.Release
 		rr.Conditions.MarkFalse(status.ConditionTypeOperandAvailable,
-			conditions.WithReason("OperandAbsent"),
+			conditions.WithReason("TrackedResourceMissing"),
 			conditions.WithSeverity(common.ConditionSeverityInfo),
-			conditions.WithMessage("module CRD not installed"),
+			conditions.WithMessage("tracked resource CRD is not installed"),
 		)
+		return nil
 	case k8serr.IsNotFound(err):
-		// CRD installed but CR not yet created by DSC/DSCI/user.
-		//
-		// In this case we shoiuld just satisfy the handshake, since the
-		// module CR is not there
 		pm.Status.Release = rr.Release
 		rr.Conditions.MarkFalse(status.ConditionTypeOperandAvailable,
-			conditions.WithReason("OperandAbsent"),
+			conditions.WithReason("TrackedResourceMissing"),
 			conditions.WithSeverity(common.ConditionSeverityInfo),
-			conditions.WithMessage("module CR not yet created"),
+			conditions.WithMessage("tracked resource CR is not created"),
 		)
+		return nil
 	case err != nil:
-		return fmt.Errorf("failed to get module CR status: %w", err)
-	case len(moduleStatus.Conditions) == 0:
-		// CR exists but no conditions yet — the module operator is running but
-		// has not reported health yet.
-		//
-		// Block the DAG until conditions appear.
-		rr.Conditions.MarkFalse(status.ConditionTypeOperandAvailable,
-			conditions.WithReason("OperandInitializing"),
-			conditions.WithMessage("module CR has no conditions yet"),
-		)
-	case !conditions.IsStatusConditionTrue(moduleStatus, status.ConditionTypeReady):
-		// CR exists, but not ready
-		rr.Conditions.MarkFalse(status.ConditionTypeOperandAvailable,
-			conditions.WithReason("OperandNotReady"),
-			conditions.WithMessage("module operand CR is not ready"),
-		)
-
-		// Always reflect the module CR's actual reported release so the DAG readiness
-		// checker can compare pm.Status.Release.Version against the expected platform
-		// version. The module's ReleaseVersion string is stored verbatim; the Name
-		// comes from the platform identity (unchanged by the module operator).
-		pm.Status.Release = rr.Release
-
-		if moduleStatus.ReleaseVersion != "" {
-			if v, err := semver.ParseTolerant(moduleStatus.ReleaseVersion); err == nil {
-				pm.Status.Release.Version = libversion.OperatorVersion{Version: v}
-			}
-		}
+		return fmt.Errorf("failed to get tracked CR status: %w", err)
 	default:
-		rr.Conditions.MarkTrue(status.ConditionTypeOperandAvailable)
+		return r.reflectTrackedObjectStatus(pm, rr, tracked.GetConditions(), trackedReleaseVersion(tracked))
+	}
+}
 
-		// Always reflect the module CR's actual reported release so the DAG readiness
-		// checker can compare pm.Status.Release.Version against the expected platform
-		// version. The module's ReleaseVersion string is stored verbatim; the Name
-		// comes from the platform identity (unchanged by the module operator).
-		pm.Status.Release = rr.Release
-
-		if moduleStatus.ReleaseVersion != "" {
-			if v, err := semver.ParseTolerant(moduleStatus.ReleaseVersion); err == nil {
-				pm.Status.Release.Version = libversion.OperatorVersion{Version: v}
-			}
+func (r *Reconciler) reflectTrackedObjectStatus(
+	pm *configv1alpha1.PlatformModule,
+	rr *odhtype.ReconciliationRequest,
+	conditionsList []common.Condition,
+	releaseVersion string,
+) error {
+	pm.Status.Release = rr.Release
+	if releaseVersion != "" {
+		if v, err := semver.ParseTolerant(releaseVersion); err == nil {
+			pm.Status.Release.Version = libversion.OperatorVersion{Version: v}
 		}
 	}
 
-	return nil
+	trackedStatus := common.Status{}
+	trackedStatus.SetConditions(conditionsList)
+
+	switch {
+	case len(conditionsList) == 0:
+		rr.Conditions.MarkFalse(status.ConditionTypeOperandAvailable,
+			conditions.WithReason("OperandInitializing"),
+			conditions.WithSeverity(common.ConditionSeverityInfo),
+			conditions.WithMessage("tracked resource has no conditions yet"),
+		)
+		return nil
+	case !conditions.IsStatusConditionTrue(trackedStatus, status.ConditionTypeReady):
+		if readyCondition := conditions.FindStatusCondition(trackedStatus, status.ConditionTypeReady); readyCondition != nil {
+			rr.Conditions.MarkFalse(status.ConditionTypeOperandAvailable,
+				conditions.WithReason(readyCondition.Reason),
+				conditions.WithSeverity(readyCondition.Severity),
+				conditions.WithMessage("%s", readyCondition.Message),
+			)
+			return nil
+		}
+		rr.Conditions.MarkFalse(status.ConditionTypeOperandAvailable,
+			conditions.WithReason(status.NotReadyReason),
+			conditions.WithMessage("tracked resource does not report a Ready condition"),
+		)
+		return nil
+	default:
+		rr.Conditions.MarkTrue(status.ConditionTypeOperandAvailable)
+		return nil
+	}
 }

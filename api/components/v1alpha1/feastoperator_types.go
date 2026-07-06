@@ -81,8 +81,19 @@ type FeastOperatorStatus struct {
 }
 
 // GetStatus retrieves the status of the FeastOperator component
-func (f *FeastOperator) GetStatus() *common.Status {
-	return &f.Status.Status
+func (f *FeastOperator) GetStatus() common.Status {
+	if copied := f.Status.Status.DeepCopy(); copied != nil {
+		return *copied
+	}
+	return common.Status{}
+}
+
+func (f *FeastOperator) SetStatus(status common.Status) {
+	if copied := status.DeepCopy(); copied != nil {
+		f.Status.Status = *copied
+		return
+	}
+	f.Status.Status = common.Status{}
 }
 
 func (c *FeastOperator) GetConditions() []common.Condition {

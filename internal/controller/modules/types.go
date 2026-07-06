@@ -34,6 +34,8 @@ const (
 // Module teams typically embed BaseHandler and only implement IsEnabled
 // and BuildModuleCR; the remaining methods have default implementations
 // driven by ModuleConfig.
+//
+//nolint:interfacebloat // This is the stable integration contract for module handlers; reshaping it is a larger refactor than this lint cleanup.
 type ModuleHandler interface {
 	// GetName returns the unique identifier for this module.
 	GetName() string
@@ -134,8 +136,8 @@ type DeploymentNamer interface {
 // ModuleStatus holds the parsed status from a module CR. It includes the
 // standard conditions, generation metadata for staleness detection, and
 // the release version for the platform version handshake.
-// ModuleStatus implements common.ConditionsAccessor so callers can use the
-// standard conditions helpers (FindStatusCondition, etc.) directly on it.
+// ModuleStatus exposes conditions so callers can use the standard conditions
+// helpers (FindStatusCondition, etc.) directly on it.
 type ModuleStatus struct {
 	// Conditions from .status.conditions on the module CR.
 	Conditions []common.Condition
@@ -155,8 +157,6 @@ func (m *ModuleStatus) GetConditions() []common.Condition {
 func (m *ModuleStatus) SetConditions(conditions []common.Condition) {
 	m.Conditions = conditions
 }
-
-var _ common.ConditionsAccessor = (*ModuleStatus)(nil)
 
 // OperatorManifests holds the manifest descriptors returned by a module handler.
 // A handler typically populates either HelmCharts or Manifests depending on

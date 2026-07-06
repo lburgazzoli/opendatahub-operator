@@ -9,8 +9,13 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 )
 
-func SetStatusCondition(a common.ConditionsAccessor, newCondition common.Condition) bool {
-	conditions := a.GetConditions()
+type conditionReader interface {
+	GetConditions() []common.Condition
+}
+
+func SetStatusCondition(a common.StatusAccessor, newCondition common.Condition) bool {
+	status := a.GetStatus()
+	conditions := status.GetConditions()
 
 	// reset LastHeartbeatTime to ensure is not set in any condition that is
 	// eventually carrying it from an old implementation
@@ -29,7 +34,8 @@ func SetStatusCondition(a common.ConditionsAccessor, newCondition common.Conditi
 			newCondition.LastTransitionTime = metav1.NewTime(time.Now())
 		}
 		conditions = append(conditions, newCondition)
-		a.SetConditions(conditions)
+		status.SetConditions(conditions)
+		a.SetStatus(status)
 		return true
 	}
 
@@ -50,13 +56,15 @@ func SetStatusCondition(a common.ConditionsAccessor, newCondition common.Conditi
 		}
 	}
 
-	a.SetConditions(conditions)
+	status.SetConditions(conditions)
+	a.SetStatus(status)
 
 	return true
 }
 
-func RemoveStatusCondition(a common.ConditionsAccessor, conditionType string) bool {
-	conditions := a.GetConditions()
+func RemoveStatusCondition(a common.StatusAccessor, conditionType string) bool {
+	status := a.GetStatus()
+	conditions := status.GetConditions()
 	l := len(conditions)
 
 	if l == 0 {
@@ -69,13 +77,14 @@ func RemoveStatusCondition(a common.ConditionsAccessor, conditionType string) bo
 
 	removed := l != len(conditions)
 	if removed {
-		a.SetConditions(conditions)
+		status.SetConditions(conditions)
+		a.SetStatus(status)
 	}
 
 	return removed
 }
 
-func FindStatusCondition(a common.ConditionsAccessor, conditionType string) *common.Condition {
+func FindStatusCondition(a conditionReader, conditionType string) *common.Condition {
 	for _, c := range a.GetConditions() {
 		if c.Type == conditionType {
 			return c.DeepCopy()
@@ -85,15 +94,15 @@ func FindStatusCondition(a common.ConditionsAccessor, conditionType string) *com
 	return nil
 }
 
-func IsStatusConditionTrue(a common.ConditionsAccessor, conditionType string) bool {
+func IsStatusConditionTrue(a conditionReader, conditionType string) bool {
 	return IsStatusConditionPresentAndEqual(a, conditionType, metav1.ConditionTrue)
 }
 
-func IsStatusConditionFalse(a common.ConditionsAccessor, conditionType string) bool {
+func IsStatusConditionFalse(a conditionReader, conditionType string) bool {
 	return IsStatusConditionPresentAndEqual(a, conditionType, metav1.ConditionFalse)
 }
 
-func IsStatusConditionPresentAndEqual(a common.ConditionsAccessor, conditionType string, status metav1.ConditionStatus) bool {
+func IsStatusConditionPresentAndEqual(a conditionReader, conditionType string, status metav1.ConditionStatus) bool {
 	return slices.ContainsFunc(a.GetConditions(), func(condition common.Condition) bool {
 		return condition.Type == conditionType && condition.Status == status
 	})

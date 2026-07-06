@@ -86,7 +86,7 @@ type Controller interface {
 
 type ResourceObject interface {
 	client.Object
-	common.WithStatus
+	common.StatusAccessor
 }
 
 type WithLogger interface {

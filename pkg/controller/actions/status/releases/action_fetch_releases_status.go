@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -74,7 +75,7 @@ func (a *Action) run(ctx context.Context, rr *types.ReconciliationRequest) error
 	}
 
 	// Update the release status in the resource
-	obj.SetReleaseStatus(a.componentReleaseStatus)
+	obj.SetReleaseStatus(appendPlatformRelease(a.componentReleaseStatus, rr.Release))
 
 	return nil
 }
@@ -150,4 +151,37 @@ func NewAction(opts ...ActionOpts) actions.Fn {
 	}
 
 	return action.run
+}
+
+func appendPlatformRelease(
+	releases []common.ComponentRelease,
+	release common.Release,
+) []common.ComponentRelease {
+	if release.Name == "" && release.Version.String() == "" {
+		return sortedReleases(releases)
+	}
+
+	filtered := make([]common.ComponentRelease, 0, len(releases)+1)
+	for _, entry := range releases {
+		if entry.Name == "platform" {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+
+	filtered = append(filtered, common.ComponentRelease{
+		Name:    "platform",
+		Version: release.Version.String(),
+	})
+
+	return sortedReleases(filtered)
+}
+
+func sortedReleases(releases []common.ComponentRelease) []common.ComponentRelease {
+	sorted := append([]common.ComponentRelease(nil), releases...)
+	sort.Slice(sorted, func(i int, j int) bool {
+		return sorted[i].Name < sorted[j].Name
+	})
+
+	return sorted
 }

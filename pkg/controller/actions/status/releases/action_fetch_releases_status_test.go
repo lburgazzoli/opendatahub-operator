@@ -17,8 +17,6 @@ import (
 
 func TestFetchReleasesStatusAction(t *testing.T) {
 	t.Helper()
-
-	g := NewWithT(t)
 	ctx := t.Context()
 
 	// Root directory for temporary test files - automatically cleaned up when test ends
@@ -30,6 +28,7 @@ func TestFetchReleasesStatusAction(t *testing.T) {
 		metadataFilePath string
 		metadataContent  string
 		expectedReleases int
+		expectedNames    []string
 		expectedError    bool
 		providedStatus   []common.ComponentRelease // Provided ReleaseStatus for testing cache behavior
 	}{
@@ -45,14 +44,16 @@ releases:
     version: 1.3.1
     repoUrl: https://example.com/repo
 `,
-			expectedReleases: 2,
+			expectedReleases: 3,
+			expectedNames:    []string{"Another Component", "Kubeflow Pipelines", "platform"},
 			expectedError:    false,
 		},
 		{
 			name:             "should handle empty metadata file and return empty releases",
 			metadataFilePath: filepath.Join(tempDir, "empty_file.yaml"),
 			metadataContent:  "",
-			expectedReleases: 0,
+			expectedReleases: 1,
+			expectedNames:    []string{"platform"},
 			expectedError:    false,
 		},
 		{
@@ -64,14 +65,16 @@ releases:
     versionNumber: 2.2.0
     repoUrl: https://github.com/kubeflow/kfp-tekton
 `,
-			expectedReleases: 0,
+			expectedReleases: 1,
+			expectedNames:    []string{"platform"},
 			expectedError:    false,
 		},
 		{
 			name:             "should handle empty metadata file path gracefully",
 			metadataFilePath: "",
 			metadataContent:  "",
-			expectedReleases: 0,
+			expectedReleases: 1,
+			expectedNames:    []string{"platform"},
 			expectedError:    false,
 		},
 		{
@@ -83,13 +86,19 @@ releases:
     version: 2.2.0
     repoUrl: https://github.com/kubeflow/kfp-tekton
 `,
-			expectedReleases: 1,
+			expectedReleases: 3,
+			expectedNames:    []string{"alpha", "platform", "zeta"},
 			expectedError:    false,
 			providedStatus: []common.ComponentRelease{
 				{ // Simulating cached status
-					Name:    "Kubeflow Pipelines",
-					Version: "0.0.0",
-					RepoURL: "https://github.com/kubeflow/kfp-tekton",
+					Name:    "zeta",
+					Version: "1.0.0",
+					RepoURL: "https://example.com/zeta",
+				},
+				{
+					Name:    "alpha",
+					Version: "2.0.0",
+					RepoURL: "https://example.com/alpha",
 				},
 			},
 		},
@@ -98,6 +107,8 @@ releases:
 	// Iterate through all test cases
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
 			// Create the mock metadata file if needed
 			if tt.metadataContent != "" && tt.metadataFilePath != "" {
 				// Ensure the directory exists
@@ -151,14 +162,13 @@ releases:
 			// Get release status after action
 			finalReleases := withReleasesInstance.GetReleaseStatus()
 
-			// Verify that the status is updated based on the caching
-			if tt.providedStatus != nil {
-				// Cache is available, expect no re-render (cached version)
-				g.Expect(*finalReleases).To(Equal(tt.providedStatus))
-			}
-
 			// Validate the expected release count after action
 			g.Expect(*finalReleases).To(HaveLen(tt.expectedReleases))
+			names := make([]string, 0, len(*finalReleases))
+			for _, release := range *finalReleases {
+				names = append(names, release.Name)
+			}
+			g.Expect(names).To(Equal(tt.expectedNames))
 		})
 	}
 }

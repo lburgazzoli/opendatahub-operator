@@ -83,9 +83,6 @@ func (c *ComponentReadinessChecker) IsReady(ctx context.Context, name string) (b
 
 func isComponentCRReady(obj common.PlatformObject) bool {
 	s := obj.GetStatus()
-	if s == nil {
-		return false
-	}
 	for _, c := range s.Conditions {
 		if c.Type == status.ConditionTypeReady {
 			return c.Status == metav1.ConditionTrue

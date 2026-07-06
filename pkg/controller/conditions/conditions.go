@@ -58,11 +58,11 @@ func WithError(err error) Option {
 type Manager struct {
 	happy       string
 	dependents  []string
-	accessor    common.ConditionsAccessor
+	accessor    common.StatusAccessor
 	activeTypes map[string]struct{}
 }
 
-func NewManager(accessor common.ConditionsAccessor, happy string, dependents ...string) *Manager {
+func NewManager(accessor common.StatusAccessor, happy string, dependents ...string) *Manager {
 	deps := make([]string, 0, len(dependents))
 	for _, d := range dependents {
 		if d == happy || slices.Contains(deps, d) {
@@ -124,7 +124,7 @@ func (r *Manager) IsHappy() bool {
 		return false
 	}
 
-	return IsStatusConditionTrue(r.accessor, r.happy)
+	return IsStatusConditionTrue(r.accessor.GetStatus(), r.happy)
 }
 
 func (r *Manager) GetTopLevelCondition() *common.Condition {
@@ -132,7 +132,7 @@ func (r *Manager) GetTopLevelCondition() *common.Condition {
 }
 
 func (r *Manager) GetCondition(t string) *common.Condition {
-	return FindStatusCondition(r.accessor, t)
+	return FindStatusCondition(r.accessor.GetStatus(), t)
 }
 
 // SetCondition sets the given condition on the manager. It updates the list of conditions and
@@ -279,7 +279,7 @@ func (r *Manager) RecomputeHappiness(t string) {
 func (r *Manager) findUnhappyDependent() *common.Condition {
 	dn := len(r.dependents)
 
-	conditions := slices.Clone(r.accessor.GetConditions())
+	conditions := r.accessor.GetStatus().GetConditions()
 	n := 0
 
 	for _, c := range conditions {
@@ -357,7 +357,7 @@ func (r *Manager) CleanupStaleConditions() {
 	var toRemove []string
 	changed := false
 
-	for _, c := range slices.Clone(r.accessor.GetConditions()) {
+	for _, c := range r.accessor.GetStatus().GetConditions() {
 		if c.Type == r.happy {
 			continue
 		}
@@ -397,7 +397,8 @@ func (r *Manager) CleanupStaleConditions() {
 // The sorting is stable, ensuring consistent ordering when conditions have the same
 // priority.
 func (r *Manager) Sort() {
-	conditions := r.accessor.GetConditions()
+	status := r.accessor.GetStatus()
+	conditions := status.GetConditions()
 	if len(conditions) <= 1 {
 		return
 	}
@@ -419,4 +420,7 @@ func (r *Manager) Sort() {
 
 		return ret
 	})
+
+	status.SetConditions(conditions)
+	r.accessor.SetStatus(status)
 }

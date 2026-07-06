@@ -77,8 +77,19 @@ func (s *AWSKubernetesEngine) GetConditions() []apicommon.Condition {
 	return s.Status.GetConditions()
 }
 
-func (s *AWSKubernetesEngine) GetStatus() *apicommon.Status {
-	return &s.Status.Status
+func (s *AWSKubernetesEngine) GetStatus() apicommon.Status {
+	if copied := s.Status.Status.DeepCopy(); copied != nil {
+		return *copied
+	}
+	return apicommon.Status{}
+}
+
+func (s *AWSKubernetesEngine) SetStatus(status apicommon.Status) {
+	if copied := status.DeepCopy(); copied != nil {
+		s.Status.Status = *copied
+		return
+	}
+	s.Status.Status = apicommon.Status{}
 }
 
 func (c *AWSKubernetesEngine) SetConditions(conditions []apicommon.Condition) {

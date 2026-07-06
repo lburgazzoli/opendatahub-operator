@@ -79,8 +79,19 @@ func init() {
 	SchemeBuilder.Register(&Trainer{}, &TrainerList{})
 }
 
-func (c *Trainer) GetStatus() *common.Status {
-	return &c.Status.Status
+func (c *Trainer) GetStatus() common.Status {
+	if copied := c.Status.Status.DeepCopy(); copied != nil {
+		return *copied
+	}
+	return common.Status{}
+}
+
+func (c *Trainer) SetStatus(status common.Status) {
+	if copied := status.DeepCopy(); copied != nil {
+		c.Status.Status = *copied
+		return
+	}
+	c.Status.Status = common.Status{}
 }
 
 func (c *Trainer) GetConditions() []common.Condition {

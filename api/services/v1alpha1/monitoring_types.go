@@ -169,8 +169,19 @@ type MonitoringList struct {
 	Items           []Monitoring `json:"items"`
 }
 
-func (m *Monitoring) GetStatus() *common.Status {
-	return &m.Status.Status
+func (m *Monitoring) GetStatus() common.Status {
+	if copied := m.Status.Status.DeepCopy(); copied != nil {
+		return *copied
+	}
+	return common.Status{}
+}
+
+func (m *Monitoring) SetStatus(status common.Status) {
+	if copied := status.DeepCopy(); copied != nil {
+		m.Status.Status = *copied
+		return
+	}
+	m.Status.Status = common.Status{}
 }
 
 func (c *Monitoring) GetConditions() []common.Condition {

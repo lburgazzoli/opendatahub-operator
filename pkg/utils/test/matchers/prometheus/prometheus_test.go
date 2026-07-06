@@ -14,7 +14,7 @@ func TestHaveValue_Gauge(t *testing.T) {
 	g := NewWithT(t)
 
 	gauge := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "test_gauge",
+		Name: "test_value",
 		Help: "test",
 	})
 
@@ -30,7 +30,7 @@ func TestHaveValue_Counter(t *testing.T) {
 	g := NewWithT(t)
 
 	counter := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "test_counter",
+		Name: "test_total",
 		Help: "test",
 	})
 
@@ -51,7 +51,7 @@ func TestHaveValueWith(t *testing.T) {
 	g := NewWithT(t)
 
 	gauge := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "test_numeric_gauge",
+		Name: "test_numeric_value",
 		Help: "test",
 	})
 
@@ -73,7 +73,7 @@ func TestHaveValueWith_UnsupportedComparator(t *testing.T) {
 	g := NewWithT(t)
 
 	gauge := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "test_bad_cmp",
+		Name: "test_bad_compare",
 		Help: "test",
 	})
 	_, err := prom.HaveValueWith("~", 1).Match(gauge)

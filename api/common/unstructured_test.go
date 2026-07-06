@@ -255,3 +255,78 @@ func TestPlatformObjectInterface(t *testing.T) {
 	g.Expect(po.GetName()).To(Equal("test"))
 	g.Expect(po.GetStatus()).NotTo(BeNil())
 }
+
+func TestUnstructuredModule_GetReleaseStatus(t *testing.T) {
+	g := NewWithT(t)
+
+	u := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "test/v1",
+		"kind":       "Foo",
+		"metadata":   map[string]any{"name": "test"},
+		"status": map[string]any{
+			"releases": []any{
+				map[string]any{
+					"name":    "platform",
+					"version": "2.20.0",
+					"repoUrl": "https://example.test/repo",
+				},
+			},
+		},
+	}}
+
+	obj := common.NewUnstructuredModule(u)
+	releases := obj.GetReleaseStatus()
+
+	g.Expect(releases).NotTo(BeNil())
+	g.Expect(*releases).To(HaveLen(1))
+	g.Expect((*releases)[0]).To(Equal(common.ComponentRelease{
+		Name:    "platform",
+		Version: "2.20.0",
+		RepoURL: "https://example.test/repo",
+	}))
+}
+
+func TestUnstructuredModule_SetReleaseStatus(t *testing.T) {
+	g := NewWithT(t)
+
+	u := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "test/v1",
+		"kind":       "Foo",
+		"metadata":   map[string]any{"name": "test"},
+	}}
+
+	obj := common.NewUnstructuredModule(u)
+	obj.SetReleaseStatus([]common.ComponentRelease{{
+		Name:    "platform",
+		Version: "2.20.0",
+		RepoURL: "https://example.test/repo",
+	}})
+
+	releases := obj.GetReleaseStatus()
+	g.Expect(releases).NotTo(BeNil())
+	g.Expect(*releases).To(HaveLen(1))
+	g.Expect((*releases)[0].Name).To(Equal("platform"))
+	g.Expect((*releases)[0].Version).To(Equal("2.20.0"))
+	g.Expect((*releases)[0].RepoURL).To(Equal("https://example.test/repo"))
+
+	rawReleases, found, err := unstructured.NestedSlice(u.Object, "status", "releases")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(found).To(BeTrue())
+	g.Expect(rawReleases).To(HaveLen(1))
+}
+
+func TestUnstructuredModule_Interfaces(t *testing.T) {
+	g := NewWithT(t)
+
+	u := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "test/v1",
+		"kind":       "Foo",
+		"metadata":   map[string]any{"name": "test"},
+	}}
+
+	var po common.PlatformObject = common.NewUnstructuredModule(u)
+	var wr common.WithReleases = common.NewUnstructuredModule(u)
+
+	g.Expect(po.GetName()).To(Equal("test"))
+	g.Expect(wr.GetReleaseStatus()).To(BeNil())
+}

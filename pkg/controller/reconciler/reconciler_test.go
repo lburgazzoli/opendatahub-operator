@@ -75,7 +75,7 @@ func createReconciler(cli client.Client) *Reconciler {
 
 			return i, nil
 		},
-		conditionsManagerFactory: func(accessor common.ConditionsAccessor) *conditions.Manager {
+		conditionsManagerFactory: func(accessor common.StatusAccessor) *conditions.Manager {
 			return conditions.NewManager(accessor, status.ConditionTypeReady)
 		},
 	}

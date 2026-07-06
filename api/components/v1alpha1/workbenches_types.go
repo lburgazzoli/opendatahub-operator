@@ -67,8 +67,19 @@ type Workbenches struct {
 	Status WorkbenchesStatus `json:"status,omitempty"`
 }
 
-func (c *Workbenches) GetStatus() *common.Status {
-	return &c.Status.Status
+func (c *Workbenches) GetStatus() common.Status {
+	if copied := c.Status.Status.DeepCopy(); copied != nil {
+		return *copied
+	}
+	return common.Status{}
+}
+
+func (c *Workbenches) SetStatus(status common.Status) {
+	if copied := status.DeepCopy(); copied != nil {
+		c.Status.Status = *copied
+		return
+	}
+	c.Status.Status = common.Status{}
 }
 
 func (c *Workbenches) GetConditions() []common.Condition {

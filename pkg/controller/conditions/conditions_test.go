@@ -21,15 +21,30 @@ const (
 )
 
 type fakeAccessor struct {
-	conditions []common.Condition
+	status common.Status
+}
+
+func (f *fakeAccessor) GetStatus() common.Status {
+	if copied := f.status.DeepCopy(); copied != nil {
+		return *copied
+	}
+	return common.Status{}
+}
+
+func (f *fakeAccessor) SetStatus(status common.Status) {
+	if copied := status.DeepCopy(); copied != nil {
+		f.status = *copied
+		return
+	}
+	f.status = common.Status{}
 }
 
 func (f *fakeAccessor) GetConditions() []common.Condition {
-	return f.conditions
+	return f.status.GetConditions()
 }
 
 func (f *fakeAccessor) SetConditions(values []common.Condition) {
-	f.conditions = values
+	f.status.SetConditions(values)
 }
 
 func TestManager_InitializeConditions(t *testing.T) {
@@ -377,7 +392,11 @@ func TestManager_MultipleDependentsPartiallySet(t *testing.T) {
 func TestManager_Sort(t *testing.T) {
 	g := NewWithT(t)
 
-	accessor := &fakeAccessor{conditions: make([]common.Condition, 0)}
+	accessor := &fakeAccessor{
+		status: common.Status{
+			Conditions: make([]common.Condition, 0),
+		},
+	}
 
 	manager := conditions.NewManager(accessor, "Z", "A", "C")
 	manager.MarkTrue("B")
@@ -385,8 +404,9 @@ func TestManager_Sort(t *testing.T) {
 	manager.MarkTrue("E")
 	manager.Sort()
 
-	result := make([]string, 0, len(accessor.conditions))
-	for _, c := range accessor.conditions {
+	currentConditions := accessor.GetConditions()
+	result := make([]string, 0, len(currentConditions))
+	for _, c := range currentConditions {
 		result = append(result, c.Type)
 	}
 

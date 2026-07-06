@@ -19,23 +19,35 @@ limitations under the License.
 package status
 
 import (
+	"slices"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	cond "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/conditions"
 )
 
-// conditionsWrapper implements common.ConditionsAccessor for a slice of conditions.
+// conditionsWrapper adapts a bare conditions slice to common.StatusAccessor.
 type conditionsWrapper struct {
 	conditions *[]common.Condition
 }
 
-func (w *conditionsWrapper) GetConditions() []common.Condition {
-	return *w.conditions
+func (w *conditionsWrapper) GetStatus() common.Status {
+	if w == nil || w.conditions == nil {
+		return common.Status{}
+	}
+
+	return common.Status{
+		Conditions: slices.Clone(*w.conditions),
+	}
 }
 
-func (w *conditionsWrapper) SetConditions(conditions []common.Condition) {
-	*w.conditions = conditions
+func (w *conditionsWrapper) SetStatus(status common.Status) {
+	if w == nil || w.conditions == nil {
+		return
+	}
+
+	*w.conditions = slices.Clone(status.Conditions)
 }
 
 // These constants represent the overall Phase as used by .Status.Phase.

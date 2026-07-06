@@ -45,7 +45,8 @@ func newPlatformModePlatformCtx(mgmtState operatorv1.ManagementState) *modules.P
 		Platform: &configv1alpha1.Platform{
 			Spec: configv1alpha1.PlatformSpec{
 				Modules: configv1alpha1.PlatformModules{
-					Monitoring: common.ManagementSpec{
+					{
+						Name:            serviceApi.MonitoringServiceName,
 						ManagementState: mgmtState,
 					},
 				},
@@ -122,7 +123,7 @@ func TestBuildModuleCR_BasicProjection(t *testing.T) {
 
 	spec, ok := u.Object["spec"].(map[string]any)
 	g.Expect(ok).Should(BeTrue(), "spec is not a map")
-	g.Expect(spec["managementState"]).Should(Equal("Managed"))
+	g.Expect(spec).ShouldNot(HaveKey("managementState"))
 	g.Expect(spec["namespace"]).Should(Equal("opendatahub"))
 }
 
@@ -137,9 +138,7 @@ func TestBuildModuleCR_EmptyManagementStatePassedThrough(t *testing.T) {
 	spec, ok := u.Object["spec"].(map[string]any)
 	g.Expect(ok).Should(BeTrue(), "spec is not a map")
 
-	if got, exists := spec["managementState"]; exists {
-		g.Expect(got).Should(BeEmpty(), "managementState should be empty when not set")
-	}
+	g.Expect(spec).ShouldNot(HaveKey("managementState"))
 }
 
 func TestBuildModuleCR_ProjectsMetrics(t *testing.T) {
@@ -235,7 +234,7 @@ func TestBuildModuleCR_PlatformMode(t *testing.T) {
 
 	spec, ok := u.Object["spec"].(map[string]any)
 	g.Expect(ok).Should(BeTrue(), "spec is not a map")
-	g.Expect(spec["managementState"]).Should(Equal("Managed"))
+	g.Expect(spec).Should(BeEmpty())
 }
 
 func TestGetRelatedImages(t *testing.T) {

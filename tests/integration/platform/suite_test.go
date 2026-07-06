@@ -122,9 +122,10 @@ func newAIGatewayModuleHandler(gvkVal schema.GroupVersionKind) *testModuleHandle
 			if ctx == nil || ctx.DSC == nil {
 				return
 			}
-			spec.AIGateway = common.ManagementSpec{
+			spec.Set(configv1alpha1.PlatformModuleConfig{
+				Name:            "aigateway",
 				ManagementState: ctx.DSC.Spec.Components.AIGateway.ManagementState,
-			}
+			})
 		},
 	}
 }
@@ -142,14 +143,26 @@ func newMonitoringModuleHandler() *testModuleHandler {
 			if ctx == nil || ctx.DSCI == nil {
 				return
 			}
-			spec.Monitoring = common.ManagementSpec{
+			spec.Set(configv1alpha1.PlatformModuleConfig{
+				Name:            serviceApi.MonitoringServiceName,
 				ManagementState: ctx.DSCI.Spec.Monitoring.ManagementState,
-			}
+			})
 		},
 		isEnabledFn: func(ctx *modules.PlatformContext) bool {
 			return ctx != nil && ctx.DSCI != nil && ctx.DSCI.Spec.Monitoring.ManagementState == operatorv1.Managed
 		},
 	}
+}
+
+func managedPlatformEntries(names ...string) configv1alpha1.PlatformModules {
+	entries := make(configv1alpha1.PlatformModules, 0, len(names))
+	for _, name := range names {
+		entries = append(entries, configv1alpha1.PlatformModuleConfig{
+			Name:            name,
+			ManagementState: operatorv1.Managed,
+		})
+	}
+	return entries
 }
 
 // ---------------------------------------------------------------------------
@@ -212,6 +225,7 @@ func startAllControllers(t *testing.T, opts suiteOpts) (*envt.EnvT, *testf.TestC
 
 			if err := platformmodule.New(ctx, mgr,
 				platformmodule.WithRegistry(opts.moduleReg),
+				platformmodule.WithComponentRegistry(opts.componentReg),
 				platformmodule.WithServiceRegistry(&sr.Registry{}),
 				platformmodule.WithProvisionRegistry(opts.provisionReg),
 				platformmodule.WithTracker(provision.GetRunlevelTracker()),

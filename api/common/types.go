@@ -129,8 +129,8 @@ type Status struct {
 	Conditions []Condition `json:"conditions,omitempty"`
 }
 
-func (s *Status) GetConditions() []Condition {
-	return s.Conditions
+func (s Status) GetConditions() []Condition {
+	return append([]Condition(nil), s.Conditions...)
 }
 
 func (s *Status) SetConditions(conditions []Condition) {
@@ -157,13 +157,9 @@ type ComponentReleaseStatus struct {
 	Releases []ComponentRelease `yaml:"releases,omitempty" json:"releases,omitempty"`
 }
 
-type WithStatus interface {
-	GetStatus() *Status
-}
-
-type ConditionsAccessor interface {
-	GetConditions() []Condition
-	SetConditions([]Condition)
+type StatusAccessor interface {
+	GetStatus() Status
+	SetStatus(Status)
 }
 
 type WithReleases interface {
@@ -173,8 +169,7 @@ type WithReleases interface {
 
 type PlatformObject interface {
 	client.Object
-	WithStatus
-	ConditionsAccessor
+	StatusAccessor
 }
 
 type Platform string

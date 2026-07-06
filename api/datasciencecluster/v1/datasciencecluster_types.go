@@ -200,8 +200,19 @@ func (c *DataScienceCluster) GetConditions() []common.Condition {
 	return c.Status.GetConditions()
 }
 
-func (c *DataScienceCluster) GetStatus() *common.Status {
-	return &c.Status.Status
+func (c *DataScienceCluster) GetStatus() common.Status {
+	if copied := c.Status.Status.DeepCopy(); copied != nil {
+		return *copied
+	}
+	return common.Status{}
+}
+
+func (c *DataScienceCluster) SetStatus(status common.Status) {
+	if copied := status.DeepCopy(); copied != nil {
+		c.Status.Status = *copied
+		return
+	}
+	c.Status.Status = common.Status{}
 }
 
 func (c *DataScienceCluster) SetConditions(conditions []common.Condition) {

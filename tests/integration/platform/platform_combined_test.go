@@ -55,8 +55,8 @@ func TestCombined_DSCAndDSCI_ModulesCombined(t *testing.T) {
 	platformKey := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
 
 	wt.Get(gvk.Platform, platformKey).Eventually().Should(And(
-		jq.Match(`.spec.modules.monitoring.managementState == "Managed"`),
-		jq.Match(`.spec.modules.aigateway.managementState == "Managed"`),
+		jq.Match(`.spec.modules[] | select(.name == "monitoring") | .managementState == "Managed"`),
+		jq.Match(`.spec.modules[] | select(.name == "aigateway") | .managementState == "Managed"`),
 	))
 
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).

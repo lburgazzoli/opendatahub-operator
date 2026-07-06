@@ -20,8 +20,8 @@ func NewUnstructuredPlatformObject(u *unstructured.Unstructured) *UnstructuredPl
 	return &UnstructuredPlatformObject{Unstructured: u}
 }
 
-func (o *UnstructuredPlatformObject) GetStatus() *Status {
-	s := &Status{}
+func (o *UnstructuredPlatformObject) GetStatus() Status {
+	s := Status{}
 
 	if v, ok, _ := unstructured.NestedString(o.Object, "status", "phase"); ok {
 		s.Phase = v
@@ -33,9 +33,25 @@ func (o *UnstructuredPlatformObject) GetStatus() *Status {
 		s.ObservedGeneration = int64(v)
 	}
 
-	s.Conditions = o.GetConditions()
+	s.SetConditions(o.GetConditions())
 
 	return s
+}
+
+func (o *UnstructuredPlatformObject) SetStatus(status Status) {
+	if status.Phase == "" {
+		unstructured.RemoveNestedField(o.Object, "status", "phase")
+	} else {
+		_ = unstructured.SetNestedField(o.Object, status.Phase, "status", "phase")
+	}
+
+	if status.ObservedGeneration == 0 {
+		unstructured.RemoveNestedField(o.Object, "status", "observedGeneration")
+	} else {
+		_ = unstructured.SetNestedField(o.Object, status.ObservedGeneration, "status", "observedGeneration")
+	}
+
+	o.SetConditions(status.GetConditions())
 }
 
 func (o *UnstructuredPlatformObject) GetConditions() []Condition {

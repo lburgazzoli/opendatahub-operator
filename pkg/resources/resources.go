@@ -748,6 +748,7 @@ func UnsetOwnerReferences(ctx context.Context, cli client.Client, instanceName s
 // Returns:
 //   - string: The gateway domain from GatewayConfig.Status.Domain
 //   - error: An error if the GatewayConfig doesn't exist or domain is empty
+//
 // DeleteAllOwnedBy lists all cluster-scoped resources of the given GVK and
 // deletes those whose controller owner matches owner (checked via
 // metav1.IsControlledBy). The function iterates all CRs of the GVK but only

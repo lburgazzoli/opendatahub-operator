@@ -99,8 +99,19 @@ type PlatformModule struct {
 	Status PlatformModuleStatus `json:"status,omitempty"`
 }
 
-func (p *PlatformModule) GetStatus() *common.Status {
-	return &p.Status.Status
+func (p *PlatformModule) GetStatus() common.Status {
+	if copied := p.Status.Status.DeepCopy(); copied != nil {
+		return *copied
+	}
+	return common.Status{}
+}
+
+func (p *PlatformModule) SetStatus(status common.Status) {
+	if copied := status.DeepCopy(); copied != nil {
+		p.Status.Status = *copied
+		return
+	}
+	p.Status.Status = common.Status{}
 }
 
 func (p *PlatformModule) GetConditions() []common.Condition {

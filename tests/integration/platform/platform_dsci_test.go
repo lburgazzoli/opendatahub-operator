@@ -48,7 +48,7 @@ func TestDSCIDriven_PlatformReflectsDSCI(t *testing.T) {
 
 	wt := tc.NewWithT(t)
 	wt.Get(gvk.Platform, types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}).Eventually().Should(
-		jq.Match(`.spec.modules.monitoring.managementState == "Managed"`),
+		jq.Match(`.spec.modules[] | select(.name == "monitoring") | .managementState == "Managed"`),
 	)
 }
 

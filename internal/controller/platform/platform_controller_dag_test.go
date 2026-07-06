@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
+	"github.com/spf13/viper"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
@@ -19,6 +20,7 @@ import (
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
 	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
+	pmctrl "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/platformmodule"
 	sr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
@@ -47,6 +49,9 @@ func startPlatformControllerFull(
 
 	ctx := t.Context()
 
+	viper.Set("rhai-applications-namespace", "default")
+	t.Cleanup(func() { viper.Set("rhai-applications-namespace", "") })
+
 	cluster.SetRelease(common.Release{Name: cluster.OpenDataHub})
 	t.Cleanup(func() { cluster.SetRelease(common.Release{}) })
 
@@ -59,13 +64,25 @@ func startPlatformControllerFull(
 			Controller: ctrlconfig.Controller{SkipNameValidation: ptr.To(true)},
 		}),
 		envt.WithRegisterControllers(func(mgr ctrl.Manager) error {
-			return New(ctx, mgr,
+			tracker := provision.GetRunlevelTracker()
+
+			if err := New(ctx, mgr,
 				WithModuleRegistry(moduleReg),
 				WithComponentRegistry(componentReg),
 				WithServiceRegistry(&sr.Registry{}),
 				WithProvisionRegistry(provisionReg),
+				WithTracker(tracker),
 				WithDeletePropagationPolicy(metav1.DeletePropagationBackground),
 				WithStuckTracker(dag.NewStuckTracker()),
+			); err != nil {
+				return err
+			}
+
+			return pmctrl.New(ctx, mgr,
+				pmctrl.WithRegistry(moduleReg),
+				pmctrl.WithComponentRegistry(componentReg),
+				pmctrl.WithProvisionRegistry(provisionReg),
+				pmctrl.WithTracker(tracker),
 			)
 		}),
 	)
@@ -110,13 +127,13 @@ func setUnstructuredReady(t *testing.T, tc *testf.TestContext, u *unstructured.U
 // composite checker (componentReadinessChecker + moduleReadinessChecker) gates
 // DAG advancement correctly when components and modules are at different runlevels.
 //
-// Setup: Dashboard component at RL10, monitoring module at RL20.
+// Setup: Dashboard component/tracker at RL10, monitoring module at RL20.
 //
 // Expected behaviour:
-//  1. No component CR → DAG blocked, ModulesReady=False
+//  1. No component CR → dashboard tracker not ready, DAG blocked
 //  2. Component CR exists but Ready=False → still blocked
-//  3. Component CR Ready=True → RL10 cleared, module can proceed
-//  4. PlatformModule CR Ready=True → ModulesReady=True
+//  3. Component CR Ready=True → dashboard tracker becomes ready, RL10 clears
+//  4. Monitoring PlatformModule Ready=True → ModulesReady=True
 func TestPlatformReconciler_DAGGating_ComponentBlocksModule(t *testing.T) {
 	// Provision registry: Dashboard at RL10, monitoring at RL20.
 	provReg := provision.NewRegistry()
@@ -137,12 +154,13 @@ func TestPlatformReconciler_DAGGating_ComponentBlocksModule(t *testing.T) {
 	cli := tc.Client()
 	ctx := context.Background()
 
-	// Create Platform CR with monitoring enabled.
+	// Create Platform CR with both dashboard (tracker-only) and monitoring.
 	p := &configv1alpha1.Platform{
 		ObjectMeta: metav1.ObjectMeta{Name: configv1alpha1.PlatformInstanceName},
 		Spec: configv1alpha1.PlatformSpec{
 			Modules: configv1alpha1.PlatformModules{
-				Monitoring: common.ManagementSpec{ManagementState: operatorv1.Managed},
+				{Name: "dashboard", ManagementState: operatorv1.Managed},
+				{Name: "monitoring", ManagementState: operatorv1.Managed},
 			},
 		},
 	}
@@ -152,19 +170,21 @@ func TestPlatformReconciler_DAGGating_ComponentBlocksModule(t *testing.T) {
 	wt := tc.NewWithT(t)
 	nn := types.NamespacedName{Name: configv1alpha1.PlatformInstanceName}
 
-	// Step 1: No Dashboard CR → DAG blocked at RL10.
-	// PlatformModule is created (syncPlatformModuleCRs is DAG-independent), but
-	// ModulesReady=False and ProvisioningProgress=False/AwaitingReadiness (blocked on dashboard).
+	// Step 1: No Dashboard CR → dashboard tracker is not ready, so DAG stays blocked at RL10.
+	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "dashboard"}).
+		Eventually().Should(Succeed())
 	wt.Get(gvk.PlatformModule, types.NamespacedName{Name: "monitoring"}).
 		Eventually().Should(Succeed())
 
 	wt.Get(gvk.Platform, nn).Eventually().Should(And(
-		// ModulesReady blocked — monitoring not yet ready (no PlatformModule conditions yet).
+		// ModulesReady blocked — dashboard tracker cannot report readiness yet.
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
 			status.ConditionTypeModulesReady, metav1.ConditionFalse),
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .message | contains("monitoring")`,
 			status.ConditionTypeModulesReady),
-		// ProvisioningProgress blocked — dashboard component at RL10 not ready.
+		jq.Match(`.status.conditions[] | select(.type == "%s") | .message | contains("dashboard")`,
+			status.ConditionTypeModulesReady),
+		// ProvisioningProgress blocked — dashboard tracker at RL10 not ready.
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
 			status.ConditionTypeProvisioningProgress, metav1.ConditionFalse),
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .reason == "%s"`,
@@ -183,7 +203,7 @@ func TestPlatformReconciler_DAGGating_ComponentBlocksModule(t *testing.T) {
 	NewWithT(t).Expect(cli.Create(ctx, dashboard)).Should(Succeed())
 	t.Cleanup(func() { _ = cli.Delete(context.Background(), dashboard) })
 
-	// Dashboard exists but has no conditions → component still not ready → still blocked.
+	// Dashboard exists but has no conditions → tracker still not ready → still blocked.
 	wt.Get(gvk.Platform, nn).Eventually().Should(And(
 		jq.Match(`.status.conditions[] | select(.type == "%s") | .status == "%s"`,
 			status.ConditionTypeModulesReady, metav1.ConditionFalse),
@@ -193,7 +213,7 @@ func TestPlatformReconciler_DAGGating_ComponentBlocksModule(t *testing.T) {
 			status.ConditionTypeProvisioningProgress),
 	))
 
-	// Step 3: Mark Dashboard Ready=True → RL10 cleared by the DAG walk.
+	// Step 3: Mark Dashboard Ready=True → dashboard tracker becomes ready and RL10 clears.
 	// ProvisioningProgress flips to True.
 	setUnstructuredReady(t, tc, dashboard, true)
 

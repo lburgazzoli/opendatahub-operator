@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
+	operatorv1 "github.com/openshift/api/operator/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
+	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
 	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
 	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
@@ -89,6 +92,53 @@ func computeComponentsStatus(
 	return nil
 }
 
+func filterInternalPlatformReleases(components *dscv2.ComponentsStatus) {
+	if components == nil {
+		return
+	}
+
+	filterPlatformReleaseValue(reflect.ValueOf(components))
+}
+
+func filterPlatformReleaseValue(value reflect.Value) {
+	if !value.IsValid() {
+		return
+	}
+
+	if value.Kind() == reflect.Ptr {
+		if value.IsNil() {
+			return
+		}
+		filterPlatformReleaseValue(value.Elem())
+		return
+	}
+
+	if value.Kind() != reflect.Struct {
+		return
+	}
+
+	valueType := value.Type()
+	for i := range value.NumField() {
+		fieldValue := value.Field(i)
+		fieldType := valueType.Field(i)
+
+		if fieldType.Name == "Releases" && fieldValue.CanSet() {
+			filtered := reflect.MakeSlice(fieldValue.Type(), 0, fieldValue.Len())
+			for j := range fieldValue.Len() {
+				entry := fieldValue.Index(j)
+				name := entry.FieldByName("Name")
+				if name.IsValid() && name.Kind() == reflect.String && name.String() == "platform" {
+					continue
+				}
+				filtered = reflect.Append(filtered, entry)
+			}
+			fieldValue.Set(filtered)
+		}
+
+		filterPlatformReleaseValue(fieldValue)
+	}
+}
+
 func syncComponentDAGStateForDSC(
 	instance *dscv2.DataScienceCluster,
 	reg *cr.Registry,
@@ -107,4 +157,37 @@ func syncComponentDAGStateForDSC(
 		}
 		return nil
 	})
+}
+
+func projectPlatformModulesFromComponents(components dscv2.Components) configv1alpha1.PlatformModules {
+	var projected configv1alpha1.PlatformModules
+
+	value := reflect.ValueOf(components)
+	valueType := value.Type()
+
+	for i := range value.NumField() {
+		field := valueType.Field(i)
+		jsonName := strings.Split(field.Tag.Get("json"), ",")[0]
+		if jsonName == "" || jsonName == "-" {
+			continue
+		}
+
+		componentValue := value.Field(i)
+		managementStateField := componentValue.FieldByName("ManagementState")
+		if !managementStateField.IsValid() {
+			continue
+		}
+
+		managementState, ok := managementStateField.Interface().(operatorv1.ManagementState)
+		if !ok || managementState == "" {
+			managementState = operatorv1.Removed
+		}
+
+		projected.Set(configv1alpha1.PlatformModuleConfig{
+			Name:            jsonName,
+			ManagementState: managementState,
+		})
+	}
+
+	return projected
 }

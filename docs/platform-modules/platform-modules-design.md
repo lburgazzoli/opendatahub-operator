@@ -1,4 +1,4 @@
-# Platform CR as Sole Module Entry Point
+# Platform CR as Low-Level Inventory and Operator Entry Point
 
 ## Context
 
@@ -14,6 +14,162 @@ one concern (operator lifecycle).
 
 Module CRs (Monitoring CR, AIGateway CR) remain the responsibility of DSC/DSCI controllers. The
 module reconciler never touches them.
+
+## Planned Architecture Update
+
+**Status:** design target only, **not yet implemented**. The remainder of this document still
+contains branch-state sections that describe the currently implemented struct-based API and
+controller split. Treat this section as the follow-up target architecture and the later sections
+as current-state documentation unless explicitly updated.
+
+The remainder of this document describes the current branch implementation and the original
+transition plan. The agreed next-step architecture is slightly different and should be treated as
+the target design for follow-up work:
+
+- `Platform` becomes the low-level desired inventory for all tracked entries.
+- Higher-level controllers such as DSC, DSCI, or GitOps write low-level intent into
+  `Platform.spec.modules`.
+- `Platform` never creates operand CRs. DSC and DSCI remain responsible for creating and
+  configuring component/module/service CRs.
+- `PlatformModule` exists once per declared `Platform.spec.modules[]` entry. It deploys resources
+  only for module-backed operators and acts as tracker-only for internal-controller-backed
+  entries.
+- `Platform.status.modules` is a compact summary and must not mirror full
+  `PlatformModule.status.conditions`.
+
+### Target Platform API
+
+`Platform.spec.modules` should move from a struct to a `+listType=map` / `+listMapKey=name` list.
+Each entry should contain:
+
+- `name`
+- `managementState` with default `Removed`
+- optional opaque `config,omitempty` for low-level/direct consumers only
+
+`Platform.status.modules` should mirror the list shape and contain:
+
+- `name`
+- `runlevel`
+- `version`
+- `status.ready`
+- `status.reason`
+- `status.message`
+
+Entries should be reported in deterministic order: runlevel, then name.
+
+This is a **breaking API change** relative to the current struct-based `PlatformModules` shape
+described later in this document. If adopted, it needs an explicit migration plan (or a version
+bump) rather than being treated as a transparent follow-up refactor.
+
+### Projection Rules
+
+Projection from DSC and DSCI into `Platform.spec.modules` should stay intentionally narrow and
+reflection-friendly:
+
+- use `module:"..."` only as canonical name mapping
+- project only `{name, managementState}`
+- do not project per-entry config from DSC or DSCI
+
+This keeps the tag as a naming aid, not a behavioral switch.
+
+### PlatformModule Modes
+
+`PlatformModule` should support two internal behaviors:
+
+- **deployer**: render/apply manifests, inject images/config, and track owned operator resources
+- **trackerOnly**: do not create resources; read the underlying CR/object status and compute
+  readiness/version only
+
+The selection mechanism for these behaviors is **registry-driven**. The current
+`PlatformModuleSpec` remains empty; the reconciler should decide deployer vs tracker-only mode
+from whether the entry is module-backed or not, using internal registry metadata keyed by entry
+name rather than public API fields.
+
+In tracker-only mode the reconciler still runs and still reads the relevant CR to compute
+status, but it must not render/apply resources or create the platform config ConfigMap.
+
+If the tracked CR for a tracker-only entry is missing, the reconciler cannot determine readiness,
+so the entry should be reported as not ready with an explicit reason/message rather than treated as
+deployed or healthy.
+
+Tracker-only entries should **not** use `runlevelGateAction` in the same way deployer-backed
+entries do. They still reconcile, but they exist to read CR status and report readiness/version,
+not to gate manifest deployment.
+
+A practical implementation approach is to keep one `PlatformModule` reconciler pipeline and wrap
+deployer-only actions in a small conditional action/helper. That allows the reconciler to invoke
+render/deploy/drift-cleanup steps only for module-backed entries while still running the
+status-reading/tracking steps for tracker-only entries.
+
+`Platform` itself should not care about whether a tracked entry is backed by a module-style
+operator or an internal component controller. `PlatformModule` is the adapter that normalizes
+status reporting and presents one consistent readiness/version contract back to `Platform`.
+
+### ModuleHandler Simplification
+
+As `Platform` becomes the low-level desired inventory, `ModuleHandler` should be simplified to
+low-level tracking/deployer concerns only. It should no longer own:
+
+- `IsEnabled`
+- `BuildModuleCR`
+- `DeleteModuleCR`
+- `ApplyManagementState`
+
+Those responsibilities move to `Platform` and the higher-level DSC/DSCI projection code.
+
+### Release Reporting Contract
+
+To keep version tracking consistent across component-backed and module-backed entries:
+
+- tracked component CRs should publish `status.releases[]` with an entry named `"platform"`
+- tracked module CRs should continue using the same convention
+- `PlatformModule` should use that entry as the canonical platform upgrade/version signal
+
+That `name = "platform"` release entry is internal tracker/controller data and should **not**
+surface through DSC aggregated release reporting, because Dashboard consumes DSC status and would
+otherwise receive an internal release row that does not represent a user-facing component release.
+
+This contract applies to **all Platform-tracked entries/CRs**, not just a subset.
+
+If `status.releases[name="platform"]` is missing, that should be handled consistently with the
+module-backed path today: version reporting remains incomplete, but the behavior should match the
+existing module semantics rather than introducing a special component-only rule.
+
+### Unknown Entries
+
+If `Platform.spec.modules[]` contains an entry name that does not exist in the internal registry,
+that is treated as invalid desired state:
+
+- `Platform` should become Degraded and `Ready=False`
+- the user (or higher-level controller) must correct the entry
+- `Platform` should still delete tracker instances for entries removed from `Platform.spec.modules`
+- existing tracker CRs whose names are unknown to the registry should otherwise be left alone
+
+### Decisions Made
+
+The following target-architecture decisions are now fixed for the implementation:
+
+1. **Tracker-only selection is registry-driven**
+   - `PlatformModuleSpec` stays empty
+   - deployer vs tracker-only is resolved from whether the entry is module-backed or not
+2. **`Platform` should read low-level readiness from `PlatformModule`**
+   - `PlatformModule` reads the underlying CR/object and computes readiness/version
+   - `Platform` aggregates `PlatformModule` summaries rather than reading raw component CRs as the
+     steady-state design
+3. **Tracker-only entries do not require deploy-style `runlevelGateAction`**
+   - they reconcile to report status, not to unblock manifest deployment
+4. **List migration happens now in `v1alpha1`**
+   - this work is treated as a POC and the breaking change is acceptable
+5. **xKS still has an internal controller for non-module component entries**
+   - for tracker-only entries on xKS, the tracker reads the CR created for that internal
+     controller-backed component
+6. **`status.releases[name="platform"]` is required consistently**
+   - all Platform-tracked entries/CRs should publish it
+   - DSC aggregated output must still filter it out
+7. **Unknown entry names are invalid desired state**
+   - unknown names degrade `Platform`
+   - removed names still lead to tracker cleanup
+   - unknown existing tracker CRs are otherwise left untouched
 
 ## Implementation Status
 
@@ -63,7 +219,7 @@ xKS:
 
 ## Changes
 
-### 1. ✅ Keep PlatformModules struct, add module fields
+### 1. ✅ Current branch: keep PlatformModules struct, add module fields
 
 **File:** `api/config/v1alpha1/platform_types.go`
 
@@ -85,11 +241,11 @@ SSA field managers own individual struct fields:
 
 `EnabledModules()` includes AIGateway.
 
-> **Future migration note:** When in-tree components migrate to modules (16+ fields), switch
-> `PlatformModules` to a `+listType=map` list with `+listMapKey=name`. This is a breaking change
-> acceptable in v1alpha1 but better deferred to a planned API version bump.
+> **Current branch note:** This reflects the branch as implemented today.
+> The target design described above instead moves to a list-based low-level inventory API and
+> should be treated as a future/breaking change until it is actually implemented.
 
-### 2. ✅ Introduce PlatformModule tracker CRD
+### 2. ✅ Current branch: introduce PlatformModule tracker CRD
 
 **New file:** `api/config/v1alpha1/platformmodule_types.go`
 
@@ -101,9 +257,9 @@ One CR per installed module operator. Cluster-scoped. Created/owned by Platform 
 - PlatformModule CR → `metadata.name: "aigateway"`
 
 ```go
-// PlatformModuleSpec is intentionally empty. The CR name (metadata.name)
-// IS the module name — it matches the handler's GetName() and the
-// PlatformModules struct field. No spec fields needed.
+// Current branch implementation: PlatformModuleSpec is intentionally empty.
+// The target architecture above may require explicit mode metadata if
+// tracker-only and deployer behaviors both need to coexist.
 type PlatformModuleSpec struct {}
 
 type PlatformModuleStatus struct {
@@ -167,7 +323,7 @@ type PlatformContext struct {
 }
 ```
 
-### 5. ✅ Platform controller: orchestrates PlatformModule CRs
+### 5. ✅ Current branch: Platform controller orchestrates PlatformModule CRs
 
 **File:** `internal/controller/platform/platform_controller.go`
 
@@ -184,6 +340,10 @@ Action chain:
 - `componentReadinessChecker`: reads component CR via `cluster.GetSingleton` + unstructured Get
 - `moduleReadinessChecker`: reads PlatformModule CR directly + version handshake
 
+> **Target architecture note:** In the future design described above, `Platform` should aggregate
+> tracker summaries only. The direct component readiness checker is part of the current branch
+> implementation and would need to be retired or explicitly kept as transitional behavior.
+
 **Watches:**
 - `Owns(gvk.PlatformModule)` — requeue when PlatformModule status changes
 - `WatchesGVK(componentGVK, ...)` with status-change predicate — requeue when component CR status changes
@@ -198,7 +358,7 @@ Action chain:
 The Platform controller **does not deploy operator resources** — that remains the PlatformModule
 reconciler's sole concern.
 
-### 6. ✅ PlatformModule reconciler: deploys module operators
+### 6. ✅ Current branch: PlatformModule reconciler deploys module operators
 
 **New file:** `internal/controller/platformmodule/platformmodule_controller.go`
 
@@ -217,7 +377,10 @@ Action chain:
 **No GC action, no finalizer.** Owner references on deployed resources enable Kubernetes GC
 cascade deletion when the PlatformModule CR is deleted.
 
-### 7. ✅ DSC controller: write to Platform CR + create module CRs
+> **Target architecture note:** The current branch only supports deployer behavior. The future
+> tracker-only mode described above is not implemented and requires an explicit selection mechanism.
+
+### 7. ✅ Current branch: DSC controller writes to Platform CR and creates module CRs
 
 **Files:** `internal/controller/datasciencecluster/datasciencecluster_controller_actions.go`,
 `datasciencecluster_controller.go`, `datasciencecluster_controller_options.go`
@@ -253,7 +416,7 @@ is the sole DAG orchestrator.
 - `computeComponentsStatus(ctx, rr, r.ComponentRegistry)` — injectable registry
 - `modules.ComputeModulesStatus(ctx, rr, r.ModuleRegistry)` — injectable registry
 
-### 8. ✅ DSCI controller: write to Platform CR + manage service module CRs
+### 8. ✅ Current branch: DSCI controller writes to Platform CR and manages service module CRs
 
 **File:** `internal/controller/dscinitialization/dscinitialization_controller.go`
 
@@ -458,7 +621,7 @@ test-only constructs.
 
 ## Integration Test Plan
 
-See [docs/platform-tests/plan.md](platform-tests/plan.md) for the full envtest
+See [docs/platform-modules/tests/plan.md](tests/plan.md) for the full envtest
 integration test plan covering Platform, PlatformModule, DSC, and DSCI controller
 pipelines. Tests are in `tests/integration/platform/`.
 
