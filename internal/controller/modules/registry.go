@@ -6,6 +6,7 @@ import (
 
 	"github.com/hashicorp/go-multierror"
 
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/base"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/dag"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 )
@@ -33,6 +34,8 @@ type Registry struct {
 	// and enable/disable signalling. If nil, provision.DefaultRegistry() is used.
 	ProvisionRegistry *provision.UnifiedRegistry
 }
+
+var _ base.Registry[ModuleHandler] = (*Registry)(nil)
 
 // provisionReg returns the configured provision registry, falling back to the global default.
 func (r *Registry) provisionReg() *provision.UnifiedRegistry {

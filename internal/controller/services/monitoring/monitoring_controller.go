@@ -59,7 +59,7 @@ func (h *serviceHandler) Init(_ common.Platform) error {
 	return nil
 }
 
-func (h *serviceHandler) GroupVersionKind() schema.GroupVersionKind { return gvk.Monitoring }
+func (h *serviceHandler) GetGroupVersionKind() schema.GroupVersionKind { return gvk.Monitoring }
 
 func (h *serviceHandler) GetName() string {
 	return ServiceName

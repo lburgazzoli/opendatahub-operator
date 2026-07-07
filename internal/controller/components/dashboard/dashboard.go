@@ -29,7 +29,7 @@ type componentHandler struct{}
 
 func NewHandler() *componentHandler { return &componentHandler{} }
 
-func (s *componentHandler) GroupVersionKind() schema.GroupVersionKind { return gvk.Dashboard }
+func (s *componentHandler) GetGroupVersionKind() schema.GroupVersionKind { return gvk.Dashboard }
 
 func (s *componentHandler) GetName() string {
 	return componentApi.DashboardComponentName

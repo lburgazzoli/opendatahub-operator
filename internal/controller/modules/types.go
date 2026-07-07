@@ -4,13 +4,13 @@ import (
 	"context"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
 	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
 	dsciv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v2"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/base"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/dag"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
 )
@@ -34,21 +34,13 @@ const (
 // Module teams typically embed BaseHandler and only implement IsEnabled
 // and BuildModuleCR; the remaining methods have default implementations
 // driven by ModuleConfig.
-//
-//nolint:interfacebloat // This is the stable integration contract for module handlers; reshaping it is a larger refactor than this lint cleanup.
 type ModuleHandler interface {
-	// GetName returns the unique identifier for this module.
-	GetName() string
+	base.Handler
 
 	// IsEnabled returns whether the module should be deployed based on platform
 	// configuration. Component modules check platform.DSC; service modules
 	// check platform.DSCI.
 	IsEnabled(platform *PlatformContext) bool
-
-	// GetGroupVersionKind returns the GroupVersionKind of the module CR that this handler
-	// manages. Used for dynamic watch registration so module CR status changes
-	// requeue the DSC controller.
-	GetGroupVersionKind() schema.GroupVersionKind
 
 	// GetOperatorManifests returns the manifest descriptors for deploying this
 	// module's operator resources (Deployment, RBAC, CRD). Handlers return

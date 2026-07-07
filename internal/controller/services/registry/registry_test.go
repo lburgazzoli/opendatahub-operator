@@ -23,7 +23,7 @@ type fakeServiceHandler struct {
 
 func (f *fakeServiceHandler) Init(_ common.Platform) error { return nil }
 func (f *fakeServiceHandler) GetName() string              { return f.name }
-func (f *fakeServiceHandler) GroupVersionKind() schema.GroupVersionKind {
+func (f *fakeServiceHandler) GetGroupVersionKind() schema.GroupVersionKind {
 	return schema.GroupVersionKind{}
 }
 func (f *fakeServiceHandler) GetManagementState(_ common.Platform, _ *dsciv2.DSCInitialization) operatorv1.ManagementState {

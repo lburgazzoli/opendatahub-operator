@@ -25,7 +25,7 @@ type fakeHandler struct {
 }
 
 func (f *fakeHandler) GetName() string                                                 { return f.name }
-func (f *fakeHandler) GroupVersionKind() schema.GroupVersionKind                       { return schema.GroupVersionKind{} }
+func (f *fakeHandler) GetGroupVersionKind() schema.GroupVersionKind                    { return schema.GroupVersionKind{} }
 func (f *fakeHandler) Init(_ common.Platform, _ operatorconfig.OperatorSettings) error { return nil }
 func (f *fakeHandler) NewCRObject(_ context.Context, _ client.Client, _ *dscv2.DataScienceCluster) (common.PlatformObject, error) {
 	return nil, nil

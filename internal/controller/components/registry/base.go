@@ -32,8 +32,8 @@ type BaseComponentHandler struct {
 	UpdateDSCStatusFn        func(context.Context, *types.ReconciliationRequest) (metav1.ConditionStatus, error)
 }
 
-func (h *BaseComponentHandler) GetName() string                           { return h.Name }
-func (h *BaseComponentHandler) GroupVersionKind() schema.GroupVersionKind { return h.GVK }
+func (h *BaseComponentHandler) GetName() string                              { return h.Name }
+func (h *BaseComponentHandler) GetGroupVersionKind() schema.GroupVersionKind { return h.GVK }
 
 func (h *BaseComponentHandler) Init(platform common.Platform, cfg operatorconfig.OperatorSettings) error {
 	if h.InitFn != nil {

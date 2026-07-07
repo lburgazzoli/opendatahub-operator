@@ -84,7 +84,7 @@ func (r *Reconciler) cleanupDisabledComponents(ctx context.Context, rr *odhtype.
 		if h.IsEnabled(instance) {
 			return nil
 		}
-		if err := resources.DeleteAllOwnedBy(ctx, rr.Client, h.GroupVersionKind(), instance, r.DeletePropagation); err != nil {
+		if err := resources.DeleteAllOwnedBy(ctx, rr.Client, h.GetGroupVersionKind(), instance, r.DeletePropagation); err != nil {
 			errs = append(errs, fmt.Errorf("component %s: %w", h.GetName(), err))
 		}
 		return nil

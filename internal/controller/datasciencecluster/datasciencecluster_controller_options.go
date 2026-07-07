@@ -61,7 +61,7 @@ func WithProvisionRegistry(r *provision.UnifiedRegistry) Option { //nolint:iretu
 // disabled component and module CRs. Defaults to Foreground.
 // Pass Background in tests (envtest has no GC controller).
 //
-//nolint:ireturn // Option constructors intentionally return the public Option interface.
+//nolint:ireturn // Public option constructors intentionally return the Option interface.
 func WithDeletePropagationPolicy(p metav1.DeletionPropagation) Option {
 	return optionFunc(func(o *Options) { o.DeletePropagation = p })
 }

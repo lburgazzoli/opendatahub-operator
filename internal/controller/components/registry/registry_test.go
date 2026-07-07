@@ -30,7 +30,7 @@ func (f *fakeComponentHandler) Init(_ common.Platform, _ operatorconfig.Operator
 	return nil
 }
 func (f *fakeComponentHandler) GetName() string { return f.name }
-func (f *fakeComponentHandler) GroupVersionKind() schema.GroupVersionKind {
+func (f *fakeComponentHandler) GetGroupVersionKind() schema.GroupVersionKind {
 	return schema.GroupVersionKind{}
 }
 func (f *fakeComponentHandler) NewCRObject(_ context.Context, _ client.Client, _ *dscv2.DataScienceCluster) (common.PlatformObject, error) {

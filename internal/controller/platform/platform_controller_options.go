@@ -58,21 +58,27 @@ type optionFunc func(*Options)
 func (f optionFunc) applyOption(o *Options) { f(o) }
 
 // WithModuleRegistry sets a custom module handler registry.
-func WithModuleRegistry(r *modules.Registry) Option { //nolint:ireturn // Public option constructors intentionally return the Option interface.
+//
+//nolint:ireturn // Public option constructors intentionally return the Option interface.
+func WithModuleRegistry(r *modules.Registry) Option {
 	return optionFunc(func(o *Options) {
 		o.ModuleRegistry = r
 	})
 }
 
 // WithComponentRegistry sets a custom component handler registry.
-func WithComponentRegistry(r *cr.Registry) Option { //nolint:ireturn // Public option constructors intentionally return the Option interface.
+//
+//nolint:ireturn // Public option constructors intentionally return the Option interface.
+func WithComponentRegistry(r *cr.Registry) Option {
 	return optionFunc(func(o *Options) {
 		o.ComponentRegistry = r
 	})
 }
 
 // WithServiceRegistry sets a custom service handler registry.
-func WithServiceRegistry(r *sr.Registry) Option { //nolint:ireturn // Public option constructors intentionally return the Option interface.
+//
+//nolint:ireturn // Public option constructors intentionally return the Option interface.
+func WithServiceRegistry(r *sr.Registry) Option {
 	return optionFunc(func(o *Options) {
 		o.ServiceRegistry = r
 	})
@@ -81,7 +87,7 @@ func WithServiceRegistry(r *sr.Registry) Option { //nolint:ireturn // Public opt
 // WithStuckTracker sets a custom DAG stuck tracker. Useful in tests to get
 // hermetic stuck-timeout behavior without sharing a package-level singleton.
 //
-//nolint:ireturn // Option constructors intentionally return the public Option interface.
+//nolint:ireturn // Public option constructors intentionally return the Option interface.
 func WithStuckTracker(t *dag.StuckTracker) Option {
 	return optionFunc(func(o *Options) {
 		o.StuckTracker = t
@@ -90,7 +96,7 @@ func WithStuckTracker(t *dag.StuckTracker) Option {
 
 // WithTracker sets a custom RunlevelTracker. Defaults to the shared singleton.
 //
-//nolint:ireturn // Option constructors intentionally return the public Option interface.
+//nolint:ireturn // Public option constructors intentionally return the Option interface.
 func WithTracker(t *provision.RunlevelTracker) Option {
 	return optionFunc(func(o *Options) {
 		o.Tracker = t
@@ -101,7 +107,7 @@ func WithTracker(t *provision.RunlevelTracker) Option {
 // ordering. Defaults to provision.DefaultRegistry(). Override in tests to
 // inject isolated runlevel entries.
 //
-//nolint:ireturn // Option constructors intentionally return the public Option interface.
+//nolint:ireturn // Public option constructors intentionally return the Option interface.
 func WithProvisionRegistry(r *provision.UnifiedRegistry) Option {
 	return optionFunc(func(o *Options) { o.ProvisionReg = r })
 }
@@ -110,7 +116,7 @@ func WithProvisionRegistry(r *provision.UnifiedRegistry) Option {
 // disabled PlatformModule CRs. Defaults to Foreground.
 // Pass Background in tests (envtest has no GC controller).
 //
-//nolint:ireturn // Option constructors intentionally return the public Option interface.
+//nolint:ireturn // Public option constructors intentionally return the Option interface.
 func WithDeletePropagationPolicy(p metav1.DeletionPropagation) Option {
 	return optionFunc(func(o *Options) {
 		o.DeletePropagation = p

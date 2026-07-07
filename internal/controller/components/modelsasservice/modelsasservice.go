@@ -51,7 +51,7 @@ type componentHandler struct{}
 
 func NewHandler() *componentHandler { return &componentHandler{} }
 
-func (s *componentHandler) GroupVersionKind() schema.GroupVersionKind { return gvk.ModelsAsService }
+func (s *componentHandler) GetGroupVersionKind() schema.GroupVersionKind { return gvk.ModelsAsService }
 
 // GetName returns the component name for ModelsAsService.
 func (s *componentHandler) GetName() string {

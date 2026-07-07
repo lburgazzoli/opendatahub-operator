@@ -59,7 +59,7 @@ type componentHandler struct{}
 
 func NewHandler() *componentHandler { return &componentHandler{} }
 
-func (s *componentHandler) GroupVersionKind() schema.GroupVersionKind { return gvk.Kserve }
+func (s *componentHandler) GetGroupVersionKind() schema.GroupVersionKind { return gvk.Kserve }
 
 // Init updates params.env files with image overrides and cert-manager configuration.
 func (s *componentHandler) Init(_ common.Platform, cfg operatorconfig.OperatorSettings) error {

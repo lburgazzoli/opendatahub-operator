@@ -8,12 +8,12 @@ import (
 
 	"github.com/hashicorp/go-multierror"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/base"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/dag"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/provision"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
@@ -23,12 +23,11 @@ import (
 // ComponentHandler is an interface to manage a component
 // Every method should accept ctx since it contains the logger.
 type ComponentHandler interface {
+	base.Handler
 	Init(platform common.Platform, cfg operatorconfig.OperatorSettings) error
-	GetName() string
-	// GroupVersionKind returns the GroupVersionKind of the component CR managed
+	// GetGroupVersionKind returns the GroupVersionKind of the component CR managed
 	// by this handler. Used by the Platform controller to dynamically register
 	// watches for all component CRs without enumerating types explicitly.
-	GroupVersionKind() schema.GroupVersionKind
 	// NewCRObject returns the component CR; if it returns an error, reconciliation fails
 	// (e.g. Dashboard/ModelRegistry when gateway domain is unavailable).
 	// Returning (nil, nil) is valid and indicates the component does not own a CR.
@@ -79,6 +78,8 @@ type Registry struct {
 	// If nil, the package-level provision.DefaultRegistry() is used.
 	ProvisionRegistry *provision.UnifiedRegistry
 }
+
+var _ base.Registry[ComponentHandler] = (*Registry)(nil)
 
 // provisionReg returns the configured provision registry, falling back to the global default.
 func (r *Registry) provisionReg() *provision.UnifiedRegistry {

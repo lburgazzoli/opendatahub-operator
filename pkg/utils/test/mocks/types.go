@@ -40,7 +40,7 @@ func (m *MockComponentHandler) GetName() string {
 	return m.Called().String(0)
 }
 
-func (m *MockComponentHandler) GroupVersionKind() schema.GroupVersionKind {
+func (m *MockComponentHandler) GetGroupVersionKind() schema.GroupVersionKind {
 	return m.Called().Get(0).(schema.GroupVersionKind)
 }
 
@@ -84,7 +84,7 @@ func NewMockComponentHandler(f func(*MockComponentHandler)) *MockComponentHandle
 func NewDefaultMockComponentHandler(name string, gvk schema.GroupVersionKind) *MockComponentHandler {
 	m := new(MockComponentHandler)
 	m.On("GetName").Return(name).Maybe()
-	m.On("GroupVersionKind").Return(gvk).Maybe()
+	m.On("GetGroupVersionKind").Return(gvk).Maybe()
 	m.On("Init", mock.Anything, mock.Anything).Return(nil).Maybe()
 	m.On("IsEnabled", mock.Anything).Return(true).Maybe()
 	m.On("NewCRObject", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil).Maybe()

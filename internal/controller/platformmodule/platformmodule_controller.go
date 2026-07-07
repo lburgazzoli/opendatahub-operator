@@ -6,7 +6,6 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -111,17 +110,28 @@ func New(ctx context.Context, mgr ctrl.Manager, fns ...Option) error {
 		reconciler.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		reconciler.WithEventMapper(func(_ context.Context, _ client.Object) []reconcile.Request {
 			var reqs []reconcile.Request
-			r.Registry.ForEachEnabled(func(h modules.ModuleHandler) {
+			_ = forAll[sr.ServiceHandler](r.ServiceRegistry, func(h sr.ServiceHandler) {
 				reqs = append(reqs, reconcile.Request{
-					NamespacedName: types.NamespacedName{Name: h.GetName()},
+					NamespacedName: types.NamespacedName{
+						Name: h.GetName(),
+					},
 				})
 			})
-			_ = r.ComponentRegistry.ForEach(func(h cr.ComponentHandler) error {
+			_ = forAll[modules.ModuleHandler](r.Registry, func(h modules.ModuleHandler) {
 				reqs = append(reqs, reconcile.Request{
-					NamespacedName: types.NamespacedName{Name: h.GetName()},
+					NamespacedName: types.NamespacedName{
+						Name: h.GetName(),
+					},
 				})
-				return nil
 			})
+			_ = forAll[cr.ComponentHandler](r.ComponentRegistry, func(h cr.ComponentHandler) {
+				reqs = append(reqs, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Name: h.GetName(),
+					},
+				})
+			})
+
 			return reqs
 		}),
 	)
@@ -129,62 +139,57 @@ func New(ctx context.Context, mgr ctrl.Manager, fns ...Option) error {
 	// Service CR watches: a change to any enabled service CR (e.g. GatewayConfig
 	// domain update) may require all modules to refresh their platform config.
 	// Handlers with an empty GVK have no dedicated CR and are skipped.
-	_ = r.ServiceRegistry.ForEach(func(h sr.ServiceHandler) error {
-		if k := h.GroupVersionKind(); k != (schema.GroupVersionKind{}) {
-			b = b.WatchesGVK(
-				k,
-				reconciler.WithPredicates(dependent.New(dependent.WithWatchStatus(true))),
-				reconciler.WithEventMapper(func(_ context.Context, _ client.Object) []reconcile.Request {
-					var reqs []reconcile.Request
-					r.Registry.ForEachEnabled(func(m modules.ModuleHandler) {
-						reqs = append(reqs, reconcile.Request{
-							NamespacedName: types.NamespacedName{Name: m.GetName()},
-						})
+	_ = forAll[sr.ServiceHandler](r.ServiceRegistry, func(h sr.ServiceHandler) {
+		b = b.WatchesGVK(
+			h.GetGroupVersionKind(),
+			reconciler.Dynamic(reconciler.CrdExists(h.GetGroupVersionKind())),
+			reconciler.WithPredicates(dependent.New(dependent.WithWatchStatus(true))),
+			reconciler.WithEventMapper(func(_ context.Context, _ client.Object) []reconcile.Request {
+				var reqs []reconcile.Request
+				_ = forAll[modules.ModuleHandler](r.Registry, func(h modules.ModuleHandler) {
+					reqs = append(reqs, reconcile.Request{
+						NamespacedName: types.NamespacedName{
+							Name: h.GetName(),
+						},
 					})
-					return reqs
-				}),
-			)
-		}
-		return nil
+				})
+				return reqs
+			}),
+		)
 	})
 
 	// Per-module CR watch: activates only once the module CRD is installed.
 	// ResourceVersionChangedPredicate is required because module CR status updates
 	// do not bump generation (only spec changes do).
-	_ = r.Registry.ForAll(func(h modules.ModuleHandler, _ bool) error {
-		moduleGVK := h.GetGroupVersionKind()
-		moduleName := h.GetName()
-
+	_ = forAll[modules.ModuleHandler](r.Registry, func(h modules.ModuleHandler) {
 		b = b.WatchesGVK(
-			moduleGVK,
+			h.GetGroupVersionKind(),
+			reconciler.Dynamic(reconciler.CrdExists(h.GetGroupVersionKind())),
 			reconciler.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 			reconciler.WithEventMapper(func(_ context.Context, obj client.Object) []reconcile.Request {
 				return []reconcile.Request{{
-					NamespacedName: types.NamespacedName{Name: moduleName},
+					NamespacedName: types.NamespacedName{
+						Name: h.GetName(),
+					},
 				}}
 			}),
-			reconciler.Dynamic(reconciler.CrdExists(moduleGVK)),
 		)
-		return nil
 	})
 
 	// Component CR watches drive tracker-only PlatformModule entries.
-	_ = r.ComponentRegistry.ForEach(func(h cr.ComponentHandler) error {
-		componentGVK := h.GroupVersionKind()
-		componentName := h.GetName()
-
+	_ = forAll[cr.ComponentHandler](r.ComponentRegistry, func(h cr.ComponentHandler) {
 		b = b.WatchesGVK(
-			componentGVK,
+			h.GetGroupVersionKind(),
+			reconciler.Dynamic(reconciler.CrdExists(h.GetGroupVersionKind())),
 			reconciler.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 			reconciler.WithEventMapper(func(_ context.Context, _ client.Object) []reconcile.Request {
 				return []reconcile.Request{{
-					NamespacedName: types.NamespacedName{Name: componentName},
+					NamespacedName: types.NamespacedName{
+						Name: h.GetName(),
+					},
 				}}
 			}),
-			reconciler.Dynamic(reconciler.CrdExists(componentGVK)),
 		)
-
-		return nil
 	})
 
 	_, err := b.Build(ctx)

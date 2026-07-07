@@ -11,6 +11,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/base"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
@@ -30,9 +31,9 @@ const (
 
 func (r *Reconciler) modeFor(name string) entryMode {
 	switch {
-	case r.Registry != nil && r.Registry.Lookup(name) != nil:
+	case r.lookupTrackedHandler(name, entryModeDeployer) != nil:
 		return entryModeDeployer
-	case r.ComponentRegistry != nil && r.ComponentRegistry.Lookup(name) != nil:
+	case r.lookupTrackedHandler(name, entryModeTrackerOnly) != nil:
 		return entryModeTrackerOnly
 	default:
 		return entryModeUnknown
@@ -40,19 +41,31 @@ func (r *Reconciler) modeFor(name string) entryMode {
 }
 
 func (r *Reconciler) trackedGVKFor(name string) (schema.GroupVersionKind, entryMode, bool) {
-	if r.Registry != nil {
-		if handler := r.Registry.Lookup(name); handler != nil {
-			return handler.GetGroupVersionKind(), entryModeDeployer, true
-		}
+	if handler := r.lookupTrackedHandler(name, entryModeDeployer); handler != nil {
+		return handler.GetGroupVersionKind(), entryModeDeployer, true
 	}
-
-	if r.ComponentRegistry != nil {
-		if handler := r.ComponentRegistry.Lookup(name); handler != nil {
-			return handler.GroupVersionKind(), entryModeTrackerOnly, true
-		}
+	if handler := r.lookupTrackedHandler(name, entryModeTrackerOnly); handler != nil {
+		return handler.GetGroupVersionKind(), entryModeTrackerOnly, true
 	}
 
 	return schema.GroupVersionKind{}, entryModeUnknown, false
+}
+
+//nolint:ireturn // Shared helper intentionally returns the minimal base contract.
+func (r *Reconciler) lookupTrackedHandler(name string, mode entryMode) base.Handler {
+	switch mode {
+	case entryModeDeployer:
+		if r.Registry != nil {
+			return r.Registry.Lookup(name)
+		}
+	case entryModeTrackerOnly:
+		if r.ComponentRegistry != nil {
+			return r.ComponentRegistry.Lookup(name)
+		}
+	case entryModeUnknown:
+		return nil
+	}
+	return nil
 }
 
 func (r *Reconciler) onDeployer(action actions.Fn) actions.Fn {
@@ -193,4 +206,15 @@ func ensureConfigMap(rs *[]unstructured.Unstructured, name string, namespace str
 	*rs = append(*rs, *u)
 
 	return len(*rs) - 1, nil
+}
+
+func forAll[H base.Handler](reg base.Registry[H], fn func(H)) error {
+	return reg.ForAll(func(h H, _ bool) error {
+		if k := h.GetGroupVersionKind(); k == (schema.GroupVersionKind{}) {
+			return nil
+		}
+
+		fn(h)
+		return nil
+	})
 }

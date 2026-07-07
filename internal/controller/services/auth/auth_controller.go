@@ -48,7 +48,7 @@ func (h *ServiceHandler) Init(_ common.Platform) error {
 	return nil
 }
 
-func (h *ServiceHandler) GroupVersionKind() schema.GroupVersionKind { return gvk.Auth }
+func (h *ServiceHandler) GetGroupVersionKind() schema.GroupVersionKind { return gvk.Auth }
 
 func (h *ServiceHandler) GetName() string {
 	return ServiceName

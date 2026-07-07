@@ -22,7 +22,7 @@ func (h *ServiceHandler) Init(platform common.Platform) error {
 }
 
 // GetName returns the service name for this handler.
-func (h *ServiceHandler) GroupVersionKind() schema.GroupVersionKind { return gvk.GatewayConfig }
+func (h *ServiceHandler) GetGroupVersionKind() schema.GroupVersionKind { return gvk.GatewayConfig }
 
 func (h *ServiceHandler) GetName() string {
 	return ServiceName

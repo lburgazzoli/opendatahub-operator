@@ -106,8 +106,8 @@ func NewDataScienceClusterReconciler(ctx context.Context, mgr ctrl.Manager, opts
 	// Dynamic Owns for in-tree component CRs.
 	_ = r.ComponentRegistry.ForEach(func(h cr.ComponentHandler) error {
 		b = b.OwnsGVK(
-			h.GroupVersionKind(),
-			reconciler.Dynamic(reconciler.CrdExists(h.GroupVersionKind())),
+			h.GetGroupVersionKind(),
+			reconciler.Dynamic(reconciler.CrdExists(h.GetGroupVersionKind())),
 			reconciler.WithPredicates(componentsPredicate),
 		)
 

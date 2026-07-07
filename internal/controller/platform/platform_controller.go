@@ -6,6 +6,7 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -13,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/base"
 	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	sr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/services/registry"
@@ -32,6 +34,13 @@ import (
 // status into the Platform Ready condition.
 type Reconciler struct {
 	Options
+}
+
+func registerTrackedWatches[H base.Handler](reg base.Registry[H], addWatch func(schema.GroupVersionKind)) error {
+	return reg.ForEach(func(h H) error {
+		addWatch(h.GetGroupVersionKind())
+		return nil
+	})
 }
 
 // New creates and registers the Platform controller with the given manager.
@@ -81,21 +90,19 @@ func New(ctx context.Context, mgr ctrl.Manager, opts ...Option) error {
 
 	// Watch in-tree component CRs. Dynamic(CrdExists) guards against missing CRDs
 	// on xKS; dependent.WithWatchStatus triggers on status-only changes.
-	_ = r.ComponentRegistry.ForEach(func(h cr.ComponentHandler) error {
-		k := h.GroupVersionKind()
+	_ = registerTrackedWatches[cr.ComponentHandler](r.ComponentRegistry, func(k schema.GroupVersionKind) {
 		b = b.WatchesGVK(
 			k,
 			reconciler.Dynamic(reconciler.CrdExists(k)),
 			reconciler.WithEventHandler(handlers.ToNamed(configv1alpha1.PlatformInstanceName)),
 			reconciler.WithPredicates(componentsPredicate),
 		)
-		return nil
 	})
 
 	// Watch service CRs (Auth, Monitoring, GatewayConfig) that have a GVK.
 	// Services without a CR return an empty GVK which is skipped.
-	_ = r.ServiceRegistry.ForEach(func(h sr.ServiceHandler) error {
-		if k := h.GroupVersionKind(); k.Kind != "" {
+	_ = registerTrackedWatches[sr.ServiceHandler](r.ServiceRegistry, func(k schema.GroupVersionKind) {
+		if k.Kind != "" {
 			b = b.WatchesGVK(
 				k,
 				reconciler.Dynamic(reconciler.CrdExists(k)),
@@ -103,7 +110,6 @@ func New(ctx context.Context, mgr ctrl.Manager, opts ...Option) error {
 				reconciler.WithPredicates(componentsPredicate),
 			)
 		}
-		return nil
 	})
 
 	_, err := b.

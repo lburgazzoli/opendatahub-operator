@@ -11,6 +11,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
+	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/base"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	odherrors "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/actions/errors"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/conditions"
@@ -124,7 +125,7 @@ func (r *Reconciler) walkModuleDAG(ctx context.Context, rr *odhtype.Reconciliati
 		return nil
 	}
 
-	checker := moduleReadinessChecker(rr.Client, rr.Release.Version.String())
+	checker := platformReadinessChecker(rr.Client, rr.Release.Version.String(), r.ComponentRegistry)
 
 	requeueAfter, walkErr := provision.WalkBatches(
 		ctx,
@@ -179,6 +180,7 @@ func (r *Reconciler) aggregateStatus(ctx context.Context, rr *odhtype.Reconcilia
 	}
 
 	notReady := sets.New[string]()
+	managed := sets.New[string]()
 	unknown := sets.New[string]()
 
 	for _, entry := range platform.Spec.Modules {
@@ -207,6 +209,7 @@ func (r *Reconciler) aggregateStatus(ctx context.Context, rr *odhtype.Reconcilia
 				Message: "entry is not managed",
 			}
 		default:
+			managed.Insert(entry.Name)
 			pm := &configv1alpha1.PlatformModule{}
 			if err := rr.Client.Get(ctx, client.ObjectKey{Name: entry.Name}, pm); err != nil {
 				if client.IgnoreNotFound(err) != nil {
@@ -274,6 +277,10 @@ func (r *Reconciler) aggregateStatus(ctx context.Context, rr *odhtype.Reconcilia
 		)
 	}
 
+	if progress := rr.Conditions.GetCondition(status.ConditionTypeProvisioningProgress); progress != nil && progress.Status != metav1.ConditionTrue {
+		notReady = notReady.Union(managed)
+	}
+
 	switch {
 	case notReady.Len() > 0:
 		rr.Conditions.MarkFalse(status.ConditionTypeModulesReady,
@@ -288,5 +295,16 @@ func (r *Reconciler) aggregateStatus(ctx context.Context, rr *odhtype.Reconcilia
 }
 
 func (r *Reconciler) isTrackedEntry(name string) bool {
-	return r.ModuleRegistry.Lookup(name) != nil || r.ComponentRegistry.Lookup(name) != nil
+	return r.lookupTrackedHandler(name) != nil
+}
+
+//nolint:ireturn // Shared helper intentionally returns the minimal base contract.
+func (r *Reconciler) lookupTrackedHandler(name string) base.Handler {
+	if h := r.ModuleRegistry.Lookup(name); h != nil {
+		return h
+	}
+	if h := r.ComponentRegistry.Lookup(name); h != nil {
+		return h
+	}
+	return nil
 }
