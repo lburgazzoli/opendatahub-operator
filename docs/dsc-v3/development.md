@@ -70,6 +70,7 @@ rg -n 'odh-platform-utilities|framework/' internal pkg cmd api -g '*.go'
 - Choose explicit, readable code over reflection, metaprogramming, implicit
   mutation, or a generic abstraction that hides conversion behavior.
 - Avoid `unsafe` and JSON serialization for typed v2/v3 conversion.
+  DEC-024 uses a literal marker and requires no JSON payload or snapshot.
 - Keep functions focused, error paths visible, and data flow easy to follow.
 - Add an abstraction only when it removes real duplication without obscuring
   Kubernetes lifecycle or conversion semantics.
@@ -117,8 +118,11 @@ affected.
 
 ## Required test layers
 
-Every change needs the lowest-cost test that proves its behavior and the
-integration/E2E coverage appropriate to its risk.
+Every change needs the lowest-cost test that proves its behavior. Intermediate
+implementation tasks require complete unit and integration coverage; the
+consolidated real-cluster E2E implementation and execution are deliberately
+deferred to final qualification in DSC-V3-011 under DEC-023. DSC-V3-010 remains
+the separate exception for its odh-cli/upgrade qualification boundary.
 
 ### Unit tests
 
@@ -141,6 +145,13 @@ integration/E2E coverage appropriate to its risk.
 
 ### End-to-end tests
 
+- DSC-V3-011 owns the consolidated E2E code, fixtures, execution, and result
+  recording for changes delivered by Tasks 001 and 006-009/012. Intermediate
+  tasks must record the behaviors and fixtures that final qualification needs,
+  but they do not need to add or run E2E tests before completion when their
+  integration coverage is complete.
+  Task 012's only E2E code changes may be compile fixture fixes; new E2E
+  scenarios belong to Task 011.
 - Use a real supported cluster for installation, OLM/upgrade ordering, storage
   migration, `status.storedVersions`, retry, and rollback behavior.
 - For v1 retirement, honor DEC-009: the external odh-cli gate runs before OLM
@@ -152,9 +163,10 @@ integration/E2E coverage appropriate to its risk.
 - Cover ODH and RHOAI variants and the affected component lifecycle/readiness
   behavior.
 
-If a cluster-dependent test cannot run locally, specify the exact CI/E2E test,
-required environment, and expected assertion in the task outcome. Lack of a
-local cluster is not grounds for omitting the test implementation.
+During DSC-V3-011, if a cluster-dependent test cannot run locally, specify the
+exact CI/E2E test, required environment, and expected assertion in the task
+outcome. Lack of a local cluster may defer execution to CI, but final
+qualification must still contain the E2E implementation.
 
 ## API and conversion discipline
 
@@ -175,6 +187,19 @@ local cluster is not grounds for omitting the test implementation.
 - Conversion must be deterministic and must not perform defaulting, validation,
   logging-dependent recovery, or Kubernetes API calls.
 - Use admission webhooks and CRD schema for validation/defaulting.
+- For MaaS, apply DEC-022 forward precedence with DEC-024's literal
+  `legacy-managed` marker. V2 ignores incoming markers and sets one iff current
+  legacy L is Managed, regardless of effective precedence. Reverse keeps C/A
+  migrated and returns legacy Managed iff marked, else Removed including empty.
+- V3 UPDATE compares old/new canonical, KServe parent, and AI Gateway parent
+  management states: any change permanently deletes the marker, even after a
+  later revert; otherwise `OldObject` is authoritative. Native CREATE strips
+  supplied reserved metadata. Reject unknown interpreted marker values.
+- Reuse existing `componentApi` AI Gateway/canonical value types without
+  canonical pointers or duplicated v2/v3 wrappers. Do not restore original
+  C/A/absence. Keep OpenAPI and the independent v2 baseline unchanged. Test
+  normalized fixtures and schema defaulting separately, with admission through
+  envtest. No supported installed intermediate-v3 release needs legacy fallback.
 
 ## Kubernetes error and portability rules
 

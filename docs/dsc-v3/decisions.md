@@ -42,6 +42,9 @@ and system-level safety instructions still take precedence.
 | `DEC-019` | Accepted | 2026-09-18 | Use the exact v2 CRD deprecation warning recorded below. |
 | `DEC-020` | Proposed | 2026-09-18 | Accept the complete supported-source, artifact, cluster, permission, odh-cli, and CI execution matrix for Task 010. |
 | `DEC-021` | Accepted | 2026-09-18 | The independent v2 OpenAPI baseline is immutable for v3-only changes. |
+| `DEC-022` | Accepted | 2026-09-18 | Independent MaaS migration and forward precedence remain; partially superseded by DEC-024 for reverse conversion and no-annotation normalization. |
+| `DEC-023` | Accepted | 2026-09-18 | Intermediate implementation tasks complete with unit/integration evidence; Task 011 owns consolidated E2E. |
+| `DEC-024` | Accepted | 2026-09-18 | Preserve only legacy Managed with a literal marker; keep canonical/parent migration and retire the marker on relevant v3 state changes. |
 
 ## Accepted decisions
 
@@ -211,6 +214,188 @@ explicitly changes the v2 wire contract. Such a change must list every modified
 v2 path separately, update v2 admission/conversion compatibility, and include
 focused tests proving the v2 change. Regenerating both sides to make a v2/v3
 difference disappear is prohibited.
+
+### DEC-022: migrate KServe MaaS independently
+
+> Supersession note (2026-09-18): DEC-024 supersedes this decision's reverse
+> conversion and no-annotation policy, with the normalization contract now
+> specified in DEC-024. The original accepted text below is retained as history. Forward precedence,
+> independent task ownership, warning removal, and retained v2 CEL still apply.
+
+- State: `Accepted`
+- Applies to: DSC-V3-012
+- Supersedes: G5 as a proposed blocker
+
+The KServe/MaaS v3 change is fully determined by existing runtime behavior and
+may be implemented after DSC-V3-001 without waiting for Dashboard, AI Hub,
+Data, removed-legacy-field, consolidated-contract, or Jira feedback.
+
+V2 keeps both canonical `spec.components.aigateway.modelsAsAService` and
+deprecated `spec.components.kserve.modelsAsService`, including the existing
+update validation. Remove the custom MaaS field deprecation warnings from both
+v2 and v3 admission; DEC-019's warning for use of the entire v2 API version is
+unrelated and remains. V3 removes only
+`spec.components.kserve.modelsAsService`; canonical
+`spec.components.aigateway.modelsAsAService`, MaaS status, and
+`ModelsAsAServiceReady` remain unchanged.
+
+Conversion follows the current runtime precedence:
+
+1. V2 -> v3 copies a non-empty canonical AI Gateway MaaS state. Otherwise, only
+   when `kserve.managementState` is `Managed`, it copies the deprecated KServe
+   MaaS state to the canonical v3 path. When KServe is not `Managed`, canonical
+   v3 MaaS remains empty. A non-empty canonical state wins every conflict. This
+   is the current runtime selection logic.
+   `Removed` is non-empty and therefore always wins over the legacy KServe
+   value. The schema default makes a present canonical stanza with an omitted
+   state `Removed`; the empty case remains possible when the entire canonical
+   `modelsAsAService` stanza is absent because that parent field has no object
+   default.
+2. Conversion copies `aigateway.managementState`, except that an empty value is
+   set to `Managed` when both v2 `kserve.managementState` and deprecated
+   `kserve.modelsAsService.managementState` are `Managed`. This preserves the
+   existing legacy fallback that deploys AI Gateway for KServe-hosted MaaS.
+3. Conversion does not otherwise default or normalize empty values.
+4. V3 -> v2 copies canonical MaaS to the canonical v2 AI Gateway path and
+   always sets deprecated `kserve.modelsAsService.managementState` to
+   `Removed`. It copies `aigateway.managementState` unchanged and does not
+   infer an independent v2 KServe parent state.
+
+"Current runtime precedence" means preserving all three observable decisions
+in `internal/controller/modules/aigateway/handler.go`:
+
+1. The projected AI Gateway CR uses canonical MaaS when it is non-empty;
+   otherwise it copies legacy MaaS only while the KServe parent is `Managed`.
+2. MaaS readiness/status is enabled by canonical `Managed`; when canonical is
+   empty, it is enabled only when both the KServe parent and legacy MaaS are
+   `Managed`. Canonical `Removed` disables it regardless of KServe values.
+3. The AI Gateway platform module uses its non-empty parent state unchanged.
+   When that state is empty, both KServe parent and legacy MaaS must be
+   `Managed` to synthesize `Managed`; every other empty-parent case is
+   effectively `Removed`.
+
+V2 retains the existing CEL transition rule on deprecated
+`kserve.modelsAsService`. It permits creation of legacy `Managed` objects,
+permits `Managed -> Managed`, `Managed -> Removed`, and `Removed -> Removed`,
+and rejects `Removed -> Managed`. Removing the custom admission warning does
+not remove or weaken this CEL rule. V3 removes the deprecated field and
+therefore does not carry that field-specific CEL rule. Conversion must not call
+admission or attempt to enforce CEL itself; it must still convert previously
+accepted legacy `Managed` objects. Because v3 -> v2 always writes legacy
+`Removed`, a subsequent v2 update cannot re-enable the deprecated path.
+
+No compatibility annotation is used. A v2 -> v3 -> v2 round trip deliberately
+migrates legacy-only or conflicting input: the selected state is stored at the
+canonical v2 path and the deprecated v2 path becomes `Removed`. For a non-empty
+canonical v3 value, v3 -> v2 -> v3 is structurally exact. An empty v3 MaaS state
+can round-trip as `Removed` when KServe is `Managed`, because the required v2
+legacy value participates in forward fallback; DEC-010 makes empty and
+`Removed` behaviorally equivalent. Both round trips preserve effective
+MaaS/AI Gateway behavior, metadata, and unrelated fields. These are accepted
+exceptions to raw equality for this removed deprecated field.
+
+Task 012 owns the v3-owned KServe type, explicit conversion and migration,
+OpenAPI difference entry, removal of both versioned custom warning hooks,
+obsolete runtime-fallback removal, generated artifacts, and direct, semantic
+round-trip, webhook, handler, CEL, schema, and envtest integration tests. It
+records the final cluster scenario, while Task 011 owns its E2E implementation
+and execution. G5 is closed; G1-G4 and G6-G7 remain independent proposed gates.
+
+### DEC-023: defer consolidated E2E to final qualification
+
+- State: `Accepted`
+- Applies to: DSC-V3-001, DSC-V3-006 through DSC-V3-009, DSC-V3-011, and
+  DSC-V3-012
+
+Intermediate implementation tasks complete when their required unit,
+conversion, webhook, schema, CEL, handler/controller, and envtest integration
+coverage and mandatory repository gates pass. They record the real-cluster
+scenario and fixture prerequisites in Outcomes, but E2E implementation or
+execution does not block their completion.
+
+DSC-V3-011 consumes those handoffs, implements the consolidated ODH/RHOAI E2E
+coverage, and runs it on supported clusters. When no local cluster is
+available, Task 011 may hand execution to a named CI job, but it may not omit
+the E2E implementation. DSC-V3-010 remains a separate exception because its
+purpose is to qualify the external odh-cli gate, storage migration, OLM
+ordering, retry, and rollback boundary.
+
+### DEC-024: preserve legacy Managed with a literal marker
+
+- State: `Accepted`
+- Date: 2026-09-18
+- Applies to: DSC-V3-012; consumed by DSC-V3-005, DSC-V3-006, and DSC-V3-011
+- Supersedes: DEC-022's reverse conversion and no-annotation policy; forward
+  precedence is unchanged and the normalization below is accepted
+- Approval: user-approved provenance-only design. The literal marker records
+  only legacy `Managed` intent; canonical and parent values remain migrated.
+
+Reserve `conversion.opendatahub.io/maas-v2-state` with the sole supported value
+`legacy-managed`. There is no JSON payload, versioned encoding, or snapshot.
+`L` denotes v2 `kserve.modelsAsService.managementState`; `C`, `K`, and `A`
+denote canonical `aigateway.modelsAsAService.managementState`, KServe parent
+`managementState`, and AI Gateway parent `managementState`, respectively.
+
+V2 -> v3 retains DEC-022's canonical selection and parent-synthesis rules.
+Ignore any incoming marker and reset it from visible source `L`: set
+`legacy-managed` if and only if `L` is `Managed`, regardless of canonical
+precedence or effective MaaS enablement. For `Removed` or empty `L`, remove
+the marker. Incoming stale or unknown values cannot override visible v2 state.
+
+V3 -> v2 copies the current canonical stanza and AI Gateway parent, keeping
+their migrated values. Set legacy `L` to `Managed` if the supported marker is
+present, otherwise `Removed`, including when the original legacy value was
+empty. Keep the current KServe parent unchanged. Original canonical state,
+AI Gateway parent state, and stanza absence are not restored. Consume the
+reserved marker on the v2 output; the next forward conversion derives it anew
+from current `L`. Reject unknown marker values when interpreting the marker
+in reverse conversion or admission; an empty annotation value is not absence.
+Unrelated metadata, spec, status, and conditions remain intact.
+
+V3 admission enforces the marker lifecycle without a projection snapshot:
+
+- On native v3 `CREATE`, strip supplied reserved metadata.
+- On v3 `UPDATE`, compare old/new `C`, `K`, and `A` (the three management-state
+  values defined above). Any change
+  deletes the marker. Canonical stanza presence is not separately tracked.
+- If those states do not change, `OldObject` supplies the authoritative marker,
+  regardless of a new object's attempt to add, replace, omit, or delete it.
+  Reject unknown authoritative marker values.
+- Deletion is permanent for that legacy intent, including after a later
+  revert. If the old object has no marker, a v3 update cannot introduce one.
+  A later v2 conversion derives a new marker solely from its current `L`.
+- Unrelated edits preserve the old marker and unrelated annotations.
+
+Reuse existing `componentApi` AI Gateway/canonical value types in both API
+versions. Do not introduce a canonical pointer or duplicated v2/v3 AI Gateway
+wrappers. Keep existing JSON names, defaults, optionality, validations, shared
+module schemas, and the independent v2 OpenAPI baseline unchanged. Absence
+versus `{}` is not restored by conversion; API-server defaulting remains
+separate from typed conversion.
+
+Tests must assert this deliberate normalization: canonical `C` and parent `A`
+stay projected on reverse, legacy `Managed` survives only via the marker, and
+legacy empty becomes `Removed`. Include `L=Managed` with canonical `Removed`
+or unmanaged KServe to prove the marker does not depend on effective enablement.
+Do not require exact restoration of the original v2 representation.
+
+Runtime reads only canonical v3 MaaS. Remove both custom MaaS field-warning
+hooks; retain DEC-019's API-version warning and the existing v2 CEL transition
+matrix, including rejection of `Removed -> Managed`. A retained marker
+exposes legacy `Managed` to v2; after retirement, reverse
+conversion exposes `Removed` and the retained CEL guard applies. Status and
+condition names do not change.
+
+There is no supported installed intermediate-v3 release with the pre-Task012
+legacy KServe field. Do not add a migration or runtime fallback for that
+development-only shape. Supported legacy input enters through v2; Task 010's
+separate upgrade gates remain in force.
+
+Task 012 covers direct/round-trip conversion, reserved metadata, admission
+CREATE/UPDATE including edit-then-revert, schema/CEL, handler behavior, and
+envtest/integration through the real webhook. Under DEC-023, new E2E code and
+execution belong to Task 011; Task 012 may only fix E2E fixtures as needed to
+compile and must record the full cluster scenario handoff.
 
 ### DEC-009: use an odh-cli gate before removing v1
 

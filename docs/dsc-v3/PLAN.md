@@ -55,6 +55,8 @@ The completed operator must:
   qualifies the odh-cli gate that migrates v1 storage to v2;
 - preserve the effective behavior of existing v2 objects and preserve all v3
   state through a v2 read-modify-write;
+- migrate deprecated KServe MaaS configuration to the canonical v3 AI Gateway
+  stanza without changing the served v2 contract;
 - implement the accepted Dashboard, AI Hub, Feature Store, and Data Registry
   public shapes and project them into the existing module APIs;
 - regenerate both ODH and RHOAI CRDs, bundles, webhooks, samples, API docs, and
@@ -95,11 +97,14 @@ reading.
 | `DEC-017` | Accepted | Even with no DSC object, remove and verify v1 in `status.storedVersions`; only v1 already absent is mutation-free success. | Correct Task 010 gate behavior |
 | `DEC-018`, `DEC-020` | Proposed | Name the enforceable promotion control and complete supported execution matrix. | Task 010 start/completion and upgrade release |
 | `DEC-021` | Accepted | Do not refresh the independent v2 baseline for v3-only changes. | Reliable schema guard |
+| `DEC-022` | Accepted | V3 removes deprecated KServe MaaS; forward precedence, warning removal, and v2 CEL remain. DEC-024 supersedes the reverse policy. | Independent Task 012 |
+| `DEC-023` | Accepted | Intermediate tasks require unit/integration evidence; Task 011 owns consolidated E2E implementation and execution. | Test staging and task completion |
+| `DEC-024` | Accepted | Literal `legacy-managed` marker preserves only legacy Managed; C/A stay migrated and v3 admission deletes the marker on any of the three management-state changes. | Task 012 marker/normalization contract |
 | G1 | Proposed (`94805`) | Choose the Dashboard v3 spec/status shape and final names for the core Dashboard and portal. | Dashboard schema, conversion, handler |
 | G2 | Proposed (`95340`, `94809`) | Confirm the public JSON name `aiHub` versus the older `hub` proposal and approve its status and condition names. | AI Hub schema, conversion, handler |
 | G3 | Proposed (`95339`, `94809`) | Confirm that `data` has no parent `managementState`, versus the older parent-gating proposal. | Data schema, conversion, handler |
 | G4 | Proposed (`95340`, `94809`) | Define `aiHub.registriesNamespace` optionality, defaults, immutability, update rules, and absent-v2-field behavior. | AI Hub admissions and conversion |
-| G5 | Proposed (`94809`) | Define conversion precedence when deprecated `kserve.modelsAsService` and canonical `aigateway.modelsAsAService` conflict. | MaaS conversion |
+| G5 | Accepted (`DEC-022`, `DEC-024`) | Forward precedence unchanged; marker derives only from source L=Managed. Reverse keeps C/A migrated and writes legacy Managed iff marked, else Removed including empty. | Task 012 MaaS conversion |
 | G6 | Proposed (`94809`) | Define v3 read/write behavior for non-empty v2 `trainingoperator` and `llamastackoperator`, which have no proposed v3 fields. | Conversion and schema |
 | G7 | Proposed (`94805`, `95339`, `95340`, `94809`) | Approve every changed spec, status, and condition mapping, including absent and empty values. | Generated schema and component completion |
 
@@ -107,29 +112,30 @@ To close a gate, add an accepted decision with exact normative behavior to
 `decisions.md`, then replace `Proposed` here and update TASKS. A statement that
 the overall v3 direction is approved does not close a field-level gate.
 
-## Embedded contract proposals
+## Embedded contract matrix
 
-These proposals capture all known input. They are implementation guidance only
-after corresponding accepted decisions are recorded in `decisions.md`.
+This matrix captures accepted and proposed input. A row is implementation-ready
+only when its corresponding decision is `Accepted` in `decisions.md`.
 
 ### Unchanged surface
 
 The following v2 spec entries currently exist and are expected to retain their
 JSON names and semantics in v3 unless the final matrix explicitly says
-otherwise: `workbenches`, `aipipelines`, `kserve`, `kueue`, `ray`, `trustyai`,
+otherwise: `workbenches`, `aipipelines`, KServe except for DEC-022's removed
+legacy MaaS child, `kueue`, `ray`, `trustyai`,
 `ogx`, `mlflowoperator`, `trainer`, `sparkoperator`, `aigateway`, and
 `mcplifecycleoperator`. The common DSC status fields, release information,
 conditions, related objects, and error message must also survive conversion.
 
-### Proposed changed surface
+### Changed and proposed surface
 
-| Concern | Current v2 shape | Latest proposed v3 shape | Required mapping |
+| Concern | Current v2 shape | Target v3 shape | Mapping state |
 | --- | --- | --- | --- |
 | Dashboard | `dashboard.managementState`; `dashboard.maasConsumerPortal.managementState`; status fields `dashboard` and `maasConsumerPortal` | Final grouping and names pending G1/G7 | Preserve both existing effective states in both round trips; map status and `MaaSConsumerPortalAvailable` only after names are accepted. |
 | AI Hub | `modelregistry.managementState`; `modelregistry.registriesNamespace`; status `modelregistry`; condition `ModelRegistryReady` | `aiHub.managementState`; `aiHub.registriesNamespace`; final status/condition pending G2/G4/G7 | One-to-one spec mapping; retain namespace and effective state; map status/condition explicitly. Internal AIHub CR stays unchanged. |
 | Feature Store | `feastoperator.managementState` | `data.featureStore.managementState` | One-to-one lifecycle mapping. |
 | Data Registry | Proposed v2 compatibility field `feastoperator.dataRegistry.managementState` | `data.dataRegistry.managementState` | One-to-one lifecycle mapping if the compatibility field is accepted. Use a conversion annotation only if the final contract leaves state unrepresentable in v2. |
-| MaaS | Canonical `aigateway.modelsAsAService`; deprecated `kserve.modelsAsService` also exists | Only `aigateway.modelsAsAService` | Canonical value is the current runtime preference when explicitly set, but conversion conflict behavior remains gated by G5. |
+| MaaS | Canonical `aigateway.modelsAsAService`; deprecated `kserve.modelsAsService` also exists | Only `aigateway.modelsAsAService` | DEC-022 forward precedence; DEC-024 literal marker preserves legacy Managed independently of effective enablement. Reverse keeps C/A migrated; absent marker means legacy Removed, including original empty. Custom field warnings removed; v2 CEL retained. |
 | Training Operator | Deprecated `trainingoperator` | Field omitted | Behavior for a non-empty legacy value remains gated by G6. |
 | Llama Stack Operator | Deprecated `llamastackoperator` | Field omitted; `ogx` remains | Behavior for a non-empty legacy value remains gated by G6. |
 
@@ -189,21 +195,34 @@ and that “customer” is too narrow for a portal with administration scenarios
 - In the machinery milestone, v2 and v3 have identical Go/JSON schemas. The
   v2 <-> v3 converter is therefore a semantic no-op: it copies the complete
   object without renames, drops, defaults, or normalization.
-- Transforming conversion begins only after G1-G7 have accepted decisions and the v3 types
-  are changed by the component-contract milestone.
+- Transforming conversion begins only after the relevant field-level decision
+  is accepted. DEC-022/DEC-024 authorize Task 012 independently; other transformations
+  still wait for their G1-G4/G6-G7 decisions.
 - Conversion is deterministic, idempotent, and performs no cluster lookups.
-- `ObjectMeta` and every unchanged spec and status field are copied in both
-  directions. A field may be deliberately dropped only when the accepted matrix
-  states how compatibility and effective behavior are preserved.
-- `v2 -> v3 -> v2` preserves every value representable by v2.
+- `ObjectMeta` (except reserved conversion metadata) and every unchanged spec
+  and status field are copied in both directions. A field may be deliberately
+  dropped only when the accepted matrix states how compatibility and effective
+  behavior are preserved.
+- `v2 -> v3 -> v2` keeps canonical MaaS and AI Gateway parent migrated under
+  DEC-024; original C/A/absence are not restored. Legacy `Managed` returns iff
+  marked; legacy empty and `Removed` both become `Removed`. Relevant v3
+  management-state edits permanently delete the marker, including after reverts.
 - `v3 -> v2 -> v3` preserves every v3 value, including independent child
   states, during a v2 read-modify-write.
-- Prefer an explicit compatibility field over annotation stashing. Use an
-  internal conversion annotation only for a final, demonstrably
-  unrepresentable value, and remove stale stash data when it is consumed.
+- Prefer an explicit compatibility field for future undecided mappings.
+  DEC-024 requires `conversion.opendatahub.io/maas-v2-state: legacy-managed`
+  only for source v2 `L=Managed`, ignoring incoming marker values. V3 UPDATE
+  compares old/new canonical, KServe parent, and AI Gateway parent management
+  states; any change deletes the marker, otherwise `OldObject` is authoritative.
+  Native v3 CREATE strips supplied metadata; unknown interpreted marker values
+  are rejected. There is no JSON payload or projection snapshot.
+- Reuse existing `componentApi` AI Gateway/canonical value types in both
+  versions, without canonical pointers or duplicated wrappers. OpenAPI and the
+  independent v2 baseline remain unchanged by this reuse.
 - Defaulting and validation stay outside conversion.
 - Empty management state is normalized to `Removed` only when code needs an
-  effective state; do not rewrite absent API fields merely for normalization.
+  effective state, except DEC-024's explicit legacy-empty reverse result.
+  Do not normalize unrelated absent API fields.
 
 ### Required rule for every future v3 data-model change
 
@@ -231,22 +250,25 @@ conversion tests are part of its definition of done.
 
 ## Current repository baseline
 
-This map records the implementation state an agent would otherwise have to
-derive before starting.
+This map records the pre-Task001 baseline and the component behavior used to
+plan the migration. Task 001 is now completed at `75c2018d4`: v3 is
+hub/storage/runtime, v2 is the served deprecated spoke, and v1 is removed.
+Its Outcomes are the current machinery evidence; the historical v1/v2 paths
+below are not instructions to restore them. Task 012 is in progress.
 
 | Area | Current behavior and primary touchpoints |
 | --- | --- |
 | Public DSC API | `api/datasciencecluster/v2/datasciencecluster_types.go` is the storage API and implements `conversion.Hub`. `api/datasciencecluster/v1` is a spoke. Shared component types are in `api/components/v1alpha1`; do not change a shared type if that would unintentionally alter v1/v2 or an internal module schema. |
 | Registration/codegen | `PROJECT` registers DSC v1 and v2 with defaulting/validation. `cmd/main.go` registers both schemes. `cmd/component-codegen/cmd/generator/generator.go` hard-codes the v2 DSC types path. |
 | Runtime DSC type | `internal/controller/datasciencecluster`, `internal/controller/components/registry/registry.go`, `internal/controller/modules/types.go`, `internal/controller/modules/base.go`, status helpers, predicates, initial-install helpers, and tests use typed v2 objects. |
-| Conversion compatibility | v1 conversion contains the existing KServe-to-AI-Gateway MaaS migration and uses `conversion.opendatahub.io/aigateway-state` from `pkg/metadata/annotations/annotations.go` to preserve otherwise unrepresentable state. `pkg/dsc/compare/v2only.go` only compares v1/v2 differences. |
+| Conversion compatibility | After Milestone 1, `api/datasciencecluster/v2/datasciencecluster_conversion.go` explicitly copies the still-identical v2/v3 shapes. `pkg/dsc/compare/openapi_test.go` and `pkg/dsc/compare/testdata/conversion-differences.json` provide the independent baseline and executable difference registry; the registry is initially empty. |
 | Admissions | `internal/webhook/webhook.go` registers `dsc-v1` and `dsc-v2`. Each version has defaulting, validation, and envtest coverage under `internal/webhook/datasciencecluster`. |
 | Generated CRD | ODH and RHOAI generated DSC CRDs currently serve v1 and v2, with v2 storage. Conversion patches under `config/crd/patches` and `config/rhoai/crd/patches` use `/convert` and list review versions v1/v2. |
 | Samples | Primary samples are `config/samples/datasciencecluster_v2_datasciencecluster.yaml` and the RHOAI equivalent. |
 | Dashboard | `api/components/v1alpha1/dashboard_types.go` embeds a top-level management state and `maasConsumerPortal`, defaulted to `Removed`. `internal/controller/modules/dashboard/handler.go` deploys the operator when either core or portal is managed, projects the current Dashboard spec plus namespaces/gateway data, and mirrors condition `MaaSConsumerPortalAvailable` to status field `MaaSConsumerPortal`. |
 | AI Hub | Public DSC types and module registration still use Model Registry naming. `internal/controller/modules/modelregistry/handler.go` manages internal AIHub GVK `AIHub`, CR name `default-aihub`, module/manifest name `modelregistry`, and condition `ModelRegistryReady`. It maps `registriesNamespace` to internal `instancesNamespace`, falling back to the applications namespace, and mirrors it into legacy DSC status. |
 | Data | `api/components/v1alpha1/feastoperator_types.go` currently contains only Feast lifecycle state. `internal/controller/modules/feastoperator/handler.go` enables the existing Feast module and builds a FeastOperator CR whose spec currently contains only derived external-OIDC configuration; it does not project child lifecycle state. |
-| MaaS | AI Gateway runtime logic uses `aigateway.modelsAsAService` when set and otherwise falls back to deprecated `kserve.modelsAsService`. `internal/controller/modules/kserve/handler.go` removes `modelsAsService` before projecting the KServe module CR. |
+| MaaS | AI Gateway runtime logic uses `aigateway.modelsAsAService` when non-empty. Only when it is empty and `kserve.managementState` is `Managed` does it consult deprecated `kserve.modelsAsService`; AI Gateway parent enablement additionally requires the legacy MaaS state to be `Managed`. `internal/controller/modules/kserve/handler.go` removes `modelsAsService` before projecting the KServe module CR. |
 | Defaults/validation | v2 defaults Model Registry `registriesNamespace` when Model Registry is managed: `odh-model-registries` for ODH and `rhoai-model-registries` for RHOAI. It defaults KServe NIM to managed when KServe is managed. Validation enforces DSC singleton creation, denies Kueue managed, warns for deprecated KServe MaaS, prevents re-enabling that deprecated field after removal, and keeps Model Registry namespace immutable while managed. |
 | Tests | Unit/envtest coverage exists beside APIs, handlers, and webhooks. `tests/e2e/v2tov3upgrade_test.go` is legacy-named and does not yet prove DSC API v2-to-v3 storage conversion; do not count it as the new upgrade acceptance test without rewriting it. |
 
@@ -293,8 +315,8 @@ must have no production hits after the machinery milestone.
 
 ### Milestone 1: establish v3 machinery without contract changes
 
-This is the first implementation step and is ready now. It deliberately uses
-the current v2 schema unchanged so it is independent of G1-G7.
+This first implementation step is completed under DEC-023. It used the v2
+schema unchanged so it was independent of G1-G7.
 The executable task and living outcome record is
 [tasks/001.md](tasks/001.md).
 
@@ -391,7 +413,46 @@ Milestone 1 exit criteria:
 - V1 code and serving are absent. Upgrade release remains blocked until Task
   010 proves v1 storage is removed before the v1-free CRD is installed.
 - Generated CRDs serve deprecated v2 and v3 with v3 as the sole storage version.
-- G1-G7 remain proposed and no proposed component stanza is encoded.
+- G1-G4 and G6-G7 remain proposed and no proposed component stanza is encoded;
+  accepted G5 is implemented separately by Task 012 after this milestone.
+
+### Milestone 1A: migrate KServe MaaS independently
+
+Entry: Milestone 1 is complete. No component Jira or G1-G4/G6-G7 decision is
+required.
+
+Execution record: [KServe/MaaS migration](tasks/012.md).
+Status: in progress, Codex, started 2026-09-18 on
+`RHOAIENG-94812-DSC-v3` at `75c2018d4`; implementation evidence is pending.
+
+- Remove deprecated `kserve.modelsAsService` only from the v3 schema; keep the
+  served v2 schema and update guard unchanged while removing the custom MaaS
+  field warning from both admissions.
+- Move today's canonical/KServe-gated runtime selection into explicit v2 <-> v3
+  conversion under DEC-022. Preserve all three current handler outcomes:
+  projected MaaS state, MaaS readiness/status enablement, and AI Gateway parent
+  enablement for legacy-only managed input.
+- Under DEC-024, set the reserved annotation to literal `legacy-managed` iff
+  incoming v2 `L=Managed`, regardless of effective precedence. Ignore incoming
+  markers and remove them for all other L. Reverse copies migrated C/A and
+  sets legacy `Managed` iff marked, else `Removed`, including original empty.
+- Enforce v3 CREATE stripping and UPDATE `OldObject` authority. Unrelated edits
+  preserve the old marker; canonical or either parent management-state changes
+  permanently delete it, even after a revert. Reject unknown marker values.
+  Reuse component types without canonical pointers, duplicated AI Gateway
+  wrappers, or a JSON payload/snapshot. Original C/A/absence are not restored.
+- Remove the custom MaaS field deprecation-warning hooks from v2 and v3 while
+  retaining the v2 legacy field's existing CEL transition validation and
+  DEC-019's unrelated warning for use of the v2 API version.
+- Remove obsolete v3 handler/admission fallback behavior, update the OpenAPI
+  difference registry, and add direct, both-round-trip, `/convert`, handler,
+  schema, CEL, and envtest integration coverage. Record the required MaaS E2E
+  scenario for Task 011; only E2E compile fixture fixes belong in Task 012.
+- Assume no supported installed intermediate-v3 release with the legacy field;
+  supported migration starts through v2, subject to Task 010's upgrade gates.
+
+Exit: v3 has one canonical MaaS path, v2 remains compatible, and Task 012's
+Outcomes contain all conversion and verification evidence.
 
 ### Milestone 2: freeze and encode component contracts
 
@@ -406,7 +467,8 @@ Execution records: [Dashboard contract](tasks/002.md),
 - Update the local decision record before code.
 - Replace provisional schemas with exact Go/JSON shapes and complete the
   field-by-field spec/status/condition/conversion matrix.
-- Implement the Dashboard, AI Hub, Data, MaaS, and legacy-field changes in v3.
+- Implement the Dashboard, AI Hub, Data, and remaining legacy-field changes in
+  v3. MaaS is already owned by Task 012 and must not be reimplemented here.
 - Change the formerly identity converter only for accepted schema differences;
   unchanged fields must retain the Milestone 1 copy behavior.
 - Apply DEC-003 and DEC-007 to every changed spec/status/condition field: conversion code,
@@ -462,10 +524,13 @@ Minimum automated scenarios:
 - a v2/v3 structural-difference guard whose explicit inventory has focused
   conversion coverage for every listed path;
 - table-driven spec/status/condition conversion for every changed field;
-- `v2 -> v3 -> v2` preservation of every v2-representable value;
+- `v2 -> v3 -> v2` accepted normalization: C/A stay projected, legacy Managed
+  survives iff marked, and legacy empty becomes Removed; permanent marker
+  deletion after any of the three management-state edits, including reverts;
 - `v3 -> v2 -> v3` preservation of every v3 value;
 - `Managed`, `Removed`, empty, absent, and conflicting inputs;
-- v2 and v3 admission defaulting, validation, warnings, and update rules;
+- v2 and v3 admission defaulting, validation, applicable warnings, and update
+  rules, including absence of the removed custom MaaS field warning;
 - Dashboard, AI Hub, Feature Store, and Data Registry handler projections,
   lifecycle, readiness, releases, legacy status, and removal;
 - generated Milestone 1 schema: deprecated v2 and v3 served, exactly v3
@@ -487,9 +552,12 @@ make build
 git diff --check
 ```
 
-Run the relevant E2E targets when a cluster is available. A task may be marked
-complete only when TASKS records the commands run, their result, the important
-generated diff, and any environment-limited test that remains for CI.
+Tasks before final qualification may complete with the required unit and
+integration suites. They must record their commands, results, important
+generated diffs, and the E2E scenarios handed to Task 011. Task 011 implements
+and runs the consolidated E2E coverage on supported clusters; execution may be
+handed to a named CI job when no local cluster is available. Task 010 retains
+its separate odh-cli/upgrade qualification responsibilities.
 
 ## Provenance (optional reading)
 

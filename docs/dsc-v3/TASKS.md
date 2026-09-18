@@ -55,17 +55,18 @@ status below, not external workflow state, controls agent execution.
 
 | Work package | Local status | Blocked by | Repository output |
 | --- | --- | --- | --- |
-| [`DSC-V3-001`](tasks/001.md) v3 machinery and v1 removal | `🚧 In progress` | None; Task 010 separately blocks upgrade release | Identical v3 API, v2 <-> v3 identity conversion, typed v3 runtime, and v1-free API |
+| [`DSC-V3-001`](tasks/001.md) v3 machinery and v1 removal | `✅ Completed` | None; Task 010 separately blocks upgrade release | Identical v3 API, v2 <-> v3 identity conversion, typed v3 runtime, and v1-free API |
 | [`RHOAIENG-94805`](tasks/002.md) Dashboard contract | `⛔ Blocked; decision task` | Dashboard/Workbenches/Platform owner choice | Freeze G1 and Dashboard parts of G7 |
 | [`RHOAIENG-95339`](tasks/003.md) Data contract | `⛔ Blocked; decision task` | Data/Feast/Data Registry/Platform owner choice | Freeze G3 and Data parts of G7 |
 | [`RHOAIENG-95340`](tasks/004.md) AI Hub contract | `⛔ Blocked; decision task` | AI Hub/Model Registry/Platform owner choice | Freeze G2/G4 and AI Hub parts of G7 |
-| [`RHOAIENG-94809`](tasks/005.md) consolidated contract | `⛔ Blocked` | `94805`, `95339`, `95340`, G5/G6 | Freeze G1-G7 and exact conversion matrix |
+| [`DSC-V3-012`](tasks/012.md) KServe/MaaS migration | `🚧 In progress` | None; Task 001 completed | DEC-024 literal marker/normalization; Codex, started 2026-09-18 at `75c2018d4` |
+| [`RHOAIENG-94809`](tasks/005.md) consolidated contract | `⛔ Blocked` | `94805`, `95339`, `95340`, G6 | Freeze remaining G1-G4/G6-G7 and exact conversion matrix |
 | [`RHOAIENG-94814`](tasks/010.md) v1 retirement qualification | `⛔ Blocked` | odh-cli implementation, DEC-018 promotion control, DEC-020 execution matrix | Produce release evidence and qualify the gate/rollback boundary |
 | [`RHOAIENG-95342`](tasks/007.md) Dashboard handler/CRD | `📝 Not started` | Waits for Task 006 | Dashboard projection and status |
 | [`RHOAIENG-95344`](tasks/008.md) AI Hub handler/CRD | `📝 Not started` | Waits for Task 006 | AI Hub projection and status |
 | [`RHOAIENG-95346`](tasks/009.md) Data handler/CRD | `📝 Not started` | Waits for Task 006 | Feature Store/Data Registry projection |
-| [`RHOAIENG-94812`](tasks/006.md) contract implementation | `⛔ Blocked after M1` | G1-G7 | Implement approved v3 API and conversion |
-| [`RHOAIENG-94812`](tasks/011.md) final qualification | `📝 Not started` | Waits for Tasks 006-010 | Complete DSC v3 delivery |
+| [`RHOAIENG-94812`](tasks/006.md) contract implementation | `⛔ Blocked after M1` | G1-G4/G6-G7 and Task 012 | Implement remaining approved v3 API and conversion |
+| [`RHOAIENG-94812`](tasks/011.md) final qualification | `📝 Not started` | Waits for Tasks 006-010 and 012 | Complete DSC v3 delivery |
 
 ```text
 001-01 v3 API ─┬─> 001-02 atomic conversion/v1 removal ─┐
@@ -76,19 +77,21 @@ status below, not external workflow state, controls agent execution.
 003 Data contract ──────┼─> 005 consolidated G1-G7 matrix
 004 AI Hub contract ────┘
 
-001 complete ─┬─> 006 API/conversion ─┬─> 007 Dashboard projection ─┐
-005 complete ─┘                       ├─> 008 AI Hub projection ────┼─> 011 final qualification
-                                      └─> 009 Data projection ──────┘
-001 complete ─> 010 future odh-cli qualification ────────────────┘
+001 complete ─> 012 KServe/MaaS ─┐
+005 complete ────────────────────┴─> 006 API/conversion ─┬─> 007 Dashboard projection ─┐
+                                                        ├─> 008 AI Hub projection ────┼─> 011 final qualification
+                                                        └─> 009 Data projection ──────┤
+001 complete ─> 010 future odh-cli qualification ─────────────────────────────────────┘
 ```
 
-Task 001 is the first executable work and does not wait for component
-contracts. It copies the v2 shape to v3, adds identity conversion, moves
-production code to v3, and removes v1. The external odh-cli gate runs before
+Task 001 is completed under DEC-023 without waiting for component contracts.
+It copied the v2 shape to v3, added identity conversion, moved production code
+to v3, and removed v1. The external odh-cli gate runs before
 OLM installs that v1-free CRD, but its implementation and qualification are the
 separate future Task 010 and do not block Task 001 implementation completion.
-Public stanza changes and transforming conversion remain blocked until G1-G7
-have accepted decisions.
+DEC-022/DEC-024 make Task 012's KServe/MaaS stanza change executable without further
+Jira or component feedback. Other public stanza changes and transforming
+conversion remain blocked until G1-G4/G6-G7 have accepted decisions.
 
 ## Numbered task execution order
 
@@ -110,13 +113,14 @@ from DAG cycle detection. Task 001 uses it to point to future Task 010.
 | [002](tasks/002.md) | Freeze Dashboard public contract | Owner approval |
 | [003](tasks/003.md) | Freeze Data public contract | Owner approval |
 | [004](tasks/004.md) | Freeze AI Hub public contract | Owner approval |
-| [005](tasks/005.md) | Consolidate G1-G7 and conversion matrix | 002-004 plus MaaS/legacy decisions |
-| [006](tasks/006.md) | Implement accepted v3 API, conversion, and admissions | 001, 005 |
+| [005](tasks/005.md) | Consolidate G1-G7 and conversion matrix | 002-004 plus G6; imports accepted DEC-022/DEC-024 |
+| [006](tasks/006.md) | Implement accepted v3 API, conversion, and admissions | 001, 005, 012 |
 | [007](tasks/007.md) | Implement Dashboard projection/status | 006 |
 | [008](tasks/008.md) | Implement AI Hub projection/status | 006 |
 | [009](tasks/009.md) | Implement Data projection/status | 006 |
 | [010](tasks/010.md) | Future: qualify odh-cli gate, storage migration, and rollback | 001 plus external gate |
-| [011](tasks/011.md) | Integrate and qualify the final release | 006-010 |
+| [011](tasks/011.md) | Integrate and qualify the final release | 006-010, 012 |
+| [012](tasks/012.md) | Migrate legacy KServe MaaS to canonical v3 AI Gateway MaaS | 001 only |
 
 ## Completion evidence template
 
@@ -137,7 +141,7 @@ Verification:
 - focused tests:
 - git diff --check:
 
-Remaining CI/E2E (must state why not run locally):
+E2E scenarios handed to final Task 011:
 -
 ```
 
@@ -172,11 +176,17 @@ explicit identity-copy path, add a test for the new field and record that
 decision. “No converter change required” never means “no conversion test
 required.”
 
+For MaaS, DEC-024 defines explicit normalized round-trip fixtures: canonical C
+and AI Gateway parent A stay projected, original C/A/absence are not restored,
+legacy Managed survives iff marked, and legacy empty becomes Removed. Record
+the expected result and rationale for each normalization and marker retirement
+case; reject unexplained differences. Unrelated metadata remains exact.
+
 ## First executable work package
 
 ### `DSC-V3-001`: establish v3 machinery
 
-- Local status: `In progress`
+- Local status: `Completed` under DEC-023; see Task 001 Outcomes
 - Blocked by: nothing
 - Must not include: any unresolved Dashboard, AI Hub, Data, MaaS, Training
   Operator, or Llama Stack schema/behavior change
@@ -305,9 +315,9 @@ rg -n 'datasciencecluster/v2|dscv2' api cmd internal pkg tests -g '*.go'
 - Update the primary ODH/RHOAI DSC samples to `apiVersion:
   datasciencecluster.opendatahub.io/v3` without changing their component
   stanza shapes.
-- Do not treat the existing `tests/e2e/v2tov3upgrade_test.go` name as evidence;
-  add or rewrite coverage so it actually verifies DSC v2 API requests against
-  v3 storage.
+- Record for Task 011 that final E2E must actually verify DSC v2 API requests
+  against v3 storage; the existing `tests/e2e/v2tov3upgrade_test.go` name alone
+  is not evidence.
 
 Definition of done:
 
@@ -321,9 +331,56 @@ Definition of done:
   qualifies the external odh-cli gate; that qualification is not Task 001 work.
 - The structural coverage guard proves that v2/v3 are identical and establishes
   the required inventory for future differences.
-- No G1-G7 component contract is implemented prematurely.
+- No post-machinery component contract, including accepted G5, is implemented
+  inside Task 001; Task 012 owns G5 after Task 001 completes.
 - All focused tests and mandatory repository gates pass, and completion
   evidence is recorded.
+
+## Independent accepted migration
+
+### `DSC-V3-012`: migrate KServe MaaS to AI Gateway
+
+- Local status: `In progress`; Task 001 prerequisite completed
+- Assignee/start: Codex, 2026-09-18, branch `RHOAIENG-94812-DSC-v3`,
+  HEAD `75c2018d4`; documentation updated, implementation evidence pending
+- Detailed task and outcome record: [tasks/012.md](tasks/012.md)
+- Decision authority: accepted DEC-022 forward precedence and DEC-024
+  preservation/admission; no further Jira or component-owner
+  feedback required
+- Blocks: Task 006 integration and final Task 011
+
+Purpose:
+
+- Remove deprecated `kserve.modelsAsService` only from v3 while retaining the
+  field and its update guard in served v2; remove the custom MaaS field warning
+  from both versioned admissions.
+- Convert legacy v2 input to canonical `aigateway.modelsAsAService` using the
+  already implemented runtime precedence: canonical non-empty wins; otherwise,
+  legacy is consulted only when `kserve.managementState` is `Managed` and is
+  ignored when KServe is not managed. Canonical `Removed`, including the
+  default for a present stanza with no state, is non-empty and ignores legacy;
+  an entirely absent canonical stanza remains empty and can use the fallback.
+- Preserve legacy-only AI Gateway enablement. Set reserved
+  `conversion.opendatahub.io/maas-v2-state` to literal `legacy-managed` iff
+  incoming v2 L=Managed, regardless of canonical precedence. Ignore incoming
+  markers and reset from current L. Reverse keeps C/A migrated and returns
+  legacy Managed iff marked, otherwise Removed including original empty.
+- V3 UPDATE trusts `OldObject`, preserves unrelated edits, and permanently
+  deletes the marker on canonical or either parent management-state change,
+  even after a revert. Native CREATE strips supplied reserved metadata; reject
+  unknown marker values. Reuse componentApi value types without canonical
+  pointers or duplicated AI Gateway wrappers. Original C/A/absence are not
+  restored; there is no JSON payload or snapshot and OpenAPI remains unchanged.
+- Remove obsolete v3 runtime/admission fallback, register the OpenAPI
+  difference, and land direct, both-round-trip, `/convert`, handler, schema,
+  CEL, generated-artifact, and envtest integration coverage. Record the final
+  E2E scenario for Task 011. Only E2E compile fixture fixes belong to Task 012.
+- Assume no supported installed intermediate-v3 release with the legacy field;
+  supported legacy input enters through v2. Task 010 retains upgrade gating.
+
+This task is deliberately separate from the blocked consolidated contract. It
+must not alter Dashboard, AI Hub/Model Registry, Data/Feast, Training Operator,
+Llama Stack Operator, or their pending decisions.
 
 ## Contract work packages
 
@@ -516,7 +573,8 @@ Definition of done:
 
 ### `RHOAIENG-94809`: freeze the consolidated API and conversion matrix
 
-- Local status: `Blocked by 94805, 95339, 95340, G5, and G6`
+- Local status: `Blocked by 94805, 95339, 95340, and G6`; G5 is accepted as
+  DEC-022/DEC-024 and implemented independently by Task 012
 - Detailed task and outcome record: [tasks/005.md](tasks/005.md)
 - Decision owners: Platform plus all affected component API owners
 - Blocks: changed public schemas, `94812`, `95342`, `95344`, and `95346`
@@ -534,9 +592,9 @@ Inputs already captured locally:
 - Dashboard decision record from `94805`.
 - Data decision record from `95339`.
 - AI Hub decision record from `95340`.
-- Current MaaS behavior: runtime prefers explicit
-  `aigateway.modelsAsAService` and otherwise falls back to
-  `kserve.modelsAsService`; v1 conversion has additional migration/stash logic.
+- Accepted MaaS behavior comes from DEC-022/DEC-024 and Task 012; import its
+  marker/normalization matrix now and implementation evidence when complete,
+  without reopening the policy.
 - Removed v3 candidates: deprecated `trainingoperator` and
   `llamastackoperator`; `ogx` remains the Llama Stack replacement.
 
@@ -549,16 +607,13 @@ Required matrix columns for every changed field:
 | Model Registry/AI Hub | From `95340` | From `95340` | Required | Required | Required | Required | Required |
 | Feast/Feature Store | `feastoperator` | Proposed `data.featureStore` | Required | Required | Required | Required | Required |
 | Data Registry | Proposed v2 compatibility child | Proposed `data.dataRegistry` | Required | Required | Required | Required | Required |
-| MaaS | legacy and canonical fields | canonical field | Required, including conflict | Required | Required | Required | Required |
+| MaaS | From DEC-022/DEC-024 | From DEC-022/DEC-024 | Existing selection; marker iff source L=Managed, ignoring incoming marker | Keep C/A migrated; L=Managed iff marked, else Removed including empty | Reuse component types; no original C/A/absence restoration; defaults unchanged | Remove custom warning; retain CEL; compare three management states and use OldObject authority | `conversion.opendatahub.io/maas-v2-state: legacy-managed`; no JSON/snapshot; Task 012 |
 | Training Operator | deprecated field | absent | Required | Required | Required | Required | Required |
 | Llama Stack Operator | deprecated field | absent | Required | Required | Required | Required | Required |
 | Changed status/conditions | current names | final names | Required | Required | Required | n/a | Required |
 
 Required decisions not owned by a component task:
 
-- G5: when legacy KServe MaaS and canonical AI Gateway MaaS are both present,
-  define priority for every empty/Managed/Removed combination and whether a
-  conflicting write warns, validates, normalizes, or preserves both for v2.
 - G6: define observable behavior when v2 clients read or write non-empty
   Training Operator or Llama Stack Operator values that v3 cannot expose.
 - For every v3-only value, choose an explicit v2 field where possible; approve
@@ -746,16 +801,18 @@ Definition of done:
 
 ## `RHOAIENG-94812`: implement and deliver DSC v3
 
-- Local status: `Milestone 1 ready; later milestones blocked in part`
+- Local status: `Milestone 1 completed; Task 012 in progress; later milestones blocked in part`
 - Detailed task records: [machinery task 001](tasks/001.md),
+  [KServe/MaaS task 012](tasks/012.md),
   [API/conversion task 006](tasks/006.md), and
   [final qualification task 011](tasks/011.md)
 - Milestone 1 dependencies: none
 - Release dependency: accepted DEC-009's odh-cli gate and qualification
-- Later contract dependencies: G1-G7 plus `95342`, `95344`, and `95346`
+- Later contract dependencies: accepted DEC-022/DEC-024 and Task 012, G1-G4/G6-G7, plus
+  `95342`, `95344`, and `95346`
 
-Follow the milestones in PLAN in order. The detailed `94812/M1` package above
-is the first work to implement; it must land without waiting for stanza tasks.
+Follow the dependencies in PLAN. The detailed `94812/M1` package above is
+completed; Task 012 now proceeds independently of pending stanza decisions.
 
 ### Milestone 1: versioning machinery
 
@@ -769,10 +826,23 @@ is the first work to implement; it must land without waiting for stanza tasks.
 - Port v2 admission behavior to identical v3 fields, retain v2 compatibility,
   regenerate all artifacts, and prove lossless whole-object round trips.
 
-### Milestone 2 and 3: accepted contract changes
+### Milestone 1A: accepted KServe/MaaS migration
 
-- After G1-G7 freeze, change the v3 schema for Dashboard, AI Hub, Data, MaaS,
-  and removed legacy fields.
+- After Task 001, execute Task 012 without waiting for other stanza decisions.
+- Remove v3 `kserve.modelsAsService`, retain DEC-022's forward selection, and
+  apply DEC-024's literal legacy-Managed marker and accepted normalization.
+  Remove custom MaaS field warnings from both admissions; keep v2 CEL intact.
+- Cover projected C/A, legacy empty -> Removed, v3 OldObject authority,
+  permanent deletion after any of the three management-state edits and reverts,
+  marker reset from current v2 L, shared component type reuse, and unknown values
+  through conversion, handler, schema, CEL, and envtest/integration tests.
+  Task 011 owns E2E implementation/execution; Task 012 permits only compile
+  fixture fixes. No installed intermediate-v3 compatibility is assumed.
+
+### Milestone 2 and 3: remaining accepted contract changes
+
+- After G1-G4/G6-G7 freeze, change the v3 schema for Dashboard, AI Hub, Data,
+  and remaining removed legacy fields. Preserve Task 012's MaaS result.
 - Evolve the identity converter only for those approved differences while
   retaining exact copy behavior for everything else.
 - Integrate `95342`, `95344`, and `95346`, then adapt v3 admissions and all
@@ -796,7 +866,8 @@ Final definition of done:
 - ODH and RHOAI generated deliverables are consistent.
 - `make generate manifests api-docs`, `make fmt`, `make lint`,
   `make unit-test`, `make build`, focused tests, and `git diff --check` pass;
-  required cluster E2E results or explicit CI handoff are recorded.
+  intermediate tasks record their Task 011 E2E handoff, and Task 011 records
+  the required cluster E2E results or explicit CI execution handoff.
 
 ## Out-of-scope and downstream records
 
