@@ -254,7 +254,8 @@ This map records the pre-Task001 baseline and the component behavior used to
 plan the migration. Task 001 is now completed at `75c2018d4`: v3 is
 hub/storage/runtime, v2 is the served deprecated spoke, and v1 is removed.
 Its Outcomes are the current machinery evidence; the historical v1/v2 paths
-below are not instructions to restore them. Task 012 is in progress.
+below are not instructions to restore them. Task 012 is completed at
+`dd8472bbc`.
 
 | Area | Current behavior and primary touchpoints |
 | --- | --- |
@@ -422,8 +423,9 @@ Entry: Milestone 1 is complete. No component Jira or G1-G4/G6-G7 decision is
 required.
 
 Execution record: [KServe/MaaS migration](tasks/012.md).
-Status: in progress, Codex, started 2026-09-18 on
-`RHOAIENG-94812-DSC-v3` at `75c2018d4`; implementation evidence is pending.
+Status: completed 2026-09-18 by Codex on `RHOAIENG-94812-DSC-v3`;
+implementation commit `dd8472bbc`. Verification and behavior examples are in
+Task 012 Outcomes; Task 011 owns cluster E2E execution.
 
 - Remove deprecated `kserve.modelsAsService` only from the v3 schema; keep the
   served v2 schema and update guard unchanged while removing the custom MaaS

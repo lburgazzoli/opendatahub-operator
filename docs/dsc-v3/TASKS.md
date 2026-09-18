@@ -59,14 +59,14 @@ status below, not external workflow state, controls agent execution.
 | [`RHOAIENG-94805`](tasks/002.md) Dashboard contract | `⛔ Blocked; decision task` | Dashboard/Workbenches/Platform owner choice | Freeze G1 and Dashboard parts of G7 |
 | [`RHOAIENG-95339`](tasks/003.md) Data contract | `⛔ Blocked; decision task` | Data/Feast/Data Registry/Platform owner choice | Freeze G3 and Data parts of G7 |
 | [`RHOAIENG-95340`](tasks/004.md) AI Hub contract | `⛔ Blocked; decision task` | AI Hub/Model Registry/Platform owner choice | Freeze G2/G4 and AI Hub parts of G7 |
-| [`DSC-V3-012`](tasks/012.md) KServe/MaaS migration | `🚧 In progress` | None; Task 001 completed | DEC-024 literal marker/normalization; Codex, started 2026-09-18 at `75c2018d4` |
+| [`DSC-V3-012`](tasks/012.md) KServe/MaaS migration | `✅ Completed` | None | DEC-024 literal marker/normalization; implementation `dd8472bbc`, tests and outcomes in Task 012 |
 | [`RHOAIENG-94809`](tasks/005.md) consolidated contract | `⛔ Blocked` | `94805`, `95339`, `95340`, G6 | Freeze remaining G1-G4/G6-G7 and exact conversion matrix |
 | [`RHOAIENG-94814`](tasks/010.md) v1 retirement qualification | `⛔ Blocked` | odh-cli implementation, DEC-018 promotion control, DEC-020 execution matrix | Produce release evidence and qualify the gate/rollback boundary |
 | [`RHOAIENG-95342`](tasks/007.md) Dashboard handler/CRD | `📝 Not started` | Waits for Task 006 | Dashboard projection and status |
 | [`RHOAIENG-95344`](tasks/008.md) AI Hub handler/CRD | `📝 Not started` | Waits for Task 006 | AI Hub projection and status |
 | [`RHOAIENG-95346`](tasks/009.md) Data handler/CRD | `📝 Not started` | Waits for Task 006 | Feature Store/Data Registry projection |
-| [`RHOAIENG-94812`](tasks/006.md) contract implementation | `⛔ Blocked after M1` | G1-G4/G6-G7 and Task 012 | Implement remaining approved v3 API and conversion |
-| [`RHOAIENG-94812`](tasks/011.md) final qualification | `📝 Not started` | Waits for Tasks 006-010 and 012 | Complete DSC v3 delivery |
+| [`RHOAIENG-94812`](tasks/006.md) contract implementation | `⛔ Blocked after M1` | G1-G4/G6-G7 | Implement remaining approved v3 API and conversion |
+| [`RHOAIENG-94812`](tasks/011.md) final qualification | `📝 Not started` | Waits for Tasks 006-010 | Complete DSC v3 delivery; Task 012 handoff ready |
 
 ```text
 001-01 v3 API ─┬─> 001-02 atomic conversion/v1 removal ─┐
@@ -340,14 +340,15 @@ Definition of done:
 
 ### `DSC-V3-012`: migrate KServe MaaS to AI Gateway
 
-- Local status: `In progress`; Task 001 prerequisite completed
+- Local status: `Completed`; Task 001 prerequisite completed
 - Assignee/start: Codex, 2026-09-18, branch `RHOAIENG-94812-DSC-v3`,
-  HEAD `75c2018d4`; documentation updated, implementation evidence pending
+  starting HEAD `75c2018d4`; implementation commit `dd8472bbc`, completed
+  2026-09-18 with verification and behavior examples in the Outcomes
 - Detailed task and outcome record: [tasks/012.md](tasks/012.md)
 - Decision authority: accepted DEC-022 forward precedence and DEC-024
   preservation/admission; no further Jira or component-owner
   feedback required
-- Blocks: Task 006 integration and final Task 011
+- Completed input to Task 006 integration and final Task 011
 
 Purpose:
 
@@ -801,7 +802,7 @@ Definition of done:
 
 ## `RHOAIENG-94812`: implement and deliver DSC v3
 
-- Local status: `Milestone 1 completed; Task 012 in progress; later milestones blocked in part`
+- Local status: `Milestone 1 and Task 012 completed; later milestones blocked in part`
 - Detailed task records: [machinery task 001](tasks/001.md),
   [KServe/MaaS task 012](tasks/012.md),
   [API/conversion task 006](tasks/006.md), and
@@ -812,7 +813,7 @@ Definition of done:
   `95342`, `95344`, and `95346`
 
 Follow the dependencies in PLAN. The detailed `94812/M1` package above is
-completed; Task 012 now proceeds independently of pending stanza decisions.
+completed; Task 012 also completed independently of pending stanza decisions.
 
 ### Milestone 1: versioning machinery
 
