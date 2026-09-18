@@ -35,18 +35,6 @@ resources:
     webhookVersion: v1
 - api:
     crdVersion: v1
-  controller: true
-  domain: opendatahub.io
-  group: datasciencecluster
-  kind: DataScienceCluster
-  path: github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v1
-  version: v1
-  webhooks:
-    defaulting: true
-    validation: true
-    webhookVersion: v1
-- api:
-    crdVersion: v1
   domain: opendatahub.io
   group: datasciencecluster
   kind: DataScienceCluster
@@ -58,6 +46,7 @@ resources:
     webhookVersion: v1
 - api:
     crdVersion: v1
+  controller: true
   domain: opendatahub.io
   group: datasciencecluster
   kind: DataScienceCluster

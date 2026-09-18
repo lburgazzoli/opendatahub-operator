@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	dsciv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v2"
 	serviceApi "github.com/opendatahub-io/opendatahub-operator/v2/api/services/v1alpha1"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
@@ -1472,14 +1472,14 @@ func (tc *TestContext) FetchDSCInitialization() *dsciv2.DSCInitialization {
 //
 // Returns:
 //   - *dsciv2.DataScienceCluster: The retrieved DataScienceCluster object.
-func (tc *TestContext) FetchDataScienceCluster() *dscv2.DataScienceCluster {
+func (tc *TestContext) FetchDataScienceCluster() *dscv3.DataScienceCluster {
 	// In XKS, DataScienceCluster does not exist, so returning nil
 	if tc.IsXKS() {
 		return nil
 	}
 
 	// Ensure the DataScienceCluster exists and retrieve the object
-	dsc := &dscv2.DataScienceCluster{}
+	dsc := &dscv3.DataScienceCluster{}
 	tc.FetchTypedResource(dsc, WithMinimalObject(gvk.DataScienceCluster, tc.DataScienceClusterNamespacedName))
 
 	return dsc

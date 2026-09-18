@@ -1,6 +1,6 @@
 //go:build !nowebhook
 
-package v2
+package v3
 
 import (
 	"context"
@@ -15,16 +15,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	dscwebhook "github.com/opendatahub-io/opendatahub-operator/v2/internal/webhook/datasciencecluster"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	webhookutils "github.com/opendatahub-io/opendatahub-operator/v2/pkg/webhook"
 )
 
-//+kubebuilder:webhook:path=/validate-datasciencecluster-v2,matchPolicy=Exact,mutating=false,failurePolicy=fail,sideEffects=None,groups=datasciencecluster.opendatahub.io,resources=datascienceclusters,verbs=create;update,versions=v2,name=datasciencecluster-v2-validator.opendatahub.io,admissionReviewVersions=v1
+//+kubebuilder:webhook:path=/validate-datasciencecluster-v3,matchPolicy=Exact,mutating=false,failurePolicy=fail,sideEffects=None,groups=datasciencecluster.opendatahub.io,resources=datascienceclusters,verbs=create;update,versions=v3,name=datasciencecluster-v3-validator.opendatahub.io,admissionReviewVersions=v1
 //nolint:lll
 
-// Validator implements webhook.AdmissionHandler for DataScienceCluster v2 validation webhooks.
+// Validator implements webhook.AdmissionHandler for DataScienceCluster v3 validation webhooks.
 // It enforces singleton creation rules, validates Kueue managementState, and always allows deletion.
 type Validator struct {
 	Client  client.Reader
@@ -44,14 +44,14 @@ var _ admission.Handler = &Validator{}
 //   - error: Always nil (for future extensibility).
 func (v *Validator) SetupWithManager(mgr ctrl.Manager) error {
 	hookServer := mgr.GetWebhookServer()
-	hookServer.Register("/validate-datasciencecluster-v2", &webhook.Admission{
+	hookServer.Register("/validate-datasciencecluster-v3", &webhook.Admission{
 		Handler:        v,
 		LogConstructor: webhookutils.NewWebhookLogConstructor(v.Name),
 	})
 	return nil
 }
 
-// Handle processes admission requests for create and update operations on DataScienceCluster v2 resources.
+// Handle processes admission requests for create and update operations on DataScienceCluster v3 resources.
 // It enforces singleton and managementState rules, allowing other operations by default.
 //
 // Parameters:
@@ -64,13 +64,13 @@ func (v *Validator) Handle(ctx context.Context, req admission.Request) admission
 	log := logf.FromContext(ctx)
 	ctx = logf.IntoContext(ctx, log)
 
-	if req.Kind.Kind != gvk.DataScienceClusterV2.Kind || req.Kind.Group != gvk.DataScienceClusterV2.Group || req.Kind.Version != gvk.DataScienceClusterV2.Version {
-		err := fmt.Errorf("unexpected gvk: %v; expecting: %v", req.Kind, gvk.DataScienceClusterV2)
+	if req.Kind.Kind != gvk.DataScienceClusterV3.Kind || req.Kind.Group != gvk.DataScienceClusterV3.Group || req.Kind.Version != gvk.DataScienceClusterV3.Version {
+		err := fmt.Errorf("unexpected gvk: %v; expecting: %v", req.Kind, gvk.DataScienceClusterV3)
 		logf.FromContext(ctx).Error(err, "got wrong group/version/kind")
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
-	allowMessage := fmt.Sprintf("Operation %s on %s v2 allowed", req.Operation, req.Kind.Kind)
+	allowMessage := fmt.Sprintf("Operation %s on %s v3 allowed", req.Operation, req.Kind.Kind)
 
 	switch req.Operation {
 	case admissionv1.Create:
@@ -100,13 +100,13 @@ func validate(ctx context.Context, checks []validationCheck, allowedMessage stri
 }
 
 func denyMultipleDsc(ctx context.Context, cli client.Reader, req *admission.Request) admission.Response {
-	return webhookutils.ValidateSingletonCreation(ctx, cli, req, gvk.DataScienceClusterV2)
+	return webhookutils.ValidateSingletonCreation(ctx, cli, req, gvk.DataScienceClusterV3)
 }
 
 func (v *Validator) denyKueueManagedState(ctx context.Context, _ client.Reader, req *admission.Request) admission.Response {
-	dsc := &dscv2.DataScienceCluster{}
+	dsc := &dscv3.DataScienceCluster{}
 	if err := v.Decoder.DecodeRaw(req.Object, dsc); err != nil {
-		logf.FromContext(ctx).Error(err, "Error converting request object to "+gvk.DataScienceClusterV2.String())
+		logf.FromContext(ctx).Error(err, "Error converting request object to "+gvk.DataScienceClusterV3.String())
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 	if dsc.Spec.Components.Kueue.ManagementState == operatorv1.Managed {
@@ -120,9 +120,9 @@ func (v *Validator) denyKueueManagedState(ctx context.Context, _ client.Reader, 
 // kserve.modelsAsService field is Managed. Admission is still allowed so upgrades
 // and no-op syncs keep working; CEL blocks Removed→Managed separately.
 func (v *Validator) warnDeprecatedModelsAsService(ctx context.Context, _ client.Reader, req *admission.Request) admission.Response {
-	dsc := &dscv2.DataScienceCluster{}
+	dsc := &dscv3.DataScienceCluster{}
 	if err := v.Decoder.DecodeRaw(req.Object, dsc); err != nil {
-		logf.FromContext(ctx).Error(err, "Error converting request object to "+gvk.DataScienceClusterV2.String())
+		logf.FromContext(ctx).Error(err, "Error converting request object to "+gvk.DataScienceClusterV3.String())
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 

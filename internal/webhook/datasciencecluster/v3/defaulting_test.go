@@ -1,4 +1,4 @@
-package v1_test
+package v3_test
 
 import (
 	"testing"
@@ -6,8 +6,8 @@ import (
 	operatorv1 "github.com/openshift/api/operator/v1"
 
 	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
-	dscv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v1"
-	v1webhook "github.com/opendatahub-io/opendatahub-operator/v2/internal/webhook/datasciencecluster/v1"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
+	v3webhook "github.com/opendatahub-io/opendatahub-operator/v2/internal/webhook/datasciencecluster/v3"
 
 	. "github.com/onsi/gomega"
 )
@@ -17,8 +17,8 @@ func ptrManagementState(ms operatorv1.ManagementState) *operatorv1.ManagementSta
 	return new(ms)
 }
 
-// TestDefaulterV1_DefaultingLogic exercises the defaulting webhook logic for DataScienceCluster v1 resources.
-func TestDefaulterV1_DefaultingLogic(t *testing.T) {
+// TestDefaulterV3_DefaultingLogic exercises the defaulting webhook logic for DataScienceCluster v3 resources.
+func TestDefaulterV3_DefaultingLogic(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 	ctx := t.Context()
@@ -58,7 +58,7 @@ func TestDefaulterV1_DefaultingLogic(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			dsc := &dscv1.DataScienceCluster{}
+			dsc := &dscv3.DataScienceCluster{}
 			if tc.managementState != nil || tc.registriesNamespace != nil {
 				// Only set ModelRegistry if at least one field is set
 				if tc.managementState != nil {
@@ -69,7 +69,7 @@ func TestDefaulterV1_DefaultingLogic(t *testing.T) {
 				}
 			}
 
-			defaulter := &v1webhook.Defaulter{Name: "test-v1"}
+			defaulter := &v3webhook.Defaulter{Name: "test-v3"}
 			err := defaulter.Default(ctx, dsc)
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(dsc.Spec.Components.ModelRegistry.RegistriesNamespace).To(Equal(tc.expectedNamespace))
@@ -77,8 +77,8 @@ func TestDefaulterV1_DefaultingLogic(t *testing.T) {
 	}
 }
 
-// TestDefaulterV1_NIMDefaultingLogic exercises the NIM defaulting webhook logic for DataScienceCluster v1 resources.
-func TestDefaulterV1_NIMDefaultingLogic(t *testing.T) {
+// TestDefaulterV3_NIMDefaultingLogic exercises the NIM defaulting webhook logic for DataScienceCluster v3 resources.
+func TestDefaulterV3_NIMDefaultingLogic(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 	ctx := t.Context()
@@ -118,7 +118,7 @@ func TestDefaulterV1_NIMDefaultingLogic(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			dsc := &dscv1.DataScienceCluster{}
+			dsc := &dscv3.DataScienceCluster{}
 			if tc.kserveManagementState != nil {
 				dsc.Spec.Components.Kserve.ManagementState = *tc.kserveManagementState
 			}
@@ -126,7 +126,7 @@ func TestDefaulterV1_NIMDefaultingLogic(t *testing.T) {
 				dsc.Spec.Components.Kserve.NIM.ManagementState = *tc.nimManagementState
 			}
 
-			defaulter := &v1webhook.Defaulter{Name: "test-v1"}
+			defaulter := &v3webhook.Defaulter{Name: "test-v3"}
 			err := defaulter.Default(ctx, dsc)
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(dsc.Spec.Components.Kserve.NIM.ManagementState).To(Equal(tc.expectedNIMState))
