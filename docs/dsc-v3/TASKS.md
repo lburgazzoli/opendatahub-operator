@@ -55,7 +55,7 @@ status below, not external workflow state, controls agent execution.
 
 | Work package | Local status | Blocked by | Repository output |
 | --- | --- | --- | --- |
-| [`DSC-V3-001`](tasks/001.md) v3 machinery and v1 removal | `📝 Todo; ready` | None; Task 010 separately blocks upgrade release | Identical v3 API, v2 <-> v3 identity conversion, typed v3 runtime, and v1-free API |
+| [`DSC-V3-001`](tasks/001.md) v3 machinery and v1 removal | `🚧 In progress` | None; Task 010 separately blocks upgrade release | Identical v3 API, v2 <-> v3 identity conversion, typed v3 runtime, and v1-free API |
 | [`RHOAIENG-94805`](tasks/002.md) Dashboard contract | `⛔ Blocked; decision task` | Dashboard/Workbenches/Platform owner choice | Freeze G1 and Dashboard parts of G7 |
 | [`RHOAIENG-95339`](tasks/003.md) Data contract | `⛔ Blocked; decision task` | Data/Feast/Data Registry/Platform owner choice | Freeze G3 and Data parts of G7 |
 | [`RHOAIENG-95340`](tasks/004.md) AI Hub contract | `⛔ Blocked; decision task` | AI Hub/Model Registry/Platform owner choice | Freeze G2/G4 and AI Hub parts of G7 |
@@ -176,7 +176,7 @@ required.”
 
 ### `DSC-V3-001`: establish v3 machinery
 
-- Local status: `Todo; ready`
+- Local status: `In progress`
 - Blocked by: nothing
 - Must not include: any unresolved Dashboard, AI Hub, Data, MaaS, Training
   Operator, or Llama Stack schema/behavior change

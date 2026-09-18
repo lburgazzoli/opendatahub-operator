@@ -76,6 +76,7 @@ import (
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
 	dscv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v1"
 	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	dsciv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v1"
 	dsciv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v2"
 	featurev1 "github.com/opendatahub-io/opendatahub-operator/v2/api/features/v1"
@@ -213,6 +214,7 @@ func init() { //nolint:gochecknoinits
 	utilruntime.Must(dsciv2.AddToScheme(scheme))
 	utilruntime.Must(dscv1.AddToScheme(scheme))
 	utilruntime.Must(dscv2.AddToScheme(scheme))
+	utilruntime.Must(dscv3.AddToScheme(scheme))
 	utilruntime.Must(featurev1.AddToScheme(scheme))
 	utilruntime.Must(networkingv1.AddToScheme(scheme))
 	utilruntime.Must(rbacv1.AddToScheme(scheme))
