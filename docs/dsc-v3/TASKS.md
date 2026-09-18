@@ -9,6 +9,10 @@ are stable work-package identifiers and optional provenance only.
 Read [development.md](development.md), [decisions.md](decisions.md), and
 [PLAN.md](PLAN.md) before selecting a task. Accepted entries in `decisions.md`
 are normative; proposed decisions are hard gates and must not be guessed.
+The PLAN contains a cross-cutting high-risk file map, and every implementation
+task contains indicative starting files, ownership boundaries, and test entry
+points so an agent can begin without Jira discovery or a preliminary scan of
+the entire repository.
 
 ## How an autonomous agent uses this tracker
 

@@ -250,8 +250,33 @@ derive before starting.
 | Defaults/validation | v2 defaults Model Registry `registriesNamespace` when Model Registry is managed: `odh-model-registries` for ODH and `rhoai-model-registries` for RHOAI. It defaults KServe NIM to managed when KServe is managed. Validation enforces DSC singleton creation, denies Kueue managed, warns for deprecated KServe MaaS, prevents re-enabling that deprecated field after removal, and keeps Model Registry namespace immutable while managed. |
 | Tests | Unit/envtest coverage exists beside APIs, handlers, and webhooks. `tests/e2e/v2tov3upgrade_test.go` is legacy-named and does not yet prove DSC API v2-to-v3 storage conversion; do not count it as the new upgrade acceptance test without rewriting it. |
 
-Before considering the internal migration complete, use targeted searches such
-as:
+### High-risk implementation map
+
+These are the concrete starting points most likely to be missed by a package-only
+migration. The numbered task files assign ownership and expected tests. Paths
+under `api/components/v1alpha1` are audit inputs for v3 divergence, not an
+invitation to mutate shared v2/v3 types.
+
+| Concern | Files to inspect |
+| --- | --- |
+| API, registration, and generators | `api/datasciencecluster/v1`, `api/datasciencecluster/v2`, the new `api/datasciencecluster/v3`, `PROJECT`, `cmd/main.go`, `cmd/component-codegen/cmd/generator/generator.go` |
+| Conversion, admission, and schemes | `internal/webhook/webhook.go`, `internal/webhook/datasciencecluster/v1`, `internal/webhook/datasciencecluster/v2`, the new v3 admission package, `internal/webhook/envtestutil/envtestutil.go`, `pkg/cluster/gvk/gvk.go`, `pkg/dsc/compare`, `pkg/utils/test/scheme/scheme.go` |
+| Runtime helpers outside the DSC controller | `pkg/cluster/resources.go`, `pkg/initialinstall/creation.go`, `pkg/upgrade/uninstallation.go`, `pkg/controller/predicates/resources/resources.go`, `pkg/controller/actions/deploy/action_deploy_support.go`, `pkg/utils/test/mocks/types.go` and their adjacent tests |
+| Runtime controllers and modules | `internal/controller/datasciencecluster`, `internal/controller/components/registry`, every handler under `internal/controller/components` and `internal/controller/modules`, especially `internal/controller/modules/types.go`, `base.go`, and `modules_controller_actions.go` |
+| Delivery artifacts and init-resource contract | `config/samples/datasciencecluster_v2_datasciencecluster.yaml`, `config/rhoai/samples/datasciencecluster_v2_datasciencecluster.yaml`, both platform DSC conversion patches, both platform CSV bases, `api/datasciencecluster/v2/init_resource_annotation_test.go`, `cmd/manifest-tools/pkg/config/init_resource_sync_test.go` |
+| Shared public-type regression risks | `api/components/v1alpha1/dashboard_types.go`, `modelregistry_types.go`, `modelregistry_types.odh.go`, `modelregistry_types.rhoai.go`, `feastoperator_types.go`, `aigateway_types.go`, `modelsasservice_types.go`, `kserve_types.go`, `trainer_types.go`, `trainingoperator_types.go`, `llamastackoperator_types.go`, `ogx_types.go` |
+| E2E infrastructure and upgrade coverage | `tests/e2e/helper_test.go`, `test_context_test.go`, `controller_test.go`, `components_test.go`, `resilience_test.go`, `creation_test.go`, `v2tov3upgrade_test.go`, plus the component-specific E2E files named in Tasks 007-009 |
+
+This map is an intentionally focused starting set, not a request to scan the
+entire repository before work begins and not a frozen exhaustive manifest.
+Start with the named files and follow their imports, generated outputs, and
+test failures. Use the searches below as scoped discovery when an unexpected
+dependency appears and as repository-wide acceptance checks after the change.
+Record any newly discovered central file in the active task's Outcomes and
+handoff record.
+
+Before considering the internal migration complete, use acceptance searches
+such as:
 
 ```bash
 rg -n 'datasciencecluster/v2|dscv2' api cmd internal pkg tests -g '*.go'
