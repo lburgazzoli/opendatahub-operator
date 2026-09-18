@@ -677,7 +677,7 @@ toolbox: ## Create a toolbox instance with the proper Golang and Operator SDK ve
 	toolbox create opendatahub-toolbox --image localhost/opendatahub-toolbox:latest
 
 # Run tests.
-TEST_SRC ?=./internal/... ./tests/integration/... ./pkg/... ./api/services/v1alpha1/... ./cmd/cloudmanager/...
+TEST_SRC ?=./internal/... ./tests/integration/... ./pkg/... ./api/datasciencecluster/... ./api/services/v1alpha1/... ./cmd/cloudmanager/...
 
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
