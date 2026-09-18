@@ -1,11 +1,16 @@
 # RHOAIENG-94812: DataScienceCluster v3 operator implementation plan
 
-This is the repository-local implementation authority for DataScienceCluster
-(DSC) v3. It contains the relevant conclusions from the DSC v3 epic,
+This is the repository-local implementation guide for DataScienceCluster
+(DSC) v3. The authoritative decisions are in `decisions.md`. This guide
+contains the relevant conclusions from the DSC v3 epic,
 implementation task, spike, follow-up tasks, comments, and wiki review as of
 **2026-09-18**. An implementation agent must be able to use this plan and
 [TASKS.md](TASKS.md) without access to Jira, Google Docs, or the wiki. External
 links at the end are provenance only.
+
+[decisions.md](decisions.md) is the authoritative decision record, and
+[development.md](development.md) defines mandatory implementation rules. If a
+summary in this plan conflicts with an accepted decision, the decision wins.
 
 The plan intentionally does not invent public API decisions that remain open.
 Such decisions are hard gates in the decision record below. Work that does not
@@ -14,22 +19,27 @@ depend on an open gate may proceed independently.
 ## Agent operating protocol
 
 1. Read `AGENTS.md`, `CONTRIBUTING.md`, `docs/DESIGN.md`,
-   `docs/COMPONENT_INTEGRATION.md`, this file, and [TASKS.md](TASKS.md).
+   `docs/COMPONENT_INTEGRATION.md`, [development.md](development.md),
+   [decisions.md](decisions.md), this file, and [TASKS.md](TASKS.md).
 2. Select the first unblocked item in the TASKS dependency order. Do not use a
    provisional example as an approved API contract.
 3. Use the repository map and task entry as the starting point. Search for all
    remaining versioned imports and generated consumers before editing.
-4. If work reaches a `Pending` decision, stop only that workstream. Continue
+4. If work reaches a `Proposed` decision, stop only that workstream. Continue
    any independent task; never choose a public JSON name, conversion
-   precedence, default, or retirement sequence on behalf of API owners.
-5. When an external decision is supplied, first replace the corresponding
-   `Pending` row in this document with the exact approved schema and behavior,
-   including approval date and evidence. Then update TASKS and implement it.
-6. Update repository-local task status and completion evidence in TASKS. Jira
-   workflow status is informational and need not be updated by an agent.
+   precedence, default, or release-rollout strategy on behalf of API owners.
+5. When an external decision is supplied, first record it as `Accepted` in
+   `decisions.md`, then update the corresponding summary/gate in this plan and
+   TASKS before implementing it.
+6. Update the numbered task file's front matter and Outcomes, then mirror its
+   status in TASKS. Jira workflow status is informational and need not be
+   updated by an agent.
 7. Keep changes scoped. Preserve unrelated working-tree changes. When an
    action chain is changed, garbage collection must remain the final action.
-8. After every code change, run the mandatory generation, formatting, and lint
+8. Treat conversion and conversion tests as part of every v3 data-model
+   change. A v3 field/status/condition change is incomplete without explicit
+   v2 <-> v3 behavior and tests in the same change.
+9. After every code change, run the mandatory generation, formatting, and lint
    gates listed under Verification and include generated diffs.
 
 ## Outcome and boundaries
@@ -39,11 +49,13 @@ The completed operator must:
 - serve `datasciencecluster.opendatahub.io/v3` as the sole storage version and
   use typed v3 DSC objects throughout production reconciliation;
 - continue serving v2 through an explicit v2-to-v3 conversion webhook and
-  preserve v2 admission compatibility;
-- retire v1 only after stored-object migration makes removal valid;
+  preserve v2 admission compatibility while marking v2 deprecated;
+- remove v1 from the new operator and generated artifacts in Task 001; keep
+  those artifacts ineligible for upgrade promotion until separate Task 010
+  qualifies the odh-cli gate that migrates v1 storage to v2;
 - preserve the effective behavior of existing v2 objects and preserve all v3
   state through a v2 read-modify-write;
-- implement the frozen Dashboard, AI Hub, Feature Store, and Data Registry
+- implement the accepted Dashboard, AI Hub, Feature Store, and Data Registry
   public shapes and project them into the existing module APIs;
 - regenerate both ODH and RHOAI CRDs, bundles, webhooks, samples, API docs, and
   Go-generated artifacts; and
@@ -55,41 +67,50 @@ The following are not part of RHOAI 3.6 DSC v3:
 - renaming the internal Data/Feast CR, GVK, or module metadata;
 - Data Connection Hub integration;
 - removal of v2 serving or v2 admissions; and
-- `odh-cli`, product-documentation, or release-note implementation outside
-  this repository.
+- implementation of the odh-cli gate, product documentation, or release notes
+  outside this repository. The gate contract and operator-side integration and
+  qualification tests remain in scope.
 
-## Local decision record
+## Decision summary
 
-`Frozen` means implementation may rely on the decision. `Pending` is a hard
+This is a convenience summary. [decisions.md](decisions.md) is authoritative.
+`Accepted` means implementation may rely on the decision. `Proposed` is a hard
 gate. Issue keys identify provenance and ownership; they are not required
 reading.
 
 | ID | State | Normative decision | Unblocks |
 | --- | --- | --- | --- |
-| D1 | Frozen | v3 is the controller-runtime hub, CRD storage version, and production-internal DSC type. | API and internal migration |
-| D2 | Frozen | v2 stays served, becomes the only conversion spoke after v1 retirement, and retains version-compatible defaulting and validation. | Conversion and admissions |
-| D3 | Frozen | Empty `managementState` has the existing effective meaning `Removed`. | All handlers and conversions |
-| D4 | Frozen | Fields not explicitly changed by the final matrix retain v2 JSON names and semantics and are copied losslessly, including metadata, release data, conditions, and related objects. | Conversion |
-| D5 | Frozen | Public DSC naming may change, but internal AI Hub/Model Registry and Data/Feast module CR names and metadata remain unchanged in 3.6. | Component handlers |
-| D6 | Frozen | DCH is excluded. Feature Store and Data Registry are the only proposed children of `data`. | Data handler |
-| G1 | Pending (`94805`) | Choose the Dashboard v3 spec/status shape and final names for the core Dashboard and portal. | Dashboard schema, conversion, handler |
-| G2 | Pending (`95340`, `94809`) | Confirm the public JSON name `aiHub` versus the older `hub` proposal and approve its status and condition names. | AI Hub schema, conversion, handler |
-| G3 | Pending (`95339`, `94809`) | Confirm that `data` has no parent `managementState`, versus the older parent-gating proposal. | Data schema, conversion, handler |
-| G4 | Pending (`95340`, `94809`) | Define `aiHub.registriesNamespace` optionality, defaults, immutability, update rules, and absent-v2-field behavior. | AI Hub admissions and conversion |
-| G5 | Pending (`94809`) | Define conversion precedence when deprecated `kserve.modelsAsService` and canonical `aigateway.modelsAsAService` conflict. | MaaS conversion |
-| G6 | Pending (`94809`) | Define v3 read/write behavior for non-empty v2 `trainingoperator` and `llamastackoperator`, which have no proposed v3 fields. | Conversion and schema |
-| G7 | Pending (`94805`, `95339`, `95340`, `94809`) | Approve every changed spec, status, and condition mapping, including absent and empty values. | Generated schema and component completion |
-| G8 | Pending (`94814`) | Select a release/OLM-safe v1 storage migration and retirement staging strategy, including rollback boundaries. | Removal of v1 |
+| `DEC-001` | Accepted | v3 is the hub/storage/internal type and v2 remains served. | API and internal migration |
+| `DEC-002` | Accepted | Initial v3 is wire-equivalent to v2 and conversion is semantic identity. | Machinery milestone |
+| `DEC-003`, `DEC-007` | Accepted | Every future v3 data change includes bidirectional conversion, tests, and complete OpenAPI difference coverage. | All future v3 changes |
+| `DEC-004` | Accepted | V2/v3 use distinct GVK constants and admissions. | Admissions |
+| `DEC-005`, `DEC-006` | Accepted | Register conversion through v2 and use ConversionReview protocol `[v1]`. | Conversion webhook |
+| `DEC-008` | Accepted | Final v3 code/generated API removes v1. | V1-free end state |
+| `DEC-009` | Accepted (`94814`) | Run the idempotent odh-cli migration gate before OLM applies the v1-free CRD, then migrate storage from v2 to v3 after upgrade. | Task 010 and upgrade release |
+| `DEC-010` | Accepted | Empty `managementState` has effective value `Removed`. | Lifecycle behavior |
+| `DEC-011`, `DEC-012` | Accepted | Keep internal module identities and exclude DCH in 3.6. | Component handlers |
+| `DEC-013`, `DEC-014`, `DEC-016` | Accepted | Task 001 removes v1 without odh-cli work; the separate gate blocks upgrade release, and evolving v3 public types remain isolated. | Safe implementation sequence |
+| `DEC-015`, `DEC-019` | Accepted | Keep v2 served but deprecated and use the exact warning literal recorded in DEC-019. | V2 migration path |
+| `DEC-016` | Accepted | Task 001 excludes odh-cli work and may complete; future Task 010 blocks upgrade release until qualification passes. | Independent machinery development |
+| `DEC-017` | Accepted | Even with no DSC object, remove and verify v1 in `status.storedVersions`; only v1 already absent is mutation-free success. | Correct Task 010 gate behavior |
+| `DEC-018`, `DEC-020` | Proposed | Name the enforceable promotion control and complete supported execution matrix. | Task 010 start/completion and upgrade release |
+| `DEC-021` | Accepted | Do not refresh the independent v2 baseline for v3-only changes. | Reliable schema guard |
+| G1 | Proposed (`94805`) | Choose the Dashboard v3 spec/status shape and final names for the core Dashboard and portal. | Dashboard schema, conversion, handler |
+| G2 | Proposed (`95340`, `94809`) | Confirm the public JSON name `aiHub` versus the older `hub` proposal and approve its status and condition names. | AI Hub schema, conversion, handler |
+| G3 | Proposed (`95339`, `94809`) | Confirm that `data` has no parent `managementState`, versus the older parent-gating proposal. | Data schema, conversion, handler |
+| G4 | Proposed (`95340`, `94809`) | Define `aiHub.registriesNamespace` optionality, defaults, immutability, update rules, and absent-v2-field behavior. | AI Hub admissions and conversion |
+| G5 | Proposed (`94809`) | Define conversion precedence when deprecated `kserve.modelsAsService` and canonical `aigateway.modelsAsAService` conflict. | MaaS conversion |
+| G6 | Proposed (`94809`) | Define v3 read/write behavior for non-empty v2 `trainingoperator` and `llamastackoperator`, which have no proposed v3 fields. | Conversion and schema |
+| G7 | Proposed (`94805`, `95339`, `95340`, `94809`) | Approve every changed spec, status, and condition mapping, including absent and empty values. | Generated schema and component completion |
 
-To close a gate, replace `Pending` with `Frozen (YYYY-MM-DD)`, replace the
-proposal below with exact normative behavior, and record the approving source
-or owner in TASKS. A statement that the overall v3 direction is approved does
-not close a field-level gate.
+To close a gate, add an accepted decision with exact normative behavior to
+`decisions.md`, then replace `Proposed` here and update TASKS. A statement that
+the overall v3 direction is approved does not close a field-level gate.
 
 ## Embedded contract proposals
 
 These proposals capture all known input. They are implementation guidance only
-after the corresponding gates above are frozen.
+after corresponding accepted decisions are recorded in `decisions.md`.
 
 ### Unchanged surface
 
@@ -104,10 +125,10 @@ conditions, related objects, and error message must also survive conversion.
 
 | Concern | Current v2 shape | Latest proposed v3 shape | Required mapping |
 | --- | --- | --- | --- |
-| Dashboard | `dashboard.managementState`; `dashboard.maasConsumerPortal.managementState`; status fields `dashboard` and `maasConsumerPortal` | Final grouping and names pending G1/G7 | Preserve both existing effective states in both round trips; map status and `MaaSConsumerPortalAvailable` only after names are frozen. |
+| Dashboard | `dashboard.managementState`; `dashboard.maasConsumerPortal.managementState`; status fields `dashboard` and `maasConsumerPortal` | Final grouping and names pending G1/G7 | Preserve both existing effective states in both round trips; map status and `MaaSConsumerPortalAvailable` only after names are accepted. |
 | AI Hub | `modelregistry.managementState`; `modelregistry.registriesNamespace`; status `modelregistry`; condition `ModelRegistryReady` | `aiHub.managementState`; `aiHub.registriesNamespace`; final status/condition pending G2/G4/G7 | One-to-one spec mapping; retain namespace and effective state; map status/condition explicitly. Internal AIHub CR stays unchanged. |
 | Feature Store | `feastoperator.managementState` | `data.featureStore.managementState` | One-to-one lifecycle mapping. |
-| Data Registry | Proposed v2 compatibility field `feastoperator.dataRegistry.managementState` | `data.dataRegistry.managementState` | One-to-one lifecycle mapping if the compatibility field is frozen. Use a conversion annotation only if the final contract leaves state unrepresentable in v2. |
+| Data Registry | Proposed v2 compatibility field `feastoperator.dataRegistry.managementState` | `data.dataRegistry.managementState` | One-to-one lifecycle mapping if the compatibility field is accepted. Use a conversion annotation only if the final contract leaves state unrepresentable in v2. |
 | MaaS | Canonical `aigateway.modelsAsAService`; deprecated `kserve.modelsAsService` also exists | Only `aigateway.modelsAsAService` | Canonical value is the current runtime preference when explicitly set, but conversion conflict behavior remains gated by G5. |
 | Training Operator | Deprecated `trainingoperator` | Field omitted | Behavior for a non-empty legacy value remains gated by G6. |
 | Llama Stack Operator | Deprecated `llamastackoperator` | Field omitted; `ogx` remains | Behavior for a non-empty legacy value remains gated by G6. |
@@ -165,9 +186,14 @@ and that “customer” is too narrow for a portal with administration scenarios
 
 ### Conversion invariants
 
+- In the machinery milestone, v2 and v3 have identical Go/JSON schemas. The
+  v2 <-> v3 converter is therefore a semantic no-op: it copies the complete
+  object without renames, drops, defaults, or normalization.
+- Transforming conversion begins only after G1-G7 have accepted decisions and the v3 types
+  are changed by the component-contract milestone.
 - Conversion is deterministic, idempotent, and performs no cluster lookups.
 - `ObjectMeta` and every unchanged spec and status field are copied in both
-  directions. A field may be deliberately dropped only when the frozen matrix
+  directions. A field may be deliberately dropped only when the accepted matrix
   states how compatibility and effective behavior are preserved.
 - `v2 -> v3 -> v2` preserves every value representable by v2.
 - `v3 -> v2 -> v3` preserves every v3 value, including independent child
@@ -178,6 +204,30 @@ and that “customer” is too narrow for a portal with administration scenarios
 - Defaulting and validation stay outside conversion.
 - Empty management state is normalized to `Removed` only when code needs an
   effective state; do not rewrite absent API fields merely for normalization.
+
+### Required rule for every future v3 data-model change
+
+Every change to a v3 DSC spec/status type, nested component type, JSON name,
+optionality, default, validation, or condition is also a conversion change,
+even when the correct converter code remains an identity copy. The same pull
+request or commit must:
+
+1. identify the old v2 representation and the new v3 representation;
+2. define `v2 -> v3` behavior for populated, absent, empty, and invalid legacy
+   inputs;
+3. define `v3 -> v2` behavior, including how a v2 read-modify-write preserves
+   any value v2 cannot represent directly;
+4. update both conversion directions, or document why the existing explicit
+   copy is still correct;
+5. add focused forward, backward, and both round-trip tests for the changed
+   data, including status/condition mappings when applicable;
+6. update defaulting, validation, CRD schema, samples, and API docs when the
+   wire contract changes; and
+7. update a structural difference/coverage guard so a new v2/v3 field
+   difference cannot be added silently without an explicit mapping and test.
+
+A v3 data-model change must not merge with only handler or schema tests. The
+conversion tests are part of its definition of done.
 
 ## Current repository baseline
 
@@ -212,137 +262,180 @@ rg -n 'modelregistry|ModelRegistry|feastoperator|FeastOperator|MaaSConsumerPorta
 
 The first search should end with a small, documented allowlist containing only
 v2 conversion/admission compatibility and version-specific tests. The second
-must have no production hits after the approved v1 retirement phase.
+must have no production hits after the machinery milestone.
 
-## Executable implementation batches
+## Executable implementation milestones
 
-### Batch 0: freeze and encode the public contract
+### Milestone 1: establish v3 machinery without contract changes
 
-Entry: component-owner decisions are available for G1-G7.
+This is the first implementation step and is ready now. It deliberately uses
+the current v2 schema unchanged so it is independent of G1-G7.
+The executable task and living outcome record is
+[tasks/001.md](tasks/001.md).
 
-- Update the local decision record first.
-- Replace all provisional schemas with exact Go/JSON shapes.
-- Add a field-by-field matrix covering spec, status, condition names, absent
-  values, empty values, defaults, validation, update rules, and both conversion
+Task 001 is a roll-up. Execute its five records independently where their
+dependencies allow: [v3 API/baseline](tasks/001-01.md),
+[atomic conversion/v1 removal](tasks/001-02.md),
+[typed-v3 runtime migration](tasks/001-03.md),
+[v2 deprecation/generated delivery](tasks/001-04.md), and
+[milestone integration](tasks/001-05.md). Tests land with the subtask that
+changes behavior; the integration subtask does not defer them.
+
+#### 1. Introduce v3
+
+- Add `api/datasciencecluster/v3` by reproducing the current v2 DSC spec,
+  status, components, markers, validation annotations, group registration, and
+  list types exactly. Do not introduce Dashboard, AI Hub, Data, MaaS, or legacy
+  field changes in this milestone.
+- Generate v3 deepcopy code and register v3 in `PROJECT`, `cmd/main.go`, envtest
+  schemes, and all version-aware helpers.
+- Leave v2 as the temporary hub/storage version while 001-01 adds v3. In
+  001-02, move `+kubebuilder:storageversion` and `conversion.Hub` to v3
+  atomically with v2 spoke conversion activation and v1 deletion. Never leave a
+  compiling boundary where the existing v1 converter requires v2 as hub after
+  that marker has been removed.
+- Point component-codegen and new DSC fixtures/samples at v3.
+- Keep top-level v3 API types version-owned. Do not change shared component
+  types to introduce v3 behavior; create v3-owned nested types when a stanza
+  later diverges and protect v2 with an independent OpenAPI baseline.
+
+#### 2. Add identity v2 <-> v3 conversion
+
+- Implement `ConvertTo` and `ConvertFrom` on v2 with v3 as the hub.
+- Because the schemas are identical in this milestone, copy the complete
+  object semantically unchanged. Do not apply defaults, normalize management
+  states, rename fields, drop legacy fields, or invoke any cluster lookup.
+- Add whole-object tests showing `v2 -> v3 -> v2` and `v3 -> v2 -> v3`
+  semantic equality for populated spec, status, metadata, conditions, releases,
+  related objects, annotations, empty values, and deprecated fields. Ignore
+  only the expected target-version `TypeMeta`/GVK representation.
+- Register controller-runtime conversion through the v2 spoke, introduce
+  distinct v2/v3 GVK constants, and keep each admission handler bound to its
+  own GVK.
+- Generate `conversionReviewVersions: [v1]`; this is the Kubernetes protocol
+  version, not a list of DSC versions.
+- Exercise real `/convert` `ConversionReview` requests in both directions with
+  one and multiple objects.
+
+#### 3. Move production code from v2 to v3
+
+- Change the DSC reconciler, component registry, module `DSCContext`, handler
+  interfaces, base-handler reflection/status writers, all component/module
+  handlers, predicates, initial-install helpers, comparison utilities,
+  generators, and production utilities to typed v3.
+- Update tests and fixtures alongside each package. After this step, v2 imports
+  are allowed only in v2 conversion, v2 admissions, and explicit compatibility
+  tests.
+- Re-check every touched action chain and keep garbage collection last.
+
+#### 4. Remove v1 and record the separate release gate
+
+- Remove v1 in Task 001 without implementing or qualifying odh-cli. Task 010 is
+  the separate future release-gate task.
+- Remove the v1 API, conversion, admissions, scheme and `PROJECT` registration,
+  generated serving, fixtures, and obsolete version-specific tests. Preserve
+  behavioral coverage by moving relevant cases to v2/v3 tests.
+- Move shared `/convert` registration to the v2 spoke before deleting its v1
+  registration path. No v1 <-> v3 converter is required in the new operator.
+- Delete the AI Gateway conversion annotation only after confirming that no
+  v2/v3 or other consumer requires it.
+- Mark the v1-free artifacts ineligible for upgrade promotion until Task 010
+  proves DEC-009's odh-cli migration, `status.storedVersions`, OLM ordering,
+  retry, and rollback contract.
+
+#### 5. Amend tests and generated artifacts
+
+- Add identity conversion unit and webhook/envtest round-trip coverage.
+- Add a structural coverage test that compares complete normalized v2/v3
+  generated OpenAPI schemas, including path, type, requiredness, nullability,
+  default, enum, CEL, and list/map semantics. Its expected-difference set is
+  empty in Milestone 1; later differences must link to focused conversion cases.
+- Port controller, handler, admission, initial-install, comparison, and E2E
+  helpers to v3 while retaining explicit v2 client compatibility tests.
+- Assert that v3 is the only storage version, v2/v3 are served, v1 is absent,
+  `/convert` is configured through v2, `conversionReviewVersions` is `[v1]`,
+  and v2/v3 admissions remain version-correct. Assert v2 has
+  `deprecated: true` and DEC-019's exact `deprecationWarning` literal.
+- Regenerate every ODH and RHOAI artifact and run all mandatory gates.
+
+Milestone 1 exit criteria:
+
+- V2 and v3 expose the same schema and identity conversion is lossless in both
   directions.
-- State the resolution for Dashboard names, `aiHub`/`hub`, Data parent state,
-  registries namespace, MaaS conflicts, and removed legacy fields.
+- Production reconciliation exclusively uses typed v3 objects.
+- V1 code and serving are absent. Upgrade release remains blocked until Task
+  010 proves v1 storage is removed before the v1-free CRD is installed.
+- Generated CRDs serve deprecated v2 and v3 with v3 as the sole storage version.
+- G1-G7 remain proposed and no proposed component stanza is encoded.
 
-Exit: no changed public field or compatibility behavior is marked pending, and
-the component handler tasks have an unambiguous contract.
+### Milestone 2: freeze and encode component contracts
 
-### Batch 1: add the v3 API and v2 spoke
+Entry: Milestone 1 is complete and component-owner decisions are available for
+G1-G7.
 
-Entry: Batch 0 is complete.
+Execution records: [Dashboard contract](tasks/002.md),
+[Data contract](tasks/003.md), [AI Hub contract](tasks/004.md),
+[consolidated matrix](tasks/005.md), and
+[API/conversion implementation](tasks/006.md).
 
-- Add `api/datasciencecluster/v3` with group/version registration, DSC/list,
-  spec/status/components, hub marker, and generated deepcopy code.
-- Start from v2 and apply only frozen differences. Use version-specific types
-  where sharing would leak a v3 schema change into v2 or module APIs.
-- Move the storage marker and `Hub()` implementation to v3. Implement
-  `ConvertTo`/`ConvertFrom` on v2 against v3.
-- Keep v2 public JSON stable except for a compatibility field explicitly
-  frozen by Batch 0.
-- Update `PROJECT`, scheme registration, and component-codegen's DSC target.
+- Update the local decision record before code.
+- Replace provisional schemas with exact Go/JSON shapes and complete the
+  field-by-field spec/status/condition/conversion matrix.
+- Implement the Dashboard, AI Hub, Data, MaaS, and legacy-field changes in v3.
+- Change the formerly identity converter only for accepted schema differences;
+  unchanged fields must retain the Milestone 1 copy behavior.
+- Apply DEC-003 and DEC-007 to every changed spec/status/condition field: conversion code,
+  structural-difference inventory, and focused bidirectional/round-trip tests
+  land together.
+- Update v2 compatibility types only where the accepted contract explicitly
+  requires a representable compatibility field.
 
-Exit: conversion unit tests cover every matrix row and both full round trips;
-generated CRD assertions show one storage version (v3) while all versions
-required for the retirement stage remain served.
+Exit: G1-G7 have accepted decisions, every changed field has deterministic bidirectional
+conversion, and generated v2/v3 schemas match the approved contract.
 
-### Batch 2: migrate production reconciliation to typed v3
+### Milestone 3: integrate component projections and admissions
 
-Entry: v3 types compile and conversion tests pass.
+Execution records: [Dashboard](tasks/007.md), [AI Hub](tasks/008.md), and
+[Data](tasks/009.md).
 
-- Change the DSC reconciler, registry interfaces, `DSCContext`, module handler
-  status interfaces/reflection, status aggregation, predicates,
-  initial-install helpers, comparison utilities, and all component handlers to
-  v3.
-- Update unit fixtures and helpers as each subsystem moves; retain explicit v2
-  objects only in compatibility tests and conversion/admission code.
-- Re-check every controller action chain and keep garbage collection last.
-
-Exit: production v2 imports match the documented compatibility allowlist; the
-operator builds and unit tests pass for both ODH and RHOAI build behavior.
-
-### Batch 3: integrate component-owned projections
-
-Entry: relevant G1-G7 rows are frozen and Batch 2 provides typed v3 context.
-
-- Dashboard: project the frozen core/portal shape into the existing Dashboard
-  module CR and mirror each approved status and condition while preserving v2
-  behavior.
-- AI Hub: project public AI Hub state/namespace into the existing `default-aihub`
-  resource and existing internal naming. Preserve build-specific namespace
-  defaults and legacy status only as required by the frozen matrix.
+- Dashboard: project the accepted core/portal shape into the existing Dashboard
+  module CR and mirror the approved status/conditions.
+- AI Hub: project the public AI Hub shape into the existing `default-aihub`
+  internal resource without performing the deferred rename.
 - Data: project Feature Store and Data Registry independently into the existing
-  Data/Feast module API. Preserve Feast OIDC projection. Add no DCH fields and
-  perform no internal rename.
-- Update vendored/module CRD schemas, schema-compliance tests, handler tests,
-  lifecycle/status tests, and generated artifacts for each component.
+  Data/Feast module while retaining OIDC behavior and excluding DCH.
+- Adapt v3 defaulting/validation to changed fields. Keep v2 admission behavior
+  compatible with v3 storage.
+- Add handler, lifecycle, readiness, status, admission, conversion, and schema
+  tests for all accepted state combinations.
 
-Exit: all state combinations produce the frozen module CR, operator lifecycle,
-DSC status, and conditions, including independent child removal where defined.
+Exit: each public stanza produces the approved internal resource behavior and
+DSC status while v2 clients remain compatible.
 
-### Batch 4: add v3 admissions and preserve v2 behavior
+### Milestone 4: final release and upgrade qualification
 
-Entry: v3 schema is frozen.
+Execution records: [odh-cli gate qualification](tasks/010.md) and
+[final integration/release qualification](tasks/011.md).
 
-- Register v3 defaulting/validation handlers, markers, routes, and envtest
-  scheme support.
-- Port common v2 rules and adapt only rules whose fields changed.
-- Keep v2 admissions and warnings compatible with conversion to v3 storage.
-- Remove v1 registration and tests only in the retirement batch selected by
-  G8. Do not use conversion failures as validation.
+- Qualify the odh-cli pre-upgrade gate from every supported source release and
+  prove OLM never applies the v1-free CRD while v1 remains in
+  `status.storedVersions`.
+- Add upgrade coverage from the gate's v2 storage state to RHOAI 3.6 v3 storage
+  for ODH and RHOAI, including v2/v3 read-update cycles and all changed
+  component behaviors.
+- Verify final served/storage versions and `status.storedVersions`.
 
-Exit: create/update/default/validation tests pass through v2 and v3, including
-empty fields, immutable fields, deprecated MaaS warnings, and platform-specific
-defaults.
-
-### Batch 5: retire v1 safely
-
-Entry: G8 is frozen with a tested delivery sequence.
-
-Kubernetes requires an old version to be absent from `status.storedVersions`
-before it is removed from CRD `spec.versions`; changing `storage: true` alone
-does not rewrite stored objects. The selected implementation must therefore:
-
-1. serve v3 as storage while conversion still supports every possibly stored
-   version;
-2. rewrite the singleton DSC through v3, or use a migration mechanism supported
-   by every target OpenShift version;
-3. idempotently verify and remove v1 from `status.storedVersions`, with retries
-   safe after interruption;
-4. only then stop serving v1 and remove its CRD schema, scheme, webhooks,
-   conversion, and production tests; and
-5. enforce the approved rollback boundary.
-
-If OLM applies the CRD before the new operator can migrate storage, these steps
-cannot be delivered as a single manifest transition. Implement the staged
-strategy recorded by G8 rather than collapsing it.
-
-Exit: fresh install, upgrade, retry-after-interruption, final storedVersions,
-and supported rollback tests pass.
-
-### Batch 6: generated deliverables and end-to-end proof
-
-- Regenerate ODH and RHOAI CRD bases, conversion patches, webhook manifests,
-  RBAC if changed, bundle/CSV content, API references, deepcopy/object code,
-  and samples.
-- Make v3 the primary ODH and RHOAI sample. Retain focused v2 fixtures only for
-  compatibility/upgrade tests.
-- Add upgrade coverage from RHOAI 3.5 v2 storage to 3.6 v3 storage for both
-  platform variants, including Dashboard, Model Registry/AI Hub, Feast/Data,
-  legacy MaaS, v2/v3 read-update cycles, status/conditions, and independent
-  removals.
-- Verify the final served/storage version set and `status.storedVersions`.
-
-Exit: all acceptance tests and quality gates below pass with reviewed generated
-diffs.
+Exit: fresh install, supported upgrade, interrupted retry, and rollback tests
+pass with reviewed generated artifacts.
 
 ## Verification and acceptance
 
 Minimum automated scenarios:
 
+- Milestone 1 whole-object identity conversion in both directions while v2 and
+  v3 schemas are identical;
+- a v2/v3 structural-difference guard whose explicit inventory has focused
+  conversion coverage for every listed path;
 - table-driven spec/status/condition conversion for every changed field;
 - `v2 -> v3 -> v2` preservation of every v2-representable value;
 - `v3 -> v2 -> v3` preservation of every v3 value;
@@ -350,8 +443,11 @@ Minimum automated scenarios:
 - v2 and v3 admission defaulting, validation, warnings, and update rules;
 - Dashboard, AI Hub, Feature Store, and Data Registry handler projections,
   lifecycle, readiness, releases, legacy status, and removal;
-- generated schema: exactly one storage version, correct served versions,
-  `/convert` configured, and no premature v1 removal;
+- generated Milestone 1 schema: deprecated v2 and v3 served, exactly v3
+  storage, v1 absent, `/convert` registered through v2, and ConversionReview
+  protocol `[v1]`;
+- odh-cli pre-upgrade gating before the v1-free CRD, followed by verified v3
+  storage migration and safe `status.storedVersions` cleanup;
 - ODH and RHOAI fresh install and supported upgrade; and
 - idempotent storage migration, interrupted retry, and approved rollback.
 
