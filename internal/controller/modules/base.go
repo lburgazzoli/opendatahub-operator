@@ -21,7 +21,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
@@ -190,14 +190,14 @@ func (b *BaseHandler) GetSubmoduleConditions() []SubmoduleCondition {
 // The field is resolved via reflection using Config.GVK.Kind. Modules
 // without a matching field on ComponentsStatus (e.g. service modules) are
 // silently skipped.
-func (b *BaseHandler) WriteDSCComponentStatus(dsc *dscv2.DataScienceCluster, enabled bool, releases []common.ComponentRelease) {
+func (b *BaseHandler) WriteDSCComponentStatus(dsc *dscv3.DataScienceCluster, enabled bool, releases []common.ComponentRelease) {
 	setDSCComponentField(dsc, b.Config.GVK.Kind, enabled, releases)
 }
 
 // setDSCComponentField sets ManagementState and releases on a named field
 // of dsc.Status.Components using reflection. Used by both module-level
 // and submodule-level status writers.
-func setDSCComponentField(dsc *dscv2.DataScienceCluster, fieldName string, enabled bool, releases []common.ComponentRelease) {
+func setDSCComponentField(dsc *dscv3.DataScienceCluster, fieldName string, enabled bool, releases []common.ComponentRelease) {
 	if dsc == nil || fieldName == "" {
 		return
 	}

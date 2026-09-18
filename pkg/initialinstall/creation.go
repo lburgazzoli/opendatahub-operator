@@ -11,7 +11,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	dsciv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v2"
 	serviceApi "github.com/opendatahub-io/opendatahub-operator/v2/api/services/v1alpha1"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
@@ -21,16 +21,16 @@ import (
 // Note: When the platform is not Managed, and a DSC instance already exists, the function doesn't re-create/update the resource.
 func CreateDefaultDSC(ctx context.Context, cli client.Client) error {
 	// Set the default DSC name depending on the platform
-	releaseDataScienceCluster := &dscv2.DataScienceCluster{
+	releaseDataScienceCluster := &dscv3.DataScienceCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "DataScienceCluster",
-			APIVersion: "datasciencecluster.opendatahub.io/v2",
+			APIVersion: "datasciencecluster.opendatahub.io/v3",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "default-dsc",
 		},
-		Spec: dscv2.DataScienceClusterSpec{
-			Components: dscv2.Components{
+		Spec: dscv3.DataScienceClusterSpec{
+			Components: dscv3.Components{
 				Dashboard: componentApi.DSCDashboard{
 					ManagementSpec: common.ManagementSpec{ManagementState: operatorv1.Managed},
 				},

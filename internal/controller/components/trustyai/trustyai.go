@@ -13,7 +13,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/conditions"
@@ -41,7 +41,7 @@ func (s *componentHandler) GroupVersionKind() schema.GroupVersionKind {
 	return componentApi.GroupVersion.WithKind(componentApi.TrustyAIKind)
 }
 
-func (s *componentHandler) NewCRObject(_ context.Context, _ client.Client, dsc *dscv2.DataScienceCluster) (common.PlatformObject, error) {
+func (s *componentHandler) NewCRObject(_ context.Context, _ client.Client, dsc *dscv3.DataScienceCluster) (common.PlatformObject, error) {
 	// Create a proper deep copy to avoid modifying the original DSC
 	spec := componentApi.TrustyAICommonSpec{}
 
@@ -92,7 +92,7 @@ func (s *componentHandler) Init(platform common.Platform, cfg operatorconfig.Ope
 	return nil
 }
 
-func (s *componentHandler) IsEnabled(dsc *dscv2.DataScienceCluster) bool {
+func (s *componentHandler) IsEnabled(dsc *dscv3.DataScienceCluster) bool {
 	return dsc.Spec.Components.TrustyAI.ManagementState == operatorv1.Managed
 }
 
@@ -106,7 +106,7 @@ func (s *componentHandler) UpdateDSCStatus(ctx context.Context, rr *types.Reconc
 		return cs, nil
 	}
 
-	dsc, ok := rr.Instance.(*dscv2.DataScienceCluster)
+	dsc, ok := rr.Instance.(*dscv3.DataScienceCluster)
 	if !ok {
 		return cs, errors.New("failed to convert to DataScienceCluster")
 	}

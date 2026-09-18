@@ -17,7 +17,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	dsciv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v2"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
@@ -401,8 +401,8 @@ func TestInitializeWithMCPGuardrailsMode(t *testing.T) {
 	})
 }
 
-func createDSCWithTrustyAI(managementState operatorv1.ManagementState) *dscv2.DataScienceCluster {
-	dsc := dscv2.DataScienceCluster{}
+func createDSCWithTrustyAI(managementState operatorv1.ManagementState) *dscv3.DataScienceCluster {
+	dsc := dscv3.DataScienceCluster{}
 	dsc.SetGroupVersionKind(gvk.DataScienceCluster)
 	dsc.SetName("test-dsc")
 

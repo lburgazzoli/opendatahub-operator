@@ -9,7 +9,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules/aigateway"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
@@ -25,10 +25,10 @@ func newPlatformModules(mgmtState operatorv1.ManagementState) *configv1alpha1.Pl
 	}
 }
 
-func newDSC(mgmtState operatorv1.ManagementState) *dscv2.DataScienceCluster {
-	return &dscv2.DataScienceCluster{
-		Spec: dscv2.DataScienceClusterSpec{
-			Components: dscv2.Components{
+func newDSC(mgmtState operatorv1.ManagementState) *dscv3.DataScienceCluster {
+	return &dscv3.DataScienceCluster{
+		Spec: dscv3.DataScienceClusterSpec{
+			Components: dscv3.Components{
 				AIGateway: componentApi.DSCAIGateway{
 					ManagementSpec: common.ManagementSpec{
 						ManagementState: mgmtState,
@@ -96,9 +96,9 @@ func TestPopulatePlatformModule_NilDSC(t *testing.T) {
 func TestPopulatePlatformModule_LegacyKserveFallback(t *testing.T) {
 	g := NewWithT(t)
 	h := aigateway.NewHandler()
-	dsc := &dscv2.DataScienceCluster{
-		Spec: dscv2.DataScienceClusterSpec{
-			Components: dscv2.Components{
+	dsc := &dscv3.DataScienceCluster{
+		Spec: dscv3.DataScienceClusterSpec{
+			Components: dscv3.Components{
 				Kserve: componentApi.DSCKserve{
 					ManagementSpec: common.ManagementSpec{ManagementState: operatorv1.Managed},
 					KserveCommonSpec: componentApi.KserveCommonSpec{
@@ -116,9 +116,9 @@ func TestPopulatePlatformModule_LegacyKserveFallback(t *testing.T) {
 func TestPopulatePlatformModule_ExplicitRemovedWinsOverLegacy(t *testing.T) {
 	g := NewWithT(t)
 	h := aigateway.NewHandler()
-	dsc := &dscv2.DataScienceCluster{
-		Spec: dscv2.DataScienceClusterSpec{
-			Components: dscv2.Components{
+	dsc := &dscv3.DataScienceCluster{
+		Spec: dscv3.DataScienceClusterSpec{
+			Components: dscv3.Components{
 				AIGateway: componentApi.DSCAIGateway{
 					ManagementSpec: common.ManagementSpec{ManagementState: operatorv1.Removed},
 				},
@@ -141,9 +141,9 @@ func TestPopulatePlatformModule_ExplicitRemovedWinsOverLegacy(t *testing.T) {
 func TestBuildModuleCR_LegacyKserveModelsAsService_PopulatesModelsAsAService(t *testing.T) {
 	g := NewWithT(t)
 	h := aigateway.NewHandler()
-	dsc := &dscv2.DataScienceCluster{
-		Spec: dscv2.DataScienceClusterSpec{
-			Components: dscv2.Components{
+	dsc := &dscv3.DataScienceCluster{
+		Spec: dscv3.DataScienceClusterSpec{
+			Components: dscv3.Components{
 				Kserve: componentApi.DSCKserve{
 					ManagementSpec: common.ManagementSpec{
 						ManagementState: operatorv1.Managed,
@@ -175,9 +175,9 @@ func TestBuildModuleCR_LegacyKserveModelsAsService_PopulatesModelsAsAService(t *
 func TestBuildModuleCR_ExplicitModelsAsAServiceWinsOverLegacy(t *testing.T) {
 	g := NewWithT(t)
 	h := aigateway.NewHandler()
-	dsc := &dscv2.DataScienceCluster{
-		Spec: dscv2.DataScienceClusterSpec{
-			Components: dscv2.Components{
+	dsc := &dscv3.DataScienceCluster{
+		Spec: dscv3.DataScienceClusterSpec{
+			Components: dscv3.Components{
 				AIGateway: componentApi.DSCAIGateway{
 					ManagementSpec: common.ManagementSpec{ManagementState: operatorv1.Managed},
 					AIGatewayCommonSpec: componentApi.AIGatewayCommonSpec{

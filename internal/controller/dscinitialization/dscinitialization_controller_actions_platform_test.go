@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	dsciv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v2"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/fakeclient"
@@ -29,7 +29,7 @@ func TestReconcileDSCIModulesPreservesExistingOwner(t *testing.T) {
 		Name: "default-dsci",
 		UID:  types.UID("dsci-uid"),
 	}}
-	dsc := &dscv2.DataScienceCluster{ObjectMeta: metav1.ObjectMeta{
+	dsc := &dscv3.DataScienceCluster{ObjectMeta: metav1.ObjectMeta{
 		Name: "default-dsc",
 		UID:  types.UID("dsc-uid"),
 	}}

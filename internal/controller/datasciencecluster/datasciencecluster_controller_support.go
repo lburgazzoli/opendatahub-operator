@@ -11,7 +11,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components"
 	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
@@ -34,7 +34,7 @@ func computeComponentsStatus(
 	rr *types.ReconciliationRequest,
 	reg *cr.Registry,
 ) error {
-	instance, ok := rr.Instance.(*dscv2.DataScienceCluster)
+	instance, ok := rr.Instance.(*dscv3.DataScienceCluster)
 	if !ok {
 		return errors.New("failed to convert to DataScienceCluster")
 	}
@@ -97,7 +97,7 @@ func computeComponentsStatus(
 // check replaces it so customers see the Obsolete condition without requiring
 // handler infrastructure (CRD, informer, PROJECT entry) on fresh clusters.
 func updateDeprecatedTrainingOperatorStatus(rr *types.ReconciliationRequest) error {
-	dsc, ok := rr.Instance.(*dscv2.DataScienceCluster)
+	dsc, ok := rr.Instance.(*dscv3.DataScienceCluster)
 	if !ok {
 		return errors.New("failed to convert to DataScienceCluster")
 	}

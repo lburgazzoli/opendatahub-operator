@@ -19,7 +19,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
@@ -59,7 +59,7 @@ func modulesFromInstance(_ context.Context, rr *odhtype.ReconciliationRequest) (
 	if p, ok := rr.Instance.(*configv1alpha1.Platform); ok {
 		return &p.Spec.Modules, nil
 	}
-	if dsc, ok := rr.Instance.(*dscv2.DataScienceCluster); ok {
+	if dsc, ok := rr.Instance.(*dscv3.DataScienceCluster); ok {
 		pm := BuildPlatformModulesForSource(&DSCContext{DSC: dsc}, ConfigFromDSC)
 		return &pm, nil
 	}
@@ -541,7 +541,7 @@ func writeDSCLegacyStatusFields(
 	ctx context.Context,
 	cli client.Client,
 	handler ModuleHandler,
-	dsc *dscv2.DataScienceCluster,
+	dsc *dscv3.DataScienceCluster,
 	enabled bool,
 ) error {
 	if dsc == nil {
@@ -793,7 +793,7 @@ func (e *modulesEvaluation) writeAggregateCondition(conditions *conditions.Manag
 func ComputeModulesStatusDetailed(ctx context.Context, rr *odhtype.ReconciliationRequest) error {
 	log := logf.FromContext(ctx)
 
-	dsc, ok := rr.Instance.(*dscv2.DataScienceCluster)
+	dsc, ok := rr.Instance.(*dscv3.DataScienceCluster)
 	if !ok {
 		return fmt.Errorf("ComputeModulesStatusDetailed requires DataScienceCluster instance, got %T", rr.Instance)
 	}

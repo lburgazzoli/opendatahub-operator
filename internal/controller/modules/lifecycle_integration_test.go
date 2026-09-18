@@ -14,7 +14,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	dsciv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v2"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/conditions"
@@ -86,15 +86,15 @@ func (s *lifecycleModuleStub) DeleteOperatorResources(_ context.Context, _ clien
 	return nil
 }
 
-func (s *lifecycleModuleStub) WriteDSCComponentStatus(*dscv2.DataScienceCluster, bool, []common.ComponentRelease) {
+func (s *lifecycleModuleStub) WriteDSCComponentStatus(*dscv3.DataScienceCluster, bool, []common.ComponentRelease) {
 }
 
 func (s *lifecycleModuleStub) GetDeploymentName() string { return s.name + "-controller-manager" }
 
-func lifecycleRR(t *testing.T) (*types.ReconciliationRequest, *dscv2.DataScienceCluster) {
+func lifecycleRR(t *testing.T) (*types.ReconciliationRequest, *dscv3.DataScienceCluster) {
 	t.Helper()
 
-	dsc := &dscv2.DataScienceCluster{
+	dsc := &dscv3.DataScienceCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: lifecycleTestDSC, UID: "uid-lifecycle"},
 	}
 	dsci := &dsciv2.DSCInitialization{

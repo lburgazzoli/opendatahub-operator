@@ -19,7 +19,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
 
@@ -36,9 +36,9 @@ func newPlatformModules(mgmtState operatorv1.ManagementState) *configv1alpha1.Pl
 
 func newDSCCtx(mgmtState operatorv1.ManagementState) *modules.DSCContext {
 	return &modules.DSCContext{
-		DSC: &dscv2.DataScienceCluster{
-			Spec: dscv2.DataScienceClusterSpec{
-				Components: dscv2.Components{
+		DSC: &dscv3.DataScienceCluster{
+			Spec: dscv3.DataScienceClusterSpec{
+				Components: dscv3.Components{
 					Workbenches: componentApi.DSCWorkbenches{
 						ManagementSpec: common.ManagementSpec{
 							ManagementState: mgmtState,
@@ -207,9 +207,9 @@ func TestGetName(t *testing.T) {
 func TestWriteLegacyStatusFields_MirrorsFromDSCSpec(t *testing.T) {
 	g := NewWithT(t)
 	h := NewHandler()
-	dsc := &dscv2.DataScienceCluster{
-		Spec: dscv2.DataScienceClusterSpec{
-			Components: dscv2.Components{
+	dsc := &dscv3.DataScienceCluster{
+		Spec: dscv3.DataScienceClusterSpec{
+			Components: dscv3.Components{
 				Workbenches: componentApi.DSCWorkbenches{
 					WorkbenchesCommonSpec: componentApi.WorkbenchesCommonSpec{
 						WorkbenchNamespace: "rhods-notebooks",
@@ -227,9 +227,9 @@ func TestWriteLegacyStatusFields_MirrorsFromDSCSpec(t *testing.T) {
 func TestWriteLegacyStatusFields_ClearsWhenDisabled(t *testing.T) {
 	g := NewWithT(t)
 	h := NewHandler()
-	dsc := &dscv2.DataScienceCluster{
-		Spec: dscv2.DataScienceClusterSpec{
-			Components: dscv2.Components{
+	dsc := &dscv3.DataScienceCluster{
+		Spec: dscv3.DataScienceClusterSpec{
+			Components: dscv3.Components{
 				Workbenches: componentApi.DSCWorkbenches{
 					WorkbenchesCommonSpec: componentApi.WorkbenchesCommonSpec{
 						WorkbenchNamespace: "rhods-notebooks",
@@ -250,9 +250,9 @@ func TestWriteLegacyStatusFields_ClearsWhenDisabled(t *testing.T) {
 func TestWriteLegacyStatusFields_ClearsWhenSpecEmpty(t *testing.T) {
 	g := NewWithT(t)
 	h := NewHandler()
-	dsc := &dscv2.DataScienceCluster{
-		Spec: dscv2.DataScienceClusterSpec{
-			Components: dscv2.Components{
+	dsc := &dscv3.DataScienceCluster{
+		Spec: dscv3.DataScienceClusterSpec{
+			Components: dscv3.Components{
 				Workbenches: componentApi.DSCWorkbenches{
 					WorkbenchesCommonSpec: componentApi.WorkbenchesCommonSpec{
 						WorkbenchNamespace: "rhods-notebooks",

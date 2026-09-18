@@ -10,7 +10,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules/sparkoperator"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
@@ -21,7 +21,7 @@ import (
 const testAppsNS = "opendatahub"
 
 func newDSCContext(mgmtState operatorv1.ManagementState) *modules.DSCContext {
-	dsc := &dscv2.DataScienceCluster{
+	dsc := &dscv3.DataScienceCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-dsc"},
 	}
 	dsc.Spec.Components.SparkOperator.ManagementState = mgmtState

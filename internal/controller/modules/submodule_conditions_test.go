@@ -14,7 +14,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/conditions"
 	odhtype "github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
@@ -45,7 +45,7 @@ func newTestRR() (*odhtype.ReconciliationRequest, *conditions.Manager) {
 
 func newTestDSCCtx() *DSCContext {
 	return &DSCContext{
-		DSC: &dscv2.DataScienceCluster{},
+		DSC: &dscv3.DataScienceCluster{},
 	}
 }
 
@@ -465,7 +465,7 @@ func TestWriteDSCComponentStatus_FieldResolution(t *testing.T) {
 
 	for _, kind := range knownKinds {
 		h := &BaseHandler{Config: ModuleConfig{GVK: schema.GroupVersionKind{Kind: kind}}}
-		dsc := &dscv2.DataScienceCluster{}
+		dsc := &dscv3.DataScienceCluster{}
 		h.WriteDSCComponentStatus(dsc, true, nil)
 
 		field := reflect.ValueOf(&dsc.Status.Components).Elem().FieldByName(kind)

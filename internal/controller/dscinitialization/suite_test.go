@@ -47,7 +47,7 @@ import (
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	dsciv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v2"
 	featuresv1 "github.com/opendatahub-io/opendatahub-operator/v2/api/features/v1"
 	infrav1 "github.com/opendatahub-io/opendatahub-operator/v2/api/infrastructure/v1"
@@ -129,7 +129,7 @@ var _ = BeforeSuite(func() {
 
 	utilruntime.Must(clientgoscheme.AddToScheme(testScheme))
 	utilruntime.Must(dsciv2.AddToScheme(testScheme))
-	utilruntime.Must(dscv2.AddToScheme(testScheme))
+	utilruntime.Must(dscv3.AddToScheme(testScheme))
 	utilruntime.Must(featuresv1.AddToScheme(testScheme))
 	utilruntime.Must(networkingv1.AddToScheme(testScheme))
 	utilruntime.Must(rbacv1.AddToScheme(testScheme))

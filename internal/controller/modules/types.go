@@ -9,7 +9,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	dsciv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v2"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/dag"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/controller/types"
@@ -106,7 +106,7 @@ type ModuleHandler interface {
 	// (e.g. dsc.Status.Components.AIGateway). Called during status
 	// computation so the DSC status reflects each module's current
 	// management state and release metadata.
-	WriteDSCComponentStatus(dsc *dscv2.DataScienceCluster, enabled bool, releases []common.ComponentRelease)
+	WriteDSCComponentStatus(dsc *dscv3.DataScienceCluster, enabled bool, releases []common.ComponentRelease)
 }
 
 // DSCLegacyStatusFieldsWriter is an optional interface for modules that mirror
@@ -116,7 +116,7 @@ type ModuleHandler interface {
 // TODO: Remove this extension point when downstream consumers (e.g. odh-dashboard)
 // read those fields directly from module CRs instead of DSC status.
 type DSCLegacyStatusFieldsWriter interface {
-	WriteLegacyStatusFields(ctx context.Context, cli client.Client, dsc *dscv2.DataScienceCluster, enabled bool) error
+	WriteLegacyStatusFields(ctx context.Context, cli client.Client, dsc *dscv3.DataScienceCluster, enabled bool) error
 }
 
 // ReadyConditionTyper allows a module handler to declare the condition type
@@ -253,7 +253,7 @@ type ModuleCRConfig struct {
 // (for PopulatePlatformModule) or return an error (for BuildModuleCR).
 type DSCContext struct {
 	// DSC is the DataScienceCluster instance. Nil when called from the DSCI controller.
-	DSC *dscv2.DataScienceCluster
+	DSC *dscv3.DataScienceCluster
 	// DSCI is the DSCInitialization instance. Nil when called from the DSC
 	// controller. Required by DSCI-configured modules such as monitoring.
 	DSCI *dsciv2.DSCInitialization

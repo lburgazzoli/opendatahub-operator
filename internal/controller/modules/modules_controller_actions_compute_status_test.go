@@ -14,7 +14,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	dsciv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v2"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster"
@@ -96,7 +96,7 @@ func setupStatusTest(t *testing.T, handlers ...*statusTestHandler) (*odhtype.Rec
 		r.Add(h)
 	}
 
-	dsc := &dscv2.DataScienceCluster{
+	dsc := &dscv3.DataScienceCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "default-dsc"},
 	}
 
@@ -204,7 +204,7 @@ func TestComputeModulesStatusDetailed_SkipsDSCIConfiguredModules(t *testing.T) {
 	r.Add(hDSCI, WithConfigSource(ConfigFromDSCI))
 	t.Cleanup(func() { r = oldR })
 
-	dsc := &dscv2.DataScienceCluster{
+	dsc := &dscv3.DataScienceCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "default-dsc"},
 	}
 	cli, err := fakeclient.New()
@@ -416,7 +416,7 @@ func TestComputeModulesStatusDetailed_StatusError_SubmodulesNotMarkedRemoved(t *
 	err := ComputeModulesStatusDetailed(t.Context(), rr)
 	g.Expect(err).ShouldNot(HaveOccurred())
 
-	dsc, ok := rr.Instance.(*dscv2.DataScienceCluster)
+	dsc, ok := rr.Instance.(*dscv3.DataScienceCluster)
 	g.Expect(ok).Should(BeTrue())
 
 	batchCond := rr.Conditions.GetCondition("BatchGatewayReady")
@@ -455,7 +455,7 @@ func TestComputeModulesStatusDetailed_StaleStatus_SubmodulesNotMarkedRemoved(t *
 	err := ComputeModulesStatusDetailed(t.Context(), rr)
 	g.Expect(err).ShouldNot(HaveOccurred())
 
-	dsc, ok := rr.Instance.(*dscv2.DataScienceCluster)
+	dsc, ok := rr.Instance.(*dscv3.DataScienceCluster)
 	g.Expect(ok).Should(BeTrue())
 
 	batchCond := rr.Conditions.GetCondition("BatchGatewayReady")

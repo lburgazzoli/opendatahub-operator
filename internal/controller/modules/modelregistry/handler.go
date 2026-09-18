@@ -11,7 +11,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/modules"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
@@ -72,7 +72,7 @@ func (h *handler) GetReadyConditionType() string {
 	return componentApi.ModelRegistryKind + status.ReadySuffix
 }
 
-func (h *handler) WriteDSCComponentStatus(dsc *dscv2.DataScienceCluster, enabled bool, releases []common.ComponentRelease) {
+func (h *handler) WriteDSCComponentStatus(dsc *dscv3.DataScienceCluster, enabled bool, releases []common.ComponentRelease) {
 	if dsc == nil {
 		return
 	}
@@ -102,7 +102,7 @@ func (h *handler) WriteDSCComponentStatus(dsc *dscv2.DataScienceCluster, enabled
 func (h *handler) WriteLegacyStatusFields(
 	_ context.Context,
 	_ client.Client,
-	dsc *dscv2.DataScienceCluster,
+	dsc *dscv3.DataScienceCluster,
 	enabled bool,
 ) error {
 	if dsc == nil {
@@ -118,7 +118,7 @@ func (h *handler) WriteLegacyStatusFields(
 	return nil
 }
 
-func writeDSCRegistriesNamespace(dsc *dscv2.DataScienceCluster, enabled bool, registriesNamespace string) {
+func writeDSCRegistriesNamespace(dsc *dscv3.DataScienceCluster, enabled bool, registriesNamespace string) {
 	if dsc == nil {
 		return
 	}

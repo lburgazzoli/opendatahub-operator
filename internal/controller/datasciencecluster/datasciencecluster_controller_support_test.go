@@ -14,7 +14,7 @@ import (
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	cr "github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/components/registry"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/cluster/gvk"
@@ -38,7 +38,7 @@ type mockHandler struct {
 
 func (m *mockHandler) Init(_ common.Platform, _ operatorconfig.OperatorSettings) error { return nil }
 func (m *mockHandler) GetName() string                                                 { return m.name }
-func (m *mockHandler) NewCRObject(_ context.Context, _ client.Client, _ *dscv2.DataScienceCluster) (common.PlatformObject, error) {
+func (m *mockHandler) NewCRObject(_ context.Context, _ client.Client, _ *dscv3.DataScienceCluster) (common.PlatformObject, error) {
 	if m.newCRErr != nil {
 		return nil, m.newCRErr
 	}
@@ -48,7 +48,7 @@ func (m *mockHandler) NewComponentReconciler(_ context.Context, _ ctrl.Manager) 
 	return nil
 }
 func (m *mockHandler) GroupVersionKind() schema.GroupVersionKind  { return schema.GroupVersionKind{} }
-func (m *mockHandler) IsEnabled(_ *dscv2.DataScienceCluster) bool { return m.enabled }
+func (m *mockHandler) IsEnabled(_ *dscv3.DataScienceCluster) bool { return m.enabled }
 func (m *mockHandler) UpdateDSCStatus(_ context.Context, _ *types.ReconciliationRequest) (metav1.ConditionStatus, error) {
 	return m.status, m.err
 }
@@ -61,8 +61,8 @@ func newRegistry(handlers ...cr.ComponentHandler) *cr.Registry {
 	return reg
 }
 
-func newDSC() *dscv2.DataScienceCluster {
-	dsc := &dscv2.DataScienceCluster{}
+func newDSC() *dscv3.DataScienceCluster {
+	dsc := &dscv3.DataScienceCluster{}
 	dsc.SetGroupVersionKind(gvk.DataScienceCluster)
 	dsc.SetName("test-dsc")
 	return dsc

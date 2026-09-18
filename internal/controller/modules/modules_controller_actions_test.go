@@ -20,7 +20,7 @@ import (
 	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	componentApi "github.com/opendatahub-io/opendatahub-operator/v2/api/components/v1alpha1"
 	configv1alpha1 "github.com/opendatahub-io/opendatahub-operator/v2/api/config/v1alpha1"
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	dsciv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/dscinitialization/v2"
 	serviceApi "github.com/opendatahub-io/opendatahub-operator/v2/api/services/v1alpha1"
 	"github.com/opendatahub-io/opendatahub-operator/v2/internal/controller/status"
@@ -103,7 +103,7 @@ func (deletingCleanupStub) DeleteOperatorResources(context.Context, client.Clien
 	return nil
 }
 
-func (deletingCleanupStub) WriteDSCComponentStatus(*dscv2.DataScienceCluster, bool, []common.ComponentRelease) {
+func (deletingCleanupStub) WriteDSCComponentStatus(*dscv3.DataScienceCluster, bool, []common.ComponentRelease) {
 }
 
 func (deletingCleanupStub) GetDeploymentName() string { return "cleanup-module-controller-manager" }
@@ -175,7 +175,7 @@ func (s provisioningModuleStub) DeleteOperatorResources(context.Context, client.
 	return nil
 }
 
-func (s provisioningModuleStub) WriteDSCComponentStatus(*dscv2.DataScienceCluster, bool, []common.ComponentRelease) {
+func (s provisioningModuleStub) WriteDSCComponentStatus(*dscv3.DataScienceCluster, bool, []common.ComponentRelease) {
 }
 
 func (s provisioningModuleStub) GetDeploymentName() string {
@@ -206,7 +206,7 @@ func (s legacyStatusFieldsWriterStub) GetModuleStatus(ctx context.Context, cli c
 func (s legacyStatusFieldsWriterStub) WriteLegacyStatusFields(
 	_ context.Context,
 	_ client.Client,
-	dsc *dscv2.DataScienceCluster,
+	dsc *dscv3.DataScienceCluster,
 	enabled bool,
 ) error {
 	if dsc == nil {
@@ -299,7 +299,7 @@ func TestProvisionModulesAddsResourcesAndEnvInjection(t *testing.T) {
 	DefaultRegistry().Add(handler, WithRunlevel(dag.RL(20)))
 	provision.Add(handler.GetName(), provision.KindModule, dag.RL(20))
 
-	dsc := &dscv2.DataScienceCluster{ObjectMeta: metav1.ObjectMeta{Name: testDSCName, UID: "uid-1"}}
+	dsc := &dscv3.DataScienceCluster{ObjectMeta: metav1.ObjectMeta{Name: testDSCName, UID: "uid-1"}}
 	dsci := &dsciv2.DSCInitialization{ObjectMeta: metav1.ObjectMeta{Name: testDSCIName}}
 	dsci.Spec.ApplicationsNamespace = testApplicationsNamespace
 
@@ -340,7 +340,7 @@ func TestInjectPlatformConfigCreatesModuleConfigMap(t *testing.T) {
 	handler := provisioningModuleStub{moduleName: testProvisioningModuleName, enabled: true}
 	DefaultRegistry().Add(handler, WithRunlevel(dag.RL(20)))
 
-	dsc := &dscv2.DataScienceCluster{ObjectMeta: metav1.ObjectMeta{Name: testDSCName}}
+	dsc := &dscv3.DataScienceCluster{ObjectMeta: metav1.ObjectMeta{Name: testDSCName}}
 	dsci := &dsciv2.DSCInitialization{ObjectMeta: metav1.ObjectMeta{Name: testDSCIName}}
 	dsci.Spec.ApplicationsNamespace = testApplicationsNamespace
 
@@ -393,7 +393,7 @@ func TestComputeModulesStatusMarksNotReadyModules(t *testing.T) {
 	DefaultRegistry().Add(readyHandler, WithRunlevel(dag.RL(20)))
 	DefaultRegistry().Add(notReadyHandler, WithRunlevel(dag.RL(20)))
 
-	dsc := &dscv2.DataScienceCluster{ObjectMeta: metav1.ObjectMeta{Name: testDSCName}}
+	dsc := &dscv3.DataScienceCluster{ObjectMeta: metav1.ObjectMeta{Name: testDSCName}}
 	dsci := &dsciv2.DSCInitialization{ObjectMeta: metav1.ObjectMeta{Name: testDSCIName}}
 	dsci.Spec.ApplicationsNamespace = testApplicationsNamespace
 
@@ -437,7 +437,7 @@ func TestComputeModulesStatusPreservesWorkbenchNamespaceOnGetModuleStatusError(t
 	}
 	DefaultRegistry().Add(handler, WithRunlevel(dag.RL(20)))
 
-	dsc := &dscv2.DataScienceCluster{ObjectMeta: metav1.ObjectMeta{Name: testDSCName}}
+	dsc := &dscv3.DataScienceCluster{ObjectMeta: metav1.ObjectMeta{Name: testDSCName}}
 	dsc.Spec.Components.Workbenches.WorkbenchNamespace = "other-namespace"
 	dsc.Status.Components.Workbenches.WorkbenchesCommonStatus = &componentApi.WorkbenchesCommonStatus{
 		WorkbenchNamespace: existingNamespace,
@@ -494,7 +494,7 @@ func TestComputeModulesStatusInfoDependencyKeepsModulesReady(t *testing.T) {
 	}
 	DefaultRegistry().Add(handler, WithRunlevel(dag.RL(20)))
 
-	dsc := &dscv2.DataScienceCluster{ObjectMeta: metav1.ObjectMeta{Name: testDSCName}}
+	dsc := &dscv3.DataScienceCluster{ObjectMeta: metav1.ObjectMeta{Name: testDSCName}}
 	dsci := &dsciv2.DSCInitialization{ObjectMeta: metav1.ObjectMeta{Name: testDSCIName}}
 	dsci.Spec.ApplicationsNamespace = testApplicationsNamespace
 
@@ -561,7 +561,7 @@ func TestComputeModulesStatusRequeuesOnCRDAbsent(t *testing.T) {
 	}
 	DefaultRegistry().Add(handler, WithRunlevel(dag.RL(20)))
 
-	dsc := &dscv2.DataScienceCluster{ObjectMeta: metav1.ObjectMeta{Name: testDSCName}}
+	dsc := &dscv3.DataScienceCluster{ObjectMeta: metav1.ObjectMeta{Name: testDSCName}}
 	dsci := &dsciv2.DSCInitialization{ObjectMeta: metav1.ObjectMeta{Name: testDSCIName}}
 	dsci.Spec.ApplicationsNamespace = testApplicationsNamespace
 
@@ -618,7 +618,7 @@ func TestComputeModulesStatusNoRequeueOnRegularError(t *testing.T) {
 	}
 	DefaultRegistry().Add(handler, WithRunlevel(dag.RL(20)))
 
-	dsc := &dscv2.DataScienceCluster{ObjectMeta: metav1.ObjectMeta{Name: testDSCName}}
+	dsc := &dscv3.DataScienceCluster{ObjectMeta: metav1.ObjectMeta{Name: testDSCName}}
 	dsci := &dsciv2.DSCInitialization{ObjectMeta: metav1.ObjectMeta{Name: testDSCIName}}
 	dsci.Spec.ApplicationsNamespace = testApplicationsNamespace
 
@@ -712,7 +712,7 @@ func TestProvisionModulesMonitoringNamespaceInjected(t *testing.T) {
 	DefaultRegistry().Add(handler, WithRunlevel(dag.RL(20)))
 	provision.Add(handler.GetName(), provision.KindModule, dag.RL(20))
 
-	dsc := &dscv2.DataScienceCluster{ObjectMeta: metav1.ObjectMeta{Name: testDSCName, UID: "uid-1"}}
+	dsc := &dscv3.DataScienceCluster{ObjectMeta: metav1.ObjectMeta{Name: testDSCName, UID: "uid-1"}}
 	dsci := &dsciv2.DSCInitialization{ObjectMeta: metav1.ObjectMeta{Name: testDSCIName}}
 	dsci.Spec.ApplicationsNamespace = testApplicationsNamespace
 	dsci.Spec.Monitoring.Namespace = testMonitoringNS
@@ -745,7 +745,7 @@ func TestProvisionModulesMonitoringNamespaceInjected(t *testing.T) {
 func TestBuildPlatformModules_NoEmptyManagementState(t *testing.T) {
 	t.Parallel()
 
-	dsc := &dscv2.DataScienceCluster{}
+	dsc := &dscv3.DataScienceCluster{}
 	pm := BuildPlatformModules(&DSCContext{DSC: dsc})
 
 	v := reflect.ValueOf(pm)
@@ -782,7 +782,7 @@ func TestBuildPlatformModules_WithDSCI_MonitoringManaged(t *testing.T) {
 	}
 
 	pm := BuildPlatformModules(&DSCContext{
-		DSC:  &dscv2.DataScienceCluster{},
+		DSC:  &dscv3.DataScienceCluster{},
 		DSCI: dsci,
 	})
 
@@ -801,7 +801,7 @@ func TestBuildPlatformModulesForSource_DoesNotPopulateOtherSource(t *testing.T) 
 		BaseHandler: BaseHandler{Config: ModuleConfig{Name: "dashboard"}},
 	})
 
-	dsc := &dscv2.DataScienceCluster{}
+	dsc := &dscv3.DataScienceCluster{}
 	dsc.Spec.Components.Dashboard.ManagementState = operatorv1.Managed
 	dsci := &dsciv2.DSCInitialization{
 		Spec: dsciv2.DSCInitializationSpec{
@@ -841,7 +841,7 @@ func TestNewPlatformCRRemovedForSource_ForcesDSCModulesRemoved(t *testing.T) {
 		BaseHandler: BaseHandler{Config: ModuleConfig{Name: "dashboard"}},
 	})
 
-	dsc := &dscv2.DataScienceCluster{}
+	dsc := &dscv3.DataScienceCluster{}
 	dsc.Spec.Components.Dashboard.ManagementState = operatorv1.Managed
 	dsci := &dsciv2.DSCInitialization{
 		Spec: dsciv2.DSCInitializationSpec{
