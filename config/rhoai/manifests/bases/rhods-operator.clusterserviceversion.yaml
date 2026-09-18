@@ -22,7 +22,7 @@ metadata:
     olm.skipRange: '>=1.0.0 <2.0.0'
     operatorframework.io/initialization-resource: |-
       {
-        "apiVersion": "datasciencecluster.opendatahub.io/v2",
+        "apiVersion": "datasciencecluster.opendatahub.io/v3",
         "kind": "DataScienceCluster",
         "metadata": {
           "name": "default-dsc",

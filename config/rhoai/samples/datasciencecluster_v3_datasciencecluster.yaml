@@ -1,4 +1,4 @@
-apiVersion: datasciencecluster.opendatahub.io/v2
+apiVersion: datasciencecluster.opendatahub.io/v3
 kind: DataScienceCluster
 metadata:
   name: default-dsc
@@ -8,8 +8,6 @@ spec:
   components:
     aigateway:
       managementState: "Removed"
-      modelsAsAService:
-        managementState: "Removed"
       batchGateway:
         managementState: "Removed"
     dashboard:
@@ -22,7 +20,6 @@ spec:
       managementState: "Managed"
       nim:
         managementState: "Managed"
-      rawDeploymentServiceConfig: "Headed"
       wva:
         managementState: "Removed"
     kueue:
@@ -39,11 +36,9 @@ spec:
       managementState: "Managed"
     modelregistry:
       managementState: "Managed"
-      registriesNamespace: "odh-model-registries"
+      registriesNamespace: "rhoai-model-registries"
     feastoperator:
       managementState: "Managed"
-    llamastackoperator:
-      managementState: "Removed"
     ogx:
       managementState: "Managed"
     mlflowoperator:

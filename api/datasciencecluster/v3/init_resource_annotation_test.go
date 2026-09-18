@@ -1,4 +1,4 @@
-package v2_test
+package v3_test
 
 import (
 	"os"
@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 
-	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
+	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 )
 
 const (
@@ -43,7 +43,7 @@ func repoRoot(t *testing.T) string {
 // against the actual DataScienceCluster API schema. Unlike the drift check
 // against the sample (TestInitResourceAnnotationMatchesSample), this catches a
 // hand-edit -- or an API field rename -- that leaves the annotation (and a
-// matching sample) referencing a field the v2 type no longer has, or gives it
+// matching sample) referencing a field the v3 type no longer has, or gives it
 // the wrong type: OLM would then fail to parse the initialization-resource.
 // Strict decoding rejects unknown fields, so a typo'd component key ("dashbaord")
 // fails here even when the drift check passes.
@@ -63,12 +63,12 @@ func TestInitResourceAnnotationIsValidDSC(t *testing.T) {
 	annotation := csv.Metadata.Annotations[initResourceAnnotation]
 	require.NotEmpty(t, annotation, "%s annotation missing from %s", initResourceAnnotation, rhoaiCSVRelPath)
 
-	var dsc dscv2.DataScienceCluster
+	var dsc dscv3.DataScienceCluster
 	require.NoError(t, yaml.UnmarshalStrict([]byte(annotation), &dsc),
-		"the %s annotation must deserialize into a v2 DataScienceCluster with no unknown fields; "+
+		"the %s annotation must deserialize into a v3 DataScienceCluster with no unknown fields; "+
 			"a field may be misspelled or renamed in the API (RHOAIENG-89419)", initResourceAnnotation)
 
 	require.Equal(t, "DataScienceCluster", dsc.Kind, "annotation kind")
-	require.Equal(t, "datasciencecluster.opendatahub.io/v2", dsc.APIVersion, "annotation apiVersion")
+	require.Equal(t, "datasciencecluster.opendatahub.io/v3", dsc.APIVersion, "annotation apiVersion")
 	require.Equal(t, "default-dsc", dsc.Name, "annotation metadata.name")
 }

@@ -3,8 +3,8 @@
 ## Packages
 - [components.platform.opendatahub.io/v1alpha1](#componentsplatformopendatahubiov1alpha1)
 - [config.opendatahub.io/v1alpha1](#configopendatahubiov1alpha1)
-- [datasciencecluster.opendatahub.io/v1](#datascienceclusteropendatahubiov1)
 - [datasciencecluster.opendatahub.io/v2](#datascienceclusteropendatahubiov2)
+- [datasciencecluster.opendatahub.io/v3](#datascienceclusteropendatahubiov3)
 - [dscinitialization.opendatahub.io/v1](#dscinitializationopendatahubiov1)
 - [dscinitialization.opendatahub.io/v2](#dscinitializationopendatahubiov2)
 - [infrastructure.opendatahub.io/v1](#infrastructureopendatahubiov1)
@@ -100,6 +100,7 @@ DSCAIGateway contains all the configuration exposed in DSC instance for AIGatewa
 
 _Appears in:_
 - [Components](#components)
+- [Components](#components)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -118,6 +119,7 @@ DSCAIGatewayStatus struct holds the status for the AIGateway component exposed i
 
 _Appears in:_
 - [ComponentsStatus](#componentsstatus)
+- [ComponentsStatus](#componentsstatus)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -134,6 +136,7 @@ submodule exposed in the DSC instance.
 
 
 _Appears in:_
+- [ComponentsStatus](#componentsstatus)
 - [ComponentsStatus](#componentsstatus)
 
 | Field | Description | Default | Validation |
@@ -297,6 +300,7 @@ DSCKueue contains all the configuration exposed in DSC instance for Kueue compon
 
 _Appears in:_
 - [Components](#components)
+- [Components](#components)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -367,6 +371,7 @@ DSCMCPLifecycleOperator contains all the configuration exposed in DSC instance f
 
 _Appears in:_
 - [Components](#components)
+- [Components](#components)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -383,6 +388,7 @@ DSCMCPLifecycleOperatorStatus struct holds the status for the MCPLifecycleOperat
 
 _Appears in:_
 - [ComponentsStatus](#componentsstatus)
+- [ComponentsStatus](#componentsstatus)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -398,6 +404,7 @@ _Appears in:_
 
 
 _Appears in:_
+- [Components](#components)
 - [Components](#components)
 
 | Field | Description | Default | Validation |
@@ -418,6 +425,7 @@ DSCMLflowOperatorStatus contains the observed state of the MLflowOperator expose
 
 _Appears in:_
 - [ComponentsStatus](#componentsstatus)
+- [ComponentsStatus](#componentsstatus)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -434,6 +442,7 @@ Portal submodule (submodule of Dashboard) exposed in the DSC instance.
 
 
 _Appears in:_
+- [ComponentsStatus](#componentsstatus)
 - [ComponentsStatus](#componentsstatus)
 
 | Field | Description | Default | Validation |
@@ -505,6 +514,7 @@ DSCModelsAsServiceStatus contains the observed state of the ModelsAsService expo
 
 _Appears in:_
 - [ComponentsStatus](#componentsstatus)
+- [ComponentsStatus](#componentsstatus)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -521,6 +531,7 @@ _Appears in:_
 
 _Appears in:_
 - [Components](#components)
+- [Components](#components)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -536,6 +547,7 @@ _Appears in:_
 
 
 _Appears in:_
+- [ComponentsStatus](#componentsstatus)
 - [ComponentsStatus](#componentsstatus)
 
 | Field | Description | Default | Validation |
@@ -587,6 +599,7 @@ DSCSparkOperator contains all the configuration exposed in DSC instance
 
 _Appears in:_
 - [Components](#components)
+- [Components](#components)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -602,6 +615,7 @@ DSCSparkOperatorStatus contains the observed state exposed in the DSC
 
 
 _Appears in:_
+- [ComponentsStatus](#componentsstatus)
 - [ComponentsStatus](#componentsstatus)
 
 | Field | Description | Default | Validation |
@@ -619,6 +633,7 @@ DSCTrainer contains all the configuration exposed in DSC instance for Trainer co
 
 _Appears in:_
 - [Components](#components)
+- [Components](#components)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -634,6 +649,7 @@ DSCTrainerStatus struct holds the status for the Trainer component exposed in th
 
 
 _Appears in:_
+- [ComponentsStatus](#componentsstatus)
 - [ComponentsStatus](#componentsstatus)
 
 | Field | Description | Default | Validation |
@@ -757,6 +773,7 @@ DSCWorkbenchesV2Status contains the observed state of the WorkbenchesV2 submodul
 
 
 _Appears in:_
+- [ComponentsStatus](#componentsstatus)
 - [ComponentsStatus](#componentsstatus)
 
 | Field | Description | Default | Validation |
@@ -970,7 +987,6 @@ Kueue is the Schema for the kueues API
 
 _Appears in:_
 - [DSCKueue](#dsckueue)
-- [DSCKueueV1](#dsckueuev1)
 - [KueueSpec](#kueuespec)
 
 
@@ -999,7 +1015,6 @@ _Appears in:_
 
 _Appears in:_
 - [DSCKueue](#dsckueue)
-- [DSCKueueV1](#dsckueuev1)
 - [KueueSpec](#kueuespec)
 
 | Field | Description | Default | Validation |
@@ -1750,160 +1765,6 @@ _Appears in:_
 
 
 
-## datasciencecluster.opendatahub.io/v1
-
-Package v1 contains API Schema definitions for the datasciencecluster v1 API group
-
-### Resource Types
-- [DataScienceCluster](#datasciencecluster)
-
-
-
-#### Components
-
-
-
-
-
-
-
-_Appears in:_
-- [DataScienceClusterSpec](#datascienceclusterspec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `dashboard` _[DSCDashboard](#dscdashboard)_ | Dashboard component configuration. |  |  |
-| `workbenches` _[DSCWorkbenches](#dscworkbenches)_ | Workbenches component configuration. |  |  |
-| `datasciencepipelines` _[DSCDataSciencePipelines](#dscdatasciencepipelines)_ | DataSciencePipeline component configuration. |  |  |
-| `kserve` _[DSCKserve](#dsckserve)_ | Kserve component configuration.<br />Only RawDeployment mode is supported. |  |  |
-| `kueue` _[DSCKueueV1](#dsckueuev1)_ | Kueue component configuration. |  |  |
-| `ray` _[DSCRay](#dscray)_ | Ray component configuration. |  |  |
-| `trustyai` _[DSCTrustyAI](#dsctrustyai)_ | TrustyAI component configuration. |  |  |
-| `modelregistry` _[DSCModelRegistry](#dscmodelregistry)_ | ModelRegistry component configuration. |  |  |
-| `trainingoperator` _[DSCTrainingOperator](#dsctrainingoperator)_ | Training Operator component configuration. |  |  |
-| `feastoperator` _[DSCFeastOperator](#dscfeastoperator)_ | Feast Operator component configuration. |  |  |
-| `llamastackoperator` _[DSCLlamaStackOperator](#dscllamastackoperator)_ | LlamaStack Operator component configuration. |  |  |
-
-
-#### ComponentsStatus
-
-
-
-ComponentsStatus defines the custom status of DataScienceCluster components.
-
-
-
-_Appears in:_
-- [DataScienceClusterStatus](#datascienceclusterstatus)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `dashboard` _[DSCDashboardStatus](#dscdashboardstatus)_ | Dashboard component status. |  |  |
-| `workbenches` _[DSCWorkbenchesStatus](#dscworkbenchesstatus)_ | Workbenches component status. |  |  |
-| `datasciencepipelines` _[DSCDataSciencePipelinesStatus](#dscdatasciencepipelinesstatus)_ | DataSciencePipeline component status. |  |  |
-| `kserve` _[DSCKserveStatus](#dsckservestatus)_ | Kserve component status. |  |  |
-| `kueue` _[DSCKueueStatus](#dsckueuestatus)_ | Kueue component status. |  |  |
-| `ray` _[DSCRayStatus](#dscraystatus)_ | Ray component status. |  |  |
-| `trustyai` _[DSCTrustyAIStatus](#dsctrustyaistatus)_ | TrustyAI component status. |  |  |
-| `modelregistry` _[DSCModelRegistryStatus](#dscmodelregistrystatus)_ | ModelRegistry component status. |  |  |
-| `trainingoperator` _[DSCTrainingOperatorStatus](#dsctrainingoperatorstatus)_ | Training Operator component status. |  |  |
-| `feastoperator` _[DSCFeastOperatorStatus](#dscfeastoperatorstatus)_ | Feast Operator component status. |  |  |
-| `llamastackoperator` _[DSCLlamaStackOperatorStatus](#dscllamastackoperatorstatus)_ | LlamaStack Operator component status. |  |  |
-
-
-#### DSCKueueV1
-
-
-
-
-
-
-
-_Appears in:_
-- [Components](#components)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `managementState` _[ManagementState](https://pkg.go.dev/github.com/openshift/api@v0.0.0-20260610192510-1b2a074e0bd6/operator/v1#ManagementState)_ | Set to one of the following values:<br />- "Managed"   : the operator is actively managing the component and trying to keep it active.<br />                It will only upgrade the component if it is safe to do so<br />- "Unmanaged" : the operator will not deploy or manage the component's lifecycle, but may create supporting configuration resources.<br />- "Removed"   : the operator is actively managing the component and will not install it,<br />                or if it is installed, the operator will try to remove it |  | Enum: [Managed Unmanaged Removed] <br /> |
-| `autoCreateQueues` _boolean_ | AutoCreateQueues controls whether the operator automatically creates default<br />ClusterQueue, LocalQueue and ResourceFlavor resources in managed namespaces.<br />When false (the default), the operator skips queue creation entirely, allowing<br />administrators to manage queues via GitOps or other external tooling.<br />HardwareProfiles of type "Queue" continue to reference externally-managed<br />LocalQueues without change.<br />This flag does not affect the Kueue config CR, which is always created. | false |  |
-| `defaultLocalQueueName` _string_ | Configures the automatically created, in the managed namespaces, local queue name.<br />Only used when autoCreateQueues is true. | default |  |
-| `defaultClusterQueueName` _string_ | Configures the automatically created cluster queue name.<br />Only used when autoCreateQueues is true. | default |  |
-
-
-#### DataScienceCluster
-
-
-
-DataScienceCluster is the Schema for the datascienceclusters API.
-
-
-
-
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `apiVersion` _string_ | `datasciencecluster.opendatahub.io/v1` | | |
-| `kind` _string_ | `DataScienceCluster` | | |
-| `kind` _string_ | Kind is a string value representing the REST resource this object represents.<br />Servers may infer this from the endpoint the client submits requests to.<br />Cannot be updated.<br />In CamelCase.<br />More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds |  |  |
-| `apiVersion` _string_ | APIVersion defines the versioned schema of this representation of an object.<br />Servers should convert recognized schemas to the latest internal value, and<br />may reject unrecognized values.<br />More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources |  |  |
-| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `spec` _[DataScienceClusterSpec](#datascienceclusterspec)_ |  |  |  |
-| `status` _[DataScienceClusterStatus](#datascienceclusterstatus)_ |  |  |  |
-
-
-#### DataScienceClusterSpec
-
-
-
-DataScienceClusterSpec defines the desired state of the cluster.
-
-
-
-_Appears in:_
-- [DataScienceCluster](#datasciencecluster)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `components` _[Components](#components)_ | Override and fine tune specific component configurations. |  |  |
-
-
-#### DataScienceClusterStatus
-
-
-
-DataScienceClusterStatus defines the observed state of DataScienceCluster.
-
-
-
-_Appears in:_
-- [DataScienceCluster](#datasciencecluster)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `relatedObjects` _[ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#objectreference-v1-core) array_ | RelatedObjects is a list of objects created and maintained by this operator.<br />Object references will be added to this list after they have been created AND found in the cluster. |  |  |
-| `errorMessage` _string_ |  |  |  |
-| `installedComponents` _object (keys:string, values:boolean)_ | List of components with status if installed or not |  |  |
-| `components` _[ComponentsStatus](#componentsstatus)_ | Expose component's specific status |  |  |
-| `release` _[Release](#release)_ | Version and release type |  |  |
-
-
-#### KueueManagementSpecV1
-
-
-
-KueueManagementSpec struct defines the component's management configuration.
-
-
-
-_Appears in:_
-- [DSCKueueV1](#dsckueuev1)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `managementState` _[ManagementState](https://pkg.go.dev/github.com/openshift/api@v0.0.0-20260610192510-1b2a074e0bd6/operator/v1#ManagementState)_ | Set to one of the following values:<br />- "Managed"   : the operator is actively managing the component and trying to keep it active.<br />                It will only upgrade the component if it is safe to do so<br />- "Unmanaged" : the operator will not deploy or manage the component's lifecycle, but may create supporting configuration resources.<br />- "Removed"   : the operator is actively managing the component and will not install it,<br />                or if it is installed, the operator will try to remove it |  | Enum: [Managed Unmanaged Removed] <br /> |
-
-
-
 ## datasciencecluster.opendatahub.io/v2
 
 Package v2 contains API Schema definitions for the datasciencecluster v2 API group.
@@ -1995,6 +1856,141 @@ DataScienceCluster is the Schema for the datascienceclusters API.
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `apiVersion` _string_ | `datasciencecluster.opendatahub.io/v2` | | |
+| `kind` _string_ | `DataScienceCluster` | | |
+| `kind` _string_ | Kind is a string value representing the REST resource this object represents.<br />Servers may infer this from the endpoint the client submits requests to.<br />Cannot be updated.<br />In CamelCase.<br />More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds |  |  |
+| `apiVersion` _string_ | APIVersion defines the versioned schema of this representation of an object.<br />Servers should convert recognized schemas to the latest internal value, and<br />may reject unrecognized values.<br />More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources |  |  |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[DataScienceClusterSpec](#datascienceclusterspec)_ |  |  |  |
+| `status` _[DataScienceClusterStatus](#datascienceclusterstatus)_ |  |  |  |
+
+
+#### DataScienceClusterSpec
+
+
+
+DataScienceClusterSpec defines the desired state of the cluster.
+
+
+
+_Appears in:_
+- [DataScienceCluster](#datasciencecluster)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `components` _[Components](#components)_ | Override and fine tune specific component configurations. |  |  |
+
+
+#### DataScienceClusterStatus
+
+
+
+DataScienceClusterStatus defines the observed state of DataScienceCluster.
+
+
+
+_Appears in:_
+- [DataScienceCluster](#datasciencecluster)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `relatedObjects` _[ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#objectreference-v1-core) array_ | RelatedObjects is a list of objects created and maintained by this operator.<br />Object references will be added to this list after they have been created AND found in the cluster. |  |  |
+| `errorMessage` _string_ |  |  |  |
+| `components` _[ComponentsStatus](#componentsstatus)_ | Expose component's specific status |  |  |
+| `release` _[Release](#release)_ | Version and release type |  |  |
+
+
+
+## datasciencecluster.opendatahub.io/v3
+
+Package v2 contains API Schema definitions for the datasciencecluster v3 API group.
+
+### Resource Types
+- [DataScienceCluster](#datasciencecluster)
+
+
+
+#### Components
+
+
+
+Note: the TrainingOperator re-enablement guard is an XValidation rule on
+componentApi.DSCTrainingOperator, not here, so it applies to v1 too.
+
+
+
+_Appears in:_
+- [DataScienceClusterSpec](#datascienceclusterspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `dashboard` _[DSCDashboard](#dscdashboard)_ | Dashboard component configuration. |  |  |
+| `workbenches` _[DSCWorkbenches](#dscworkbenches)_ | Workbenches component configuration. |  |  |
+| `aipipelines` _[DSCDataSciencePipelines](#dscdatasciencepipelines)_ | AIPipelines component configuration. |  |  |
+| `kserve` _[DSCKserve](#dsckserve)_ | Kserve component configuration.<br />Only RawDeployment mode is supported. |  |  |
+| `kueue` _[DSCKueue](#dsckueue)_ | Kueue component configuration. |  |  |
+| `ray` _[DSCRay](#dscray)_ | Ray component configuration. |  |  |
+| `trustyai` _[DSCTrustyAI](#dsctrustyai)_ | TrustyAI component configuration. |  |  |
+| `modelregistry` _[DSCModelRegistry](#dscmodelregistry)_ | ModelRegistry component configuration. |  |  |
+| `trainingoperator` _[DSCTrainingOperator](#dsctrainingoperator)_ | Training Operator component configuration.<br />Deprecated: Training Operator v1 is obsolete in RHOAI 3.6. Use Trainer v2 instead.<br />This field is kept for backward compatibility only. |  |  |
+| `feastoperator` _[DSCFeastOperator](#dscfeastoperator)_ | Feast Operator component configuration. |  |  |
+| `llamastackoperator` _[DSCLlamaStackOperator](#dscllamastackoperator)_ | LlamaStack Operator component configuration.<br />Deprecated: Use OGX instead. This field is kept for backward compatibility only. |  |  |
+| `ogx` _[DSCOGX](#dscogx)_ | OGX component configuration. |  |  |
+| `mlflowoperator` _[DSCMLflowOperator](#dscmlflowoperator)_ | MLflow Operator component configuration. |  |  |
+| `trainer` _[DSCTrainer](#dsctrainer)_ | Trainer component configuration. |  |  |
+| `sparkoperator` _[DSCSparkOperator](#dscsparkoperator)_ | SparkOperator component configuration. |  |  |
+| `aigateway` _[DSCAIGateway](#dscaigateway)_ | AIGateway component configuration. |  |  |
+| `mcplifecycleoperator` _[DSCMCPLifecycleOperator](#dscmcplifecycleoperator)_ | MCPLifecycleOperator component configuration. |  |  |
+
+
+#### ComponentsStatus
+
+
+
+ComponentsStatus defines the custom status of DataScienceCluster components.
+
+
+
+_Appears in:_
+- [DataScienceClusterStatus](#datascienceclusterstatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `dashboard` _[DSCDashboardStatus](#dscdashboardstatus)_ | Dashboard component status. |  |  |
+| `maasConsumerPortal` _[DSCMaaSConsumerPortalStatus](#dscmaasconsumerportalstatus)_ | MaaSConsumerPortal submodule status (submodule of Dashboard). |  |  |
+| `workbenches` _[DSCWorkbenchesStatus](#dscworkbenchesstatus)_ | Workbenches component status. |  |  |
+| `workbenchesV2` _[DSCWorkbenchesV2Status](#dscworkbenchesv2status)_ | WorkbenchesV2 submodule status (submodule of Workbenches). |  |  |
+| `aipipelines` _[DSCDataSciencePipelinesStatus](#dscdatasciencepipelinesstatus)_ | AIPipelines component status. |  |  |
+| `kserve` _[DSCKserveStatus](#dsckservestatus)_ | Kserve component status. |  |  |
+| `kueue` _[DSCKueueStatus](#dsckueuestatus)_ | Kueue component status. |  |  |
+| `ray` _[DSCRayStatus](#dscraystatus)_ | Ray component status. |  |  |
+| `trustyai` _[DSCTrustyAIStatus](#dsctrustyaistatus)_ | TrustyAI component status. |  |  |
+| `modelregistry` _[DSCModelRegistryStatus](#dscmodelregistrystatus)_ | ModelRegistry component status. |  |  |
+| `trainingoperator` _[DSCTrainingOperatorStatus](#dsctrainingoperatorstatus)_ | Training Operator component status.<br />Deprecated: Training Operator v1 is obsolete in RHOAI 3.6. Use Trainer v2 instead. |  |  |
+| `feastoperator` _[DSCFeastOperatorStatus](#dscfeastoperatorstatus)_ | Feast Operator component status. |  |  |
+| `llamastackoperator` _[DSCLlamaStackOperatorStatus](#dscllamastackoperatorstatus)_ | LlamaStack Operator component status.<br />Deprecated: Use OGX instead. This field is kept for backward compatibility only. |  |  |
+| `ogx` _[DSCOGXStatus](#dscogxstatus)_ | OGX component status. |  |  |
+| `mlflowoperator` _[DSCMLflowOperatorStatus](#dscmlflowoperatorstatus)_ | MLflow Operator component status. |  |  |
+| `trainer` _[DSCTrainerStatus](#dsctrainerstatus)_ | Trainer component status. |  |  |
+| `sparkoperator` _[DSCSparkOperatorStatus](#dscsparkoperatorstatus)_ | SparkOperator component status. |  |  |
+| `aigateway` _[DSCAIGatewayStatus](#dscaigatewaystatus)_ | AIGateway component status. |  |  |
+| `modelsAsAService` _[DSCModelsAsServiceStatus](#dscmodelsasservicestatus)_ | ModelsAsAService submodule status (submodule of AIGateway). |  |  |
+| `batchGateway` _[DSCBatchGatewayStatus](#dscbatchgatewaystatus)_ | BatchGateway submodule status (submodule of AIGateway). |  |  |
+| `mcplifecycleoperator` _[DSCMCPLifecycleOperatorStatus](#dscmcplifecycleoperatorstatus)_ | MCPLifecycleOperator component status. |  |  |
+
+
+#### DataScienceCluster
+
+
+
+DataScienceCluster is the Schema for the datascienceclusters API.
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `datasciencecluster.opendatahub.io/v3` | | |
 | `kind` _string_ | `DataScienceCluster` | | |
 | `kind` _string_ | Kind is a string value representing the REST resource this object represents.<br />Servers may infer this from the endpoint the client submits requests to.<br />Cannot be updated.<br />In CamelCase.<br />More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds |  |  |
 | `apiVersion` _string_ | APIVersion defines the versioned schema of this representation of an object.<br />Servers should convert recognized schemas to the latest internal value, and<br />may reject unrecognized values.<br />More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources |  |  |
@@ -2629,6 +2625,7 @@ Package v1 contains API Schema definitions for the services v1 API group
 ### Resource Types
 - [Auth](#auth)
 - [GatewayConfig](#gatewayconfig)
+- [Monitoring](#monitoring)
 
 
 
@@ -2636,13 +2633,12 @@ Package v1 contains API Schema definitions for the services v1 API group
 
 
 
-Alerting configuration for Prometheus
+Alerting configures Prometheus alerting rules.
 
 
 
 _Appears in:_
-- [DSCIMonitoring](#dscimonitoring)
-- [MonitoringCommonSpec](#monitoringcommonspec)
+- [MonitoringSpec](#monitoringspec)
 
 
 
@@ -2835,30 +2831,66 @@ _Appears in:_
 | `enabled` _boolean_ | Enabled determines whether ingress rules are applied.<br />When true, creates NetworkPolicy allowing traffic only from Gateway pods and monitoring namespaces. |  | Required: \{\} <br /> |
 
 
-#### Metrics
+#### Logs
 
 
 
-Metrics defines the desired state of metrics for the monitoring service
+Logs defines the configuration for cluster log forwarding via the ClusterLogForwarder operator.
 
 
 
 _Appears in:_
-- [DSCIMonitoring](#dscimonitoring)
-- [MonitoringCommonSpec](#monitoringcommonspec)
+- [MonitoringSpec](#monitoringspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `storage` _[LokiStorageConfig](#lokistorageconfig)_ | Storage configures the LokiStack storage backend for log forwarding.<br />Required: the operator deploys a shared LokiStack used by both log forwarding and usage logs. |  | Required: \{\} <br /> |
+| `inferenceNamespaces` _string array_ | InferenceNamespaces lists the namespaces whose application logs should be forwarded to Loki. |  | items:MaxLength: 63 <br />items:Pattern: ^[a-z0-9]([a-z0-9\-]\{0,61\}[a-z0-9])?$ <br /> |
+
+
+#### LokiStorageConfig
+
+
+
+LokiStorageConfig defines storage configuration for LokiStack.
+
+
+
+_Appears in:_
+- [Logs](#logs)
+- [UsageLogs](#usagelogs)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `type` _string_ | Type specifies the storage backend: "s3". |  | Enum: [s3] <br />Required: \{\} <br /> |
+| `secretName` _string_ | SecretName is the name of the Secret containing storage credentials.<br />For S3: must contain keys: access_key_id, access_key_secret, bucketnames, endpoint, region, insecure, s3ForcePathStyle |  | MaxLength: 253 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$` <br />Required: \{\} <br /> |
+| `credentialMode` _string_ | CredentialMode specifies how credentials are provided to LokiStack.<br />Valid values: "static", "token", "token-cco". | static | Enum: [static token token-cco] <br /> |
+| `storageClassName` _string_ | StorageClassName specifies the storage class for LokiStack PVCs. | gp3-csi | MaxLength: 253 <br /> |
+
+
+#### Metrics
+
+
+
+Metrics defines the desired state of metrics collection.
+
+
+
+_Appears in:_
+- [MonitoringSpec](#monitoringspec)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `storage` _[MetricsStorage](#metricsstorage)_ |  |  |  |
-| `replicas` _integer_ | Replicas specifies the number of replicas in monitoringstack. If not set, it defaults<br />to 1 on single-node clusters and 2 on multi-node clusters. |  | Minimum: 0 <br /> |
-| `exporters` _object (keys:string, values:[RawExtension](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#rawextension-runtime-pkg))_ | Exporters defines custom metrics exporters for sending metrics to external observability tools.<br />Each key represents the exporter name, and the value contains the exporter configuration.<br />The configuration follows the OpenTelemetry Collector exporter format.<br />Reserved names 'prometheus' and 'otlp/tempo' cannot be used as they conflict with built-in exporters.<br />Maximum 10 exporters allowed, each config must be less than 10KB (enforced at reconciliation time). |  |  |
+| `replicas` _integer_ | Replicas specifies the number of replicas in the MonitoringStack. |  | Minimum: 0 <br /> |
+| `exporters` _object (keys:string, values:[RawExtension](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#rawextension-runtime-pkg))_ | Exporters defines custom metrics exporters for external observability tools.<br />The configuration follows the OpenTelemetry Collector exporter format.<br />Reserved names 'prometheus' and 'otlp/tempo' cannot be used.<br />Maximum 10 exporters allowed. |  |  |
 
 
 #### MetricsStorage
 
 
 
-MetricsStorage defines the storage configuration for the monitoring service
+MetricsStorage defines the storage configuration for the MonitoringStack.
 
 
 
@@ -2867,8 +2899,29 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#quantity-resource-api)_ | Size specifies the storage size for the MonitoringStack (e.g, "5Gi", "10Mi") |  |  |
-| `retention` _string_ | Retention specifies how long metrics data should be retained (e.g., "1d", "2w") |  |  |
+| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#quantity-resource-api)_ | Size specifies the PVC storage size (e.g. "5Gi", "10Mi"). |  |  |
+| `retention` _string_ | Retention specifies how long metrics data is retained (e.g. "1d", "2w"). |  |  |
+
+
+#### Monitoring
+
+
+
+Monitoring is the Schema for the monitorings API.
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `services.platform.opendatahub.io/v1alpha1` | | |
+| `kind` _string_ | `Monitoring` | | |
+| `kind` _string_ | Kind is a string value representing the REST resource this object represents.<br />Servers may infer this from the endpoint the client submits requests to.<br />Cannot be updated.<br />In CamelCase.<br />More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds |  |  |
+| `apiVersion` _string_ | APIVersion defines the versioned schema of this representation of an object.<br />Servers should convert recognized schemas to the latest internal value, and<br />may reject unrecognized values.<br />More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources |  |  |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
+| `spec` _[MonitoringSpec](#monitoringspec)_ |  |  |  |
+| `status` _[MonitoringStatus](#monitoringstatus)_ |  |  |  |
 
 
 #### MonitoringCommonSpec
@@ -2889,6 +2942,50 @@ _Appears in:_
 | `traces` _[Traces](#traces)_ | Tracing configuration for OpenTelemetry instrumentation |  |  |
 | `alerting` _[Alerting](#alerting)_ | Alerting configuration for Prometheus |  |  |
 | `collectorReplicas` _integer_ | CollectorReplicas specifies the number of replicas in opentelemetry-collector. If not set, it defaults<br />to 1 on single-node clusters and 2 on multi-node clusters. |  |  |
+
+
+#### MonitoringSpec
+
+
+
+MonitoringSpec defines the desired state of Monitoring.
+
+
+
+_Appears in:_
+- [Monitoring](#monitoring)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `managementState` _[ManagementState](https://pkg.go.dev/github.com/openshift/api@v0.0.0-20260610192510-1b2a074e0bd6/operator/v1#ManagementState)_ | ManagementState controls whether the operator actively manages the<br />component (Managed) or removes it (Removed). | Managed | Enum: [Managed Removed] <br /> |
+| `namespace` _string_ | Namespace is the target namespace where monitoring resources are deployed. | opendatahub | MaxLength: 63 <br />Pattern: `^([a-z0-9]([-a-z0-9]*[a-z0-9])?)?$` <br /> |
+| `metrics` _[Metrics](#metrics)_ | Metrics configures metrics collection via the MonitoringStack operator. |  |  |
+| `traces` _[Traces](#traces)_ | Traces configures distributed tracing via the Tempo operator. |  |  |
+| `usageLogs` _[UsageLogs](#usagelogs)_ | UsageLogs configures usage log collection and forwarding to Loki. |  |  |
+| `alerting` _[Alerting](#alerting)_ | Alerting configures Prometheus alerting rules. |  |  |
+| `logs` _[Logs](#logs)_ | Logs configures cluster log forwarding via the ClusterLogForwarder operator. |  |  |
+| `collectorReplicas` _integer_ | CollectorReplicas specifies the number of replicas in the OpenTelemetry collector.<br />Defaults to 1 on single-node clusters and 2 on multi-node clusters. |  | Minimum: 0 <br /> |
+
+
+#### MonitoringStatus
+
+
+
+MonitoringStatus defines the observed state of Monitoring.
+
+
+
+_Appears in:_
+- [Monitoring](#monitoring)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `phase` _[Phase](#phase)_ | Phase is the top-level lifecycle phase of the module. |  |  |
+| `conditions` _[Condition](#condition) array_ | Conditions is the set of condition observations for this module. |  |  |
+| `observedGeneration` _integer_ | ObservedGeneration is the most recent .metadata.generation observed<br />by the controller. It allows consumers to determine whether the<br />controller has processed the latest spec changes. |  |  |
+| `releases` _[ComponentRelease](#componentrelease) array_ | Releases is the list of deployed component releases. |  |  |
+| `url` _string_ | URL is the dashboard endpoint when available. |  |  |
+| `usageLogsEndpoint` _string_ | UsageLogsEndpoint is the Loki OTLP endpoint for sending usage logs.<br />Populated when usageLogs is configured. |  |  |
 
 
 #### NetworkPolicyConfig
@@ -2950,27 +3047,26 @@ _Appears in:_
 
 
 
-Traces enables and defines the configuration for traces collection
+Traces defines the configuration for distributed traces collection.
 
 
 
 _Appears in:_
-- [DSCIMonitoring](#dscimonitoring)
-- [MonitoringCommonSpec](#monitoringcommonspec)
+- [MonitoringSpec](#monitoringspec)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `storage` _[TracesStorage](#tracesstorage)_ |  |  |  |
-| `sampleRatio` _string_ | SampleRatio determines the sampling rate for traces<br />Value should be between 0.0 (no sampling) and 1.0 (sample all traces) |  | Pattern: `^(0(\.[0-9]+)?\|1(\.0+)?)$` <br /> |
-| `tls` _[TracesTLS](#tracestls)_ | TLS configuration for Tempo gRPC connections |  |  |
-| `exporters` _object (keys:string, values:[RawExtension](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#rawextension-runtime-pkg))_ | Exporters defines custom trace exporters for sending traces to external observability tools.<br />Each key represents the exporter name, and the value contains the exporter configuration.<br />The configuration follows the OpenTelemetry Collector exporter format. |  |  |
+| `sampleRatio` _string_ | SampleRatio determines the sampling rate for traces (0.0–1.0). |  | Pattern: `^(0(\.[0-9]+)?\|1(\.0+)?)$` <br /> |
+| `tls` _[TracesTLS](#tracestls)_ | TLS configures TLS for Tempo gRPC connections. |  |  |
+| `exporters` _object (keys:string, values:[RawExtension](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#rawextension-runtime-pkg))_ | Exporters defines custom trace exporters for external observability tools. |  |  |
 
 
 #### TracesStorage
 
 
 
-TracesStorage defines the storage configuration for tracing
+TracesStorage defines the storage backend for Tempo.
 
 
 
@@ -2979,17 +3075,17 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `backend` _string_ | Backend defines the storage backend type.<br />Valid values are "pv", "s3", and "gcs". |  | Enum: [pv s3 gcs] <br /> |
-| `size` _string_ | Size specifies the size of the storage.<br />This field is optional. |  |  |
-| `secret` _string_ | Secret specifies the secret name for storage credentials.<br />This field is required when the backend is not "pv". |  |  |
-| `retention` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#duration-v1-meta)_ | Retention specifies how long trace data should be retained globally (e.g., "60m", "10h") |  |  |
+| `backend` _string_ | Backend defines the storage type: "pv", "s3", or "gcs". |  | Enum: [pv s3 gcs] <br /> |
+| `size` _string_ | Size specifies storage size (PV backend only). |  |  |
+| `secret` _string_ | Secret is the name of the Secret with storage credentials (non-PV backends). |  |  |
+| `retention` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#duration-v1-meta)_ | Retention specifies how long trace data is retained (e.g. "60m", "10h"). |  |  |
 
 
 #### TracesTLS
 
 
 
-TracesTLS defines TLS configuration for trace ingestion and query APIs
+TracesTLS defines TLS configuration for Tempo ingestion and query APIs.
 
 
 
@@ -2998,8 +3094,24 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `enabled` _boolean_ | Enabled enables TLS for Tempo OTLP ingestion (gRPC/HTTP) and query APIs (HTTP)<br />TLS is disabled by default to maintain backward compatibility |  |  |
-| `certificateSecret` _string_ | CertificateSecret specifies the name of the secret containing TLS certificates<br />If not specified, OpenShift service serving certificates will be used |  |  |
-| `caConfigMap` _string_ | CAConfigMap specifies the name of the ConfigMap containing the CA certificate<br />Required for mutual TLS authentication |  |  |
+| `enabled` _boolean_ | Enabled enables TLS for Tempo OTLP ingestion (gRPC/HTTP) and query APIs. |  |  |
+| `certificateSecret` _string_ | CertificateSecret is the name of the Secret containing TLS certificates. |  |  |
+| `caConfigMap` _string_ | CAConfigMap is the name of the ConfigMap containing the CA certificate. |  |  |
+
+
+#### UsageLogs
+
+
+
+UsageLogs defines the configuration for usage log collection.
+
+
+
+_Appears in:_
+- [MonitoringSpec](#monitoringspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `storage` _[LokiStorageConfig](#lokistorageconfig)_ | Storage configures the LokiStack storage backend (S3).<br />When configured, the operator deploys a LokiStack instance and auto-configures the collector endpoint. |  | Required: \{\} <br /> |
 
 
