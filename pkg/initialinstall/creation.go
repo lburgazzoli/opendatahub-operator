@@ -45,9 +45,9 @@ func CreateDefaultDSC(ctx context.Context, cli client.Client) error {
 				AIPipelines: componentApi.DSCDataSciencePipelines{
 					ManagementSpec: common.ManagementSpec{ManagementState: operatorv1.Managed},
 				},
-				Kserve: componentApi.DSCKserve{
+				Kserve: dscv3.DSCKserve{
 					ManagementSpec: common.ManagementSpec{ManagementState: operatorv1.Managed},
-					KserveCommonSpec: componentApi.KserveCommonSpec{
+					KserveCommonSpec: dscv3.KserveCommonSpec{
 						NIM: componentApi.NimSpec{
 							ManagementState: operatorv1.Managed,
 						},

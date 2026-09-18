@@ -1,7 +1,7 @@
 package aigateway_test
 
 import (
-	"context"
+	"fmt"
 	"testing"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
@@ -93,121 +93,83 @@ func TestPopulatePlatformModule_NilDSC(t *testing.T) {
 	g.Expect(pm.AIGateway.ManagementState).Should(BeEmpty())
 }
 
-func TestPopulatePlatformModule_LegacyKserveFallback(t *testing.T) {
-	g := NewWithT(t)
-	h := aigateway.NewHandler()
-	dsc := &dscv3.DataScienceCluster{
-		Spec: dscv3.DataScienceClusterSpec{
-			Components: dscv3.Components{
-				Kserve: componentApi.DSCKserve{
-					ManagementSpec: common.ManagementSpec{ManagementState: operatorv1.Managed},
-					KserveCommonSpec: componentApi.KserveCommonSpec{
-						ModelsAsService: componentApi.DSCModelsAsServiceSpec{ManagementState: operatorv1.Managed},
-					},
-				},
-			},
+func TestCanonicalModelsAsAService(t *testing.T) {
+	cases := []struct {
+		name    string
+		maas    componentApi.DSCModelsAsServiceSpec
+		spec    map[string]any
+		enabled bool
+	}{
+		{name: "empty", spec: map[string]any{}},
+		{
+			name:    "managed",
+			maas:    componentApi.DSCModelsAsServiceSpec{ManagementState: operatorv1.Managed},
+			spec:    map[string]any{"managementState": "Managed"},
+			enabled: true,
+		},
+		{
+			name: "removed",
+			maas: componentApi.DSCModelsAsServiceSpec{ManagementState: operatorv1.Removed},
+			spec: map[string]any{"managementState": "Removed"},
 		},
 	}
-	var pm configv1alpha1.PlatformModules
-	h.PopulatePlatformModule(&pm, &modules.DSCContext{DSC: dsc})
-	g.Expect(pm.AIGateway.ManagementState).Should(Equal(operatorv1.Managed))
+	states := []struct {
+		name      string
+		state     operatorv1.ManagementState
+		effective operatorv1.ManagementState
+	}{
+		{name: "empty", effective: operatorv1.Removed},
+		{name: "managed", state: operatorv1.Managed, effective: operatorv1.Managed},
+		{name: "removed", state: operatorv1.Removed, effective: operatorv1.Removed},
+	}
+
+	for _, tc := range cases {
+		for _, gateway := range states {
+			for _, kserve := range states {
+				name := fmt.Sprintf("%s/aigateway=%s/kserve=%s", tc.name, gateway.name, kserve.name)
+
+				t.Run(name, func(t *testing.T) {
+					g := NewWithT(t)
+					h := aigateway.NewHandler()
+					dsc := newDSC(gateway.state)
+					dsc.Spec.Components.Kserve.ManagementState = kserve.state
+					dsc.Spec.Components.AIGateway.ModelsAsAService = tc.maas
+					dsc.Spec.Components.AIGateway.BatchGateway.ManagementState = operatorv1.Managed
+					before := dsc.DeepCopy()
+					dscCtx := &modules.DSCContext{DSC: dsc}
+
+					var pm configv1alpha1.PlatformModules
+					h.PopulatePlatformModule(&pm, dscCtx)
+					g.Expect(pm.AIGateway.ManagementState).Should(Equal(gateway.effective))
+
+					subs := h.GetSubmoduleConditions()
+					g.Expect(subs).Should(HaveLen(2))
+					g.Expect(subs[0].SourceConditionType).Should(Equal("ModelsAsAServiceReady"))
+					g.Expect(subs[0].DSCConditionType).Should(Equal("ModelsAsAServiceReady"))
+					g.Expect(subs[0].StatusFieldName).Should(Equal("ModelsAsAService"))
+					g.Expect(subs[0].IsEnabled(dscCtx)).Should(Equal(tc.enabled))
+					g.Expect(subs[1].IsEnabled(dscCtx)).Should(BeTrue())
+
+					u, err := h.BuildModuleCR(t.Context(), nil, dscCtx, nil)
+					g.Expect(err).ShouldNot(HaveOccurred())
+					g.Expect(u.Object["spec"]).Should(Equal(map[string]any{
+						"modelsAsAService": tc.spec,
+						"batchGateway":     map[string]any{"managementState": "Managed"},
+					}))
+					g.Expect(dsc).Should(Equal(before), "projection must not mutate the DSC")
+				})
+			}
+		}
+	}
 }
 
-func TestPopulatePlatformModule_ExplicitRemovedWinsOverLegacy(t *testing.T) {
+func TestSubmoduleIsEnabled_NilDSC(t *testing.T) {
 	g := NewWithT(t)
 	h := aigateway.NewHandler()
-	dsc := &dscv3.DataScienceCluster{
-		Spec: dscv3.DataScienceClusterSpec{
-			Components: dscv3.Components{
-				AIGateway: componentApi.DSCAIGateway{
-					ManagementSpec: common.ManagementSpec{ManagementState: operatorv1.Removed},
-				},
-				Kserve: componentApi.DSCKserve{
-					ManagementSpec: common.ManagementSpec{ManagementState: operatorv1.Managed},
-					KserveCommonSpec: componentApi.KserveCommonSpec{
-						ModelsAsService: componentApi.DSCModelsAsServiceSpec{ManagementState: operatorv1.Managed},
-					},
-				},
-			},
-		},
+	for _, sub := range h.GetSubmoduleConditions() {
+		g.Expect(sub.IsEnabled(nil)).Should(BeFalse())
+		g.Expect(sub.IsEnabled(&modules.DSCContext{})).Should(BeFalse())
 	}
-	var pm configv1alpha1.PlatformModules
-	h.PopulatePlatformModule(&pm, &modules.DSCContext{DSC: dsc})
-	g.Expect(pm.AIGateway.ManagementState).Should(Equal(operatorv1.Removed))
-}
-
-// Backward compat: BuildModuleCR must populate modelsAsAService from
-// kserve.modelsAsService when modelsAsAService is not explicitly set.
-func TestBuildModuleCR_LegacyKserveModelsAsService_PopulatesModelsAsAService(t *testing.T) {
-	g := NewWithT(t)
-	h := aigateway.NewHandler()
-	dsc := &dscv3.DataScienceCluster{
-		Spec: dscv3.DataScienceClusterSpec{
-			Components: dscv3.Components{
-				Kserve: componentApi.DSCKserve{
-					ManagementSpec: common.ManagementSpec{
-						ManagementState: operatorv1.Managed,
-					},
-					KserveCommonSpec: componentApi.KserveCommonSpec{
-						ModelsAsService: componentApi.DSCModelsAsServiceSpec{
-							ManagementState: operatorv1.Managed,
-						},
-					},
-				},
-			},
-		},
-	}
-
-	u, err := h.BuildModuleCR(context.Background(), nil, &modules.DSCContext{DSC: dsc}, nil)
-	g.Expect(err).ShouldNot(HaveOccurred())
-
-	spec, ok := u.Object["spec"].(map[string]any)
-	g.Expect(ok).Should(BeTrue())
-
-	maas, ok := spec["modelsAsAService"].(map[string]any)
-	g.Expect(ok).Should(BeTrue(), "modelsAsAService should be present in AIGateway CR spec")
-	g.Expect(maas["managementState"]).Should(Equal("Managed"),
-		"modelsAsAService.managementState should be Managed (populated from kserve.modelsAsService)")
-}
-
-// Backward compat: explicit aigateway.modelsAsAService takes priority over
-// kserve.modelsAsService when both are set.
-func TestBuildModuleCR_ExplicitModelsAsAServiceWinsOverLegacy(t *testing.T) {
-	g := NewWithT(t)
-	h := aigateway.NewHandler()
-	dsc := &dscv3.DataScienceCluster{
-		Spec: dscv3.DataScienceClusterSpec{
-			Components: dscv3.Components{
-				AIGateway: componentApi.DSCAIGateway{
-					ManagementSpec: common.ManagementSpec{ManagementState: operatorv1.Managed},
-					AIGatewayCommonSpec: componentApi.AIGatewayCommonSpec{
-						ModelsAsAService: componentApi.DSCModelsAsServiceSpec{
-							ManagementState: operatorv1.Removed, // explicit
-						},
-					},
-				},
-				Kserve: componentApi.DSCKserve{
-					ManagementSpec: common.ManagementSpec{ManagementState: operatorv1.Managed},
-					KserveCommonSpec: componentApi.KserveCommonSpec{
-						ModelsAsService: componentApi.DSCModelsAsServiceSpec{
-							ManagementState: operatorv1.Managed, // legacy
-						},
-					},
-				},
-			},
-		},
-	}
-
-	u, err := h.BuildModuleCR(context.Background(), nil, &modules.DSCContext{DSC: dsc}, nil)
-	g.Expect(err).ShouldNot(HaveOccurred())
-
-	spec, ok := u.Object["spec"].(map[string]any)
-	g.Expect(ok).Should(BeTrue())
-
-	maas, ok := spec["modelsAsAService"].(map[string]any)
-	g.Expect(ok).Should(BeTrue())
-	g.Expect(maas["managementState"]).Should(Equal("Removed"),
-		"explicit modelsAsAService=Removed must win over legacy kserve.modelsAsService=Managed")
 }
 
 func TestBuildModuleCR_BasicProjection(t *testing.T) {
@@ -215,7 +177,7 @@ func TestBuildModuleCR_BasicProjection(t *testing.T) {
 	h := aigateway.NewHandler()
 	dsc := newDSC(operatorv1.Managed)
 
-	u, err := h.BuildModuleCR(context.Background(), nil, &modules.DSCContext{DSC: dsc}, nil)
+	u, err := h.BuildModuleCR(t.Context(), nil, &modules.DSCContext{DSC: dsc}, nil)
 	g.Expect(err).ShouldNot(HaveOccurred())
 	g.Expect(u.GetName()).Should(Equal(componentApi.AIGatewayInstanceName))
 	g.Expect(u.GetKind()).Should(Equal(componentApi.AIGatewayKind))
@@ -229,7 +191,7 @@ func TestBuildModuleCR_BasicProjection(t *testing.T) {
 func TestBuildModuleCR_NilDSCReturnsError(t *testing.T) {
 	g := NewWithT(t)
 	h := aigateway.NewHandler()
-	_, err := h.BuildModuleCR(context.Background(), nil, nil, nil)
+	_, err := h.BuildModuleCR(t.Context(), nil, nil, nil)
 	g.Expect(err).Should(HaveOccurred())
 }
 

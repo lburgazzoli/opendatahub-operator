@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
@@ -103,14 +104,18 @@ func TestDefaultDSCFromSampleAdmittedByAPIServer(t *testing.T) {
 	g.Expect(yaml.Unmarshal(sampleBytes, dsc)).To(Succeed(), "decoding %s into a v3 DataScienceCluster", dscSampleRelPath)
 
 	// (4) Deprecated components must not appear in the shipped default. Checked on the raw
-	// decoded sample (before API-server defaulting), since kserve.modelsAsService carries a
-	// +kubebuilder:default that the server would otherwise re-populate. The sample feeds
+	// decoded sample, so decoding into the v3 type cannot silently discard the removed
+	// kserve.modelsAsService field. The sample feeds
 	// alm-examples and -- per U1 -- is textually identical to the initialization-resource
 	// annotation, so this guards both OLM install paths against re-introducing deprecated
 	// items into the default users are presented with (RHOAIENG-89419).
 	g.Expect(dsc.Spec.Components.LlamaStackOperator.ManagementState).To(BeEmpty(),
 		"llamastackoperator is deprecated (renamed to ogx) and must not be set in the shipped default DSC")
-	g.Expect(dsc.Spec.Components.Kserve.ModelsAsService.ManagementState).To(BeEmpty(), //nolint:staticcheck // asserting the deprecated field is intentionally unset
+	var rawSample map[string]any
+	g.Expect(yaml.Unmarshal(sampleBytes, &rawSample)).To(Succeed())
+	_, legacyPresent, err := unstructured.NestedFieldNoCopy(rawSample, "spec", "components", "kserve", "modelsAsService")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(legacyPresent).To(BeFalse(),
 		"kserve.modelsAsService is deprecated (migrated to aigateway.modelsAsAService) and must not be set in the shipped default DSC")
 
 	// Capture the intended states before create -- controller-runtime's Create writes the

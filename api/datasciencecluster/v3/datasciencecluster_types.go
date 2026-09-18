@@ -44,7 +44,7 @@ type Components struct {
 
 	// Kserve component configuration.
 	// Only RawDeployment mode is supported.
-	Kserve componentApi.DSCKserve `json:"kserve,omitempty"`
+	Kserve DSCKserve `json:"kserve,omitempty"`
 
 	// Kueue component configuration.
 	Kueue componentApi.DSCKueue `json:"kueue,omitempty"`

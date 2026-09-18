@@ -256,7 +256,7 @@ func CreateDSC(name string, workbenchesNamespace string) *dscv3.DataScienceClust
 						ManagementState: operatorv1.Removed,
 					},
 				},
-				Kserve: componentApi.DSCKserve{
+				Kserve: dscv3.DSCKserve{
 					ManagementSpec: common.ManagementSpec{
 						ManagementState: operatorv1.Removed,
 					},

@@ -51,7 +51,7 @@ func managedDSCContext() (*modules.DSCContext, *modules.ModuleCRConfig) {
 						AIGateway: componentApi.DSCAIGateway{
 							ManagementSpec: common.ManagementSpec{ManagementState: operatorv1.Managed},
 						},
-						Kserve: componentApi.DSCKserve{
+						Kserve: dscv3.DSCKserve{
 							ManagementSpec: common.ManagementSpec{ManagementState: operatorv1.Managed},
 						},
 						Workbenches: componentApi.DSCWorkbenches{

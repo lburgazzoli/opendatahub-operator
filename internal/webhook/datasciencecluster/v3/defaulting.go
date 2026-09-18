@@ -1,14 +1,16 @@
 //go:build !nowebhook
 
-// Package v2 provides admission webhook logic for defaulting DataScienceCluster v3 resources.
+// Package v3 provides admission webhook logic for defaulting DataScienceCluster v3 resources.
 // It ensures required fields are set to their default values when not specified by the user.
 package v3
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
+	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -66,6 +68,25 @@ func (d *Defaulter) Default(ctx context.Context, obj runtime.Object) error {
 
 	// Set default values
 	d.applyDefaults(ctx, dsc)
+
+	request, err := admission.RequestFromContext(ctx)
+	if err != nil {
+		// Direct defaulting calls have no old object and cannot introduce history.
+		return dsc.AdmitMaaSV2State(nil)
+	}
+
+	var old *dscv3.DataScienceCluster
+	if request.Operation == admissionv1.Update {
+		old = &dscv3.DataScienceCluster{}
+		if err := json.Unmarshal(request.OldObject.Raw, old); err != nil {
+			return fmt.Errorf("decode old DSC for MaaS compatibility: %w", err)
+		}
+	}
+
+	if err := dsc.AdmitMaaSV2State(old); err != nil {
+		return fmt.Errorf("admit DSC MaaS compatibility: %w", err)
+	}
+
 	return nil
 }
 

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -25,15 +25,18 @@ import (
 type baseline map[string]string
 
 type conversionCase struct {
-	CaseID           string          `json:"case_id"`
-	V2Path           string          `json:"v2_path"`
-	V3Path           string          `json:"v3_path"`
-	OpenAPIPaths     []string        `json:"openapi_paths"`
-	ChangedSemantics string          `json:"changed_semantics"`
-	V2Object         json.RawMessage `json:"v2_object"`
-	V3Object         json.RawMessage `json:"v3_object"`
-	ExpectedV2       json.RawMessage `json:"expected_v2"`
-	ExpectedV3       json.RawMessage `json:"expected_v3"`
+	CaseID                 string          `json:"case_id"`
+	V2Path                 string          `json:"v2_path"`
+	V3Path                 string          `json:"v3_path"`
+	OpenAPIPaths           []string        `json:"openapi_paths"`
+	ChangedSemantics       string          `json:"changed_semantics"`
+	V2Object               json.RawMessage `json:"v2_object"`
+	V3Object               json.RawMessage `json:"v3_object"`
+	ExpectedV2             json.RawMessage `json:"expected_v2"`
+	ExpectedV3             json.RawMessage `json:"expected_v3"`
+	ExpectedV2RoundTrip    json.RawMessage `json:"expected_v2_round_trip,omitempty"`
+	ExpectedV3RoundTrip    json.RawMessage `json:"expected_v3_round_trip,omitempty"`
+	NormalizationRationale string          `json:"normalization_rationale,omitempty"`
 }
 
 var requiredCases = []string{"forward", "backward", "v2-round-trip", "v3-round-trip"}
@@ -100,18 +103,45 @@ func schemaDifferences(a, b any, path string) []string {
 		}
 		diff = append(diff, schemaDifferences(av, bv, path+"."+k)...)
 	}
-	sort.Strings(diff)
+	slices.Sort(diff)
 	return diff
+}
+
+func validateRoundTripExpectations(entry conversionCase) error {
+	hasExpected := len(entry.ExpectedV2RoundTrip) != 0 || len(entry.ExpectedV3RoundTrip) != 0
+	hasRationale := strings.TrimSpace(entry.NormalizationRationale) != ""
+	if hasExpected && !hasRationale {
+		return fmt.Errorf("conversion case %q has a round-trip exception without a normalization rationale", entry.CaseID)
+	}
+	if hasRationale && !hasExpected {
+		return fmt.Errorf("conversion case %q has a normalization rationale without an explicit round-trip expectation", entry.CaseID)
+	}
+	for _, expected := range []json.RawMessage{entry.ExpectedV2RoundTrip, entry.ExpectedV3RoundTrip} {
+		if len(expected) == 0 {
+			continue
+		}
+		var object map[string]any
+		if err := json.Unmarshal(expected, &object); err != nil {
+			return fmt.Errorf("conversion case %q has an invalid round-trip object: %w", entry.CaseID, err)
+		}
+		if object == nil {
+			return fmt.Errorf("conversion case %q has a null round-trip object", entry.CaseID)
+		}
+	}
+	return nil
 }
 
 func validateCases(entries []conversionCase, executed map[string]map[string]bool) error {
 	seen := make(map[string]bool, len(entries))
 	for _, entry := range entries {
-		if entry.CaseID == "" || entry.V2Path == "" || entry.V3Path == "" || len(entry.OpenAPIPaths) == 0 || entry.ChangedSemantics == "" {
+		if entry.CaseID == "" || entry.V2Path == "" || entry.V3Path == "" || len(entry.OpenAPIPaths) == 0 || strings.TrimSpace(entry.ChangedSemantics) == "" {
 			return fmt.Errorf("conversion case %q lacks identity, path, or changed semantics", entry.CaseID)
 		}
 		if len(entry.V2Object) == 0 || len(entry.V3Object) == 0 || len(entry.ExpectedV2) == 0 || len(entry.ExpectedV3) == 0 {
 			return fmt.Errorf("conversion case %q lacks an executable fixture", entry.CaseID)
+		}
+		if err := validateRoundTripExpectations(entry); err != nil {
+			return err
 		}
 		if seen[entry.CaseID] {
 			return fmt.Errorf("duplicate conversion case %q", entry.CaseID)
@@ -138,25 +168,49 @@ func conversionWire(t *testing.T, obj any) map[string]any {
 	return wire
 }
 
+const maasConversionAnnotation = "conversion.opendatahub.io/maas-v2-state"
+
+func roundTripFixture(source, expected json.RawMessage) json.RawMessage {
+	if len(expected) != 0 {
+		return expected
+	}
+	return source
+}
+
+func expectedOpenAPIPaths(entries []conversionCase) []string {
+	var paths []string
+	for _, entry := range entries {
+		paths = append(paths, entry.OpenAPIPaths...)
+	}
+	slices.Sort(paths)
+	return slices.Compact(paths)
+}
+
 func runConversionCases(t *testing.T, entries []conversionCase) map[string]map[string]bool {
 	t.Helper()
 	executed := make(map[string]map[string]bool, len(entries))
 	for _, entry := range entries {
 		t.Run(entry.CaseID, func(t *testing.T) {
 			g := NewWithT(t)
+			g.Expect(validateRoundTripExpectations(entry)).To(Succeed())
 			var v2 dscv2.DataScienceCluster
 			var v3 dscv3.DataScienceCluster
 			var expectedV2 dscv2.DataScienceCluster
 			var expectedV3 dscv3.DataScienceCluster
+			var expectedV2RoundTrip dscv2.DataScienceCluster
+			var expectedV3RoundTrip dscv3.DataScienceCluster
 			g.Expect(json.Unmarshal(entry.V2Object, &v2)).To(Succeed())
 			g.Expect(json.Unmarshal(entry.V3Object, &v3)).To(Succeed())
 			g.Expect(json.Unmarshal(entry.ExpectedV2, &expectedV2)).To(Succeed())
 			g.Expect(json.Unmarshal(entry.ExpectedV3, &expectedV3)).To(Succeed())
+			g.Expect(json.Unmarshal(roundTripFixture(entry.V2Object, entry.ExpectedV2RoundTrip), &expectedV2RoundTrip)).To(Succeed())
+			g.Expect(json.Unmarshal(roundTripFixture(entry.V3Object, entry.ExpectedV3RoundTrip), &expectedV3RoundTrip)).To(Succeed())
 			executed[entry.CaseID] = make(map[string]bool, len(requiredCases))
 
 			fromV2 := &dscv3.DataScienceCluster{}
 			g.Expect(v2.ConvertTo(fromV2)).To(Succeed())
-			g.Expect(conversionWire(t, fromV2)).To(Equal(conversionWire(t, &expectedV3)))
+			forwardExpected := conversionWire(t, &expectedV3)
+			g.Expect(conversionWire(t, fromV2)).To(Equal(forwardExpected), "forward, including the exact provenance marker")
 			executed[entry.CaseID]["forward"] = true
 
 			fromV3 := &dscv2.DataScienceCluster{}
@@ -166,12 +220,13 @@ func runConversionCases(t *testing.T, entries []conversionCase) map[string]map[s
 
 			v2RoundTrip := &dscv2.DataScienceCluster{}
 			g.Expect(v2RoundTrip.ConvertFrom(fromV2)).To(Succeed())
-			g.Expect(conversionWire(t, v2RoundTrip)).To(Equal(conversionWire(t, &v2)))
+			g.Expect(conversionWire(t, v2RoundTrip)).To(Equal(conversionWire(t, &expectedV2RoundTrip)), "v2 round trip: %s", entry.NormalizationRationale)
 			executed[entry.CaseID]["v2-round-trip"] = true
 
 			v3RoundTrip := &dscv3.DataScienceCluster{}
 			g.Expect(fromV3.ConvertTo(v3RoundTrip)).To(Succeed())
-			g.Expect(conversionWire(t, v3RoundTrip)).To(Equal(conversionWire(t, &v3)))
+			roundTripExpected := conversionWire(t, &expectedV3RoundTrip)
+			g.Expect(conversionWire(t, v3RoundTrip)).To(Equal(roundTripExpected), "v3 round trip: %s", entry.NormalizationRationale)
 			executed[entry.CaseID]["v3-round-trip"] = true
 		})
 	}
@@ -183,11 +238,7 @@ func TestV2V3OpenAPIIdentical(t *testing.T) {
 	root := repoRoot(t)
 	entries := readConversionCases(t)
 	g.Expect(validateCases(entries, runConversionCases(t, entries))).To(Succeed())
-	var expectedPaths []string
-	for _, entry := range entries {
-		expectedPaths = append(expectedPaths, entry.OpenAPIPaths...)
-	}
-	sort.Strings(expectedPaths)
+	expectedPaths := expectedOpenAPIPaths(entries)
 	data, err := os.ReadFile(filepath.Join(root, "pkg/dsc/compare/testdata/v2-openapi-baseline.json"))
 	g.Expect(err).NotTo(HaveOccurred())
 	var expected baseline
@@ -295,4 +346,66 @@ func TestConversionRegistry(t *testing.T) {
 	// A semantic difference cannot be registered with an empty path or explanation.
 	g.Expect(validateCases([]conversionCase{{CaseID: "empty"}}, nil)).To(HaveOccurred())
 	g.Expect(validateCases([]conversionCase{{CaseID: "missing-fixture", V2Path: "a", V3Path: "b", OpenAPIPaths: []string{"$.properties.spec"}, ChangedSemantics: "added"}}, nil)).To(MatchError(ContainSubstring("executable fixture")))
+}
+
+func TestConversionRegistryRejectsUnexplainedNormalization(t *testing.T) {
+	source := json.RawMessage(`{"spec":{"components":{"kserve":{"managementState":"Managed"},"aigateway":{"modelsAsAService":{}}}}}`)
+	normalized := json.RawMessage(`{"spec":{"components":{"kserve":{"managementState":"Managed"},"aigateway":{"modelsAsAService":{"managementState":"Removed"}}}}}`)
+	for _, version := range []string{"v2", "v3"} {
+		t.Run(version, func(t *testing.T) {
+			g := NewWithT(t)
+			entry := conversionCase{
+				CaseID: "unexplained", V2Path: "old", V3Path: "new",
+				OpenAPIPaths: []string{"$.properties.spec"}, ChangedSemantics: "MaaS migration",
+				V2Object: source, V3Object: source, ExpectedV2: normalized, ExpectedV3: normalized,
+			}
+			executed := map[string]map[string]bool{"unexplained": {}}
+			for _, category := range requiredCases {
+				executed[entry.CaseID][category] = true
+			}
+			// Direct conversion expectations must never silently authorize round-trip loss.
+			g.Expect(roundTripFixture(source, nil)).To(Equal(source))
+			g.Expect(roundTripFixture(source, nil)).NotTo(Equal(normalized))
+			if version == "v2" {
+				entry.ExpectedV2RoundTrip = normalized
+			} else {
+				entry.ExpectedV3RoundTrip = normalized
+			}
+			for _, rationale := range []string{"", " \n\t "} {
+				entry.NormalizationRationale = rationale
+				g.Expect(validateCases([]conversionCase{entry}, executed)).To(MatchError(ContainSubstring("without a normalization rationale")))
+			}
+			entry.NormalizationRationale = "Native v3 empty MaaS with managed KServe selects reverse-conversion legacy Removed on the forward leg."
+			g.Expect(validateCases([]conversionCase{entry}, executed)).To(Succeed())
+			g.Expect(roundTripFixture(source, normalized)).To(Equal(normalized))
+			entry.ExpectedV2RoundTrip = nil
+			entry.ExpectedV3RoundTrip = nil
+			g.Expect(validateCases([]conversionCase{entry}, executed)).To(MatchError(ContainSubstring("without an explicit round-trip expectation")))
+			entry.ExpectedV3RoundTrip = json.RawMessage(`null`)
+			g.Expect(validateCases([]conversionCase{entry}, executed)).To(MatchError(ContainSubstring("null round-trip object")))
+		})
+	}
+}
+
+func TestConversionRegistryDeduplicatesOpenAPIPaths(t *testing.T) {
+	g := NewWithT(t)
+	entries := []conversionCase{
+		{OpenAPIPaths: []string{"$.b", "$.a"}},
+		{OpenAPIPaths: []string{"$.a", "$.b", "$.c"}},
+	}
+	g.Expect(expectedOpenAPIPaths(entries)).To(Equal([]string{"$.a", "$.b", "$.c"}))
+	g.Expect(entries[0].OpenAPIPaths).To(Equal([]string{"$.b", "$.a"}))
+}
+
+func TestConversionRegistryRejectsUnknownMaaSMarker(t *testing.T) {
+	for _, value := range []string{"", "Managed", "removed", "legacy-managed ", `{"legacy":"Managed"}`} {
+		t.Run(value, func(t *testing.T) {
+			g := NewWithT(t)
+			source := &dscv3.DataScienceCluster{}
+			source.Annotations = map[string]string{maasConversionAnnotation: value}
+			target := &dscv2.DataScienceCluster{}
+			g.Expect(target.ConvertFrom(source)).NotTo(Succeed(), "only the literal legacy-managed is valid")
+			g.Expect(source.Annotations).To(Equal(map[string]string{maasConversionAnnotation: value}), "reject without mutating the source")
+		})
+	}
 }

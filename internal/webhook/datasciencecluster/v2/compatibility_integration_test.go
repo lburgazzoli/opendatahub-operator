@@ -1,8 +1,6 @@
 package v2_test
 
 import (
-	"net"
-	"strconv"
 	"testing"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
@@ -32,22 +30,10 @@ func TestV2ClientAgainstV3Storage(t *testing.T) {
 	t.Cleanup(teardown)
 	cli := env.Client()
 	createDSCI(g, ctx, cli)
+	configureDSCConversion(t, ctx, env)
 	extensionsClient, err := apiextensionsclientset.NewForConfig(env.Config())
 	g.Expect(err).NotTo(HaveOccurred())
 	crdClient := extensionsClient.ApiextensionsV1().CustomResourceDefinitions()
-	crd, err := crdClient.Get(ctx, "datascienceclusters.datasciencecluster.opendatahub.io", metav1.GetOptions{})
-	g.Expect(err).NotTo(HaveOccurred())
-	webhookOptions := env.Env.WebhookInstallOptions
-	url := "https://" + net.JoinHostPort(webhookOptions.LocalServingHost, strconv.Itoa(webhookOptions.LocalServingPort)) + "/convert"
-	crd.Spec.Conversion = &apiextensionsv1.CustomResourceConversion{
-		Strategy: apiextensionsv1.WebhookConverter,
-		Webhook: &apiextensionsv1.WebhookConversion{
-			ClientConfig:             &apiextensionsv1.WebhookClientConfig{URL: &url, CABundle: webhookOptions.LocalServingCAData},
-			ConversionReviewVersions: []string{"v1"},
-		},
-	}
-	_, err = crdClient.Update(ctx, crd, metav1.UpdateOptions{})
-	g.Expect(err).NotTo(HaveOccurred())
 
 	v2 := envtestutil.NewDSCV2("v2-client-v3-storage")
 	v2.Labels = map[string]string{"conversion": "preserved"}
@@ -73,7 +59,7 @@ func TestV2ClientAgainstV3Storage(t *testing.T) {
 	g.Expect(v3.Status.Conditions).To(HaveLen(1))
 
 	g.Expect(v3.ResourceVersion).NotTo(BeEmpty())
-	crd, err = crdClient.Get(ctx, "datascienceclusters.datasciencecluster.opendatahub.io", metav1.GetOptions{})
+	crd, err := crdClient.Get(ctx, "datascienceclusters.datasciencecluster.opendatahub.io", metav1.GetOptions{})
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(crd.Status.StoredVersions).To(Equal([]string{dscv3.GroupVersion.Version}))
 	g.Expect(crd.Spec.Conversion.Strategy).To(Equal(apiextensionsv1.WebhookConverter))

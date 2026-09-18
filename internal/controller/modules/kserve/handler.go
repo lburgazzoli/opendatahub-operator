@@ -168,7 +168,6 @@ func (h *handler) BuildModuleCR(
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert KserveCommonSpec to unstructured: %w", err)
 	}
-	delete(spec, "modelsAsService")
 
 	// Inject cross-component ModelRegistry state.
 	// ModelRegistry is a separate DSC component, not a Kserve sub-component.
