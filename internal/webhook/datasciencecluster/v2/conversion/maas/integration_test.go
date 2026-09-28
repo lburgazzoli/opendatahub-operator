@@ -230,7 +230,7 @@ func (m maasTest) testMaaSUnrelatedUpdates(t *testing.T) {
 		name  string
 		apply func(*unstructured.Unstructured) error
 	}{
-		{"spec", jq.Transform(`.spec.components.dashboard.managementState = "Managed"`)},
+		{"spec", jq.Transform(`.spec.components.dashboard.standard.managementState = "Managed"`)},
 		{"metadata", matchers.SetLabel("preserved", "yes")},
 		{"delete annotation", matchers.RemoveAnnotation(maasV2StateAnnotation)},
 		{"resubmit marker", matchers.SetAnnotation(maasV2StateAnnotation, "legacy-managed")},
