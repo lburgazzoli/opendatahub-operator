@@ -862,7 +862,13 @@ func (tc *TestContext) CheckComponentResourceExistsOrNotWithKind(shouldExist boo
 //   - kind (string): The component kind (e.g., "Dashboard", "Workbenches").
 func (tc *TestContext) UpdateComponentStateInDataScienceClusterWithKind(state operatorv1.ManagementState, kind string) {
 	componentName, conditionKind := getComponentNameFromKind(kind)
-	specPath := componentManagementStateSpecPath(kind, componentName)
+	var specPath string
+	switch kind {
+	case componentApi.DashboardKind:
+		specPath = ".spec.components.dashboard.standard.managementState"
+	default:
+		specPath = ".spec.components." + componentName + ".managementState"
+	}
 
 	readyCondition := metav1.ConditionFalse
 	if state == operatorv1.Managed {
@@ -884,14 +890,6 @@ func (tc *TestContext) UpdateComponentStateInDataScienceClusterWithKind(state op
 		WithMutateFunc(testf.Transform(`%s = "%s"`, specPath, state)),
 		WithCondition(And(conditions...)),
 	)
-}
-
-func componentManagementStateSpecPath(kind, componentName string) string {
-	if kind == componentApi.DashboardKind {
-		return ".spec.components.dashboard.standard.managementState"
-	}
-
-	return ".spec.components." + componentName + ".managementState"
 }
 
 // EnsureOperatorInstalledWithChannel ensures that an operator is installed via OLM with a specific channel.
