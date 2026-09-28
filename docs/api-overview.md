@@ -1795,11 +1795,11 @@ _Appears in:_
 Package v1alpha2 contains API Schema definitions for the config v1alpha2 API group.
 
 ### Resource Types
-- [Platform](#platform)
+- [Platform](#platform-v1alpha2)
 
 
 
-#### Platform
+#### Platform (v1alpha2)
 
 
 
@@ -1818,11 +1818,11 @@ DataScienceCluster is not installed (xKS / vanilla Kubernetes).
 | `kind` _string_ | Kind is a string value representing the REST resource this object represents.<br />Servers may infer this from the endpoint the client submits requests to.<br />Cannot be updated.<br />In CamelCase.<br />More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds |  |  |
 | `apiVersion` _string_ | APIVersion defines the versioned schema of this representation of an object.<br />Servers should convert recognized schemas to the latest internal value, and<br />may reject unrecognized values.<br />More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources |  |  |
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `spec` _[PlatformSpec](#platformspec)_ |  |  |  |
-| `status` _[PlatformStatus](#platformstatus)_ |  |  |  |
+| `spec` _[PlatformSpec](#platformspec-v1alpha2)_ |  |  |  |
+| `status` _[PlatformStatus](#platformstatus-v1alpha2)_ |  |  |  |
 
 
-#### PlatformModules
+#### PlatformModules (v1alpha2)
 
 
 
@@ -1834,7 +1834,7 @@ Add new module fields here when onboarding additional modules.
 
 
 _Appears in:_
-- [PlatformSpec](#platformspec)
+- [PlatformSpec](#platformspec-v1alpha2)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -1855,7 +1855,7 @@ _Appears in:_
 | `aiHub` _[ManagementSpec](https://pkg.go.dev/github.com/opendatahub-io/opendatahub-operator/v2/api/common#ManagementSpec)_ | AIHub controls the AI Hub module operator lifecycle. |  |  |
 
 
-#### PlatformSpec
+#### PlatformSpec (v1alpha2)
 
 
 
@@ -1864,14 +1864,14 @@ PlatformSpec defines the desired state of Platform.
 
 
 _Appears in:_
-- [Platform](#platform)
+- [Platform](#platform-v1alpha2)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `modules` _[PlatformModules](#platformmodules)_ | Modules declares the set of modules managed by this Platform instance.<br />Each field corresponds to a registered module handler. Modules follow<br />the same Managed/Removed/empty convention as DSC components: Managed<br />deploys the module, Removed tears it down, empty means not managed. |  |  |
+| `modules` _[PlatformModules](#platformmodules-v1alpha2)_ | Modules declares the set of modules managed by this Platform instance.<br />Each field corresponds to a registered module handler. Modules follow<br />the same Managed/Removed/empty convention as DSC components: Managed<br />deploys the module, Removed tears it down, empty means not managed. |  |  |
 
 
-#### PlatformStatus
+#### PlatformStatus (v1alpha2)
 
 
 
@@ -1880,7 +1880,7 @@ PlatformStatus defines the observed state of Platform.
 
 
 _Appears in:_
-- [Platform](#platform)
+- [Platform](#platform-v1alpha2)
 
 
 
@@ -2032,11 +2032,11 @@ _Appears in:_
 Package v3 contains API Schema definitions for the datasciencecluster v3 API group.
 
 ### Resource Types
-- [DataScienceCluster](#datasciencecluster)
+- [DataScienceCluster](#datasciencecluster-v3)
 
 
 
-#### Components
+#### Components (v3)
 
 
 
@@ -2045,7 +2045,7 @@ Package v3 contains API Schema definitions for the datasciencecluster v3 API gro
 
 
 _Appears in:_
-- [DataScienceClusterSpec](#datascienceclusterspec)
+- [DataScienceClusterSpec](#datascienceclusterspec-v3)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -2066,7 +2066,7 @@ _Appears in:_
 | `mcplifecycleoperator` _[DSCMCPLifecycleOperator](#dscmcplifecycleoperator)_ | MCPLifecycleOperator component configuration. |  |  |
 
 
-#### ComponentsStatus
+#### ComponentsStatus (v3)
 
 
 
@@ -2075,7 +2075,7 @@ ComponentsStatus defines the custom status of DataScienceCluster components.
 
 
 _Appears in:_
-- [DataScienceClusterStatus](#datascienceclusterstatus)
+- [DataScienceClusterStatus](#datascienceclusterstatus-v3)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -2109,7 +2109,7 @@ DSCKserve contains the v3 KServe configuration. MaaS belongs to AI Gateway.
 
 
 _Appears in:_
-- [Components](#components)
+- [Components](#components-v3)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -2123,7 +2123,7 @@ _Appears in:_
 | `modelCache` _[ModelCacheSpec](#modelcachespec)_ | Configures and enables Model Cache integration |  |  |
 
 
-#### DataScienceCluster
+#### DataScienceCluster (v3)
 
 
 
@@ -2140,11 +2140,11 @@ DataScienceCluster is the Schema for the datascienceclusters API.
 | `kind` _string_ | Kind is a string value representing the REST resource this object represents.<br />Servers may infer this from the endpoint the client submits requests to.<br />Cannot be updated.<br />In CamelCase.<br />More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds |  |  |
 | `apiVersion` _string_ | APIVersion defines the versioned schema of this representation of an object.<br />Servers should convert recognized schemas to the latest internal value, and<br />may reject unrecognized values.<br />More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources |  |  |
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  |  |
-| `spec` _[DataScienceClusterSpec](#datascienceclusterspec)_ |  |  |  |
-| `status` _[DataScienceClusterStatus](#datascienceclusterstatus)_ |  |  |  |
+| `spec` _[DataScienceClusterSpec](#datascienceclusterspec-v3)_ |  |  |  |
+| `status` _[DataScienceClusterStatus](#datascienceclusterstatus-v3)_ |  |  |  |
 
 
-#### DataScienceClusterSpec
+#### DataScienceClusterSpec (v3)
 
 
 
@@ -2153,14 +2153,14 @@ DataScienceClusterSpec defines the desired state of the cluster.
 
 
 _Appears in:_
-- [DataScienceCluster](#datasciencecluster)
+- [DataScienceCluster](#datasciencecluster-v3)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `components` _[Components](#components)_ | Override and fine tune specific component configurations. |  |  |
+| `components` _[Components](#components-v3)_ | Override and fine tune specific component configurations. |  |  |
 
 
-#### DataScienceClusterStatus
+#### DataScienceClusterStatus (v3)
 
 
 
@@ -2169,13 +2169,13 @@ DataScienceClusterStatus defines the observed state of DataScienceCluster.
 
 
 _Appears in:_
-- [DataScienceCluster](#datasciencecluster)
+- [DataScienceCluster](#datasciencecluster-v3)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `relatedObjects` _[ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#objectreference-v1-core) array_ | RelatedObjects is a list of objects created and maintained by this operator.<br />Object references will be added to this list after they have been created AND found in the cluster. |  |  |
 | `errorMessage` _string_ |  |  |  |
-| `components` _[ComponentsStatus](#componentsstatus)_ | Expose component's specific status |  |  |
+| `components` _[ComponentsStatus](#componentsstatus-v3)_ | Expose component's specific status |  |  |
 | `release` _[Release](#release)_ | Version and release type |  |  |
 
 
