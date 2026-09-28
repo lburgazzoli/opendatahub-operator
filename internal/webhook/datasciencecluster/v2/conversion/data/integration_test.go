@@ -4,8 +4,10 @@ import (
 	"testing"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/opendatahub-io/opendatahub-operator/v2/api/common"
 	dscv2 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v2"
 	dscv3 "github.com/opendatahub-io/opendatahub-operator/v2/api/datasciencecluster/v3"
 	v2webhook "github.com/opendatahub-io/opendatahub-operator/v2/internal/webhook/datasciencecluster/v2"
@@ -58,5 +60,37 @@ func TestDataVersionedAdmission(t *testing.T) {
 		g.Expect(v2.Spec.Components.FeastOperator.DataRegistry.ManagementState).To(Equal(operatorv1.Removed))
 
 		g.Expect(env.Client().Delete(ctx, v3)).To(Succeed())
+	})
+
+	t.Run("readiness condition mapping", func(t *testing.T) {
+		g := NewWithT(t)
+		v2 := &dscv2.DataScienceCluster{}
+		v2.Name = "data-condition-mapping"
+		g.Expect(env.Client().Create(ctx, v2)).To(Succeed())
+		t.Cleanup(func() {
+			g.Expect(env.Client().Delete(ctx, v2)).To(Succeed())
+		})
+
+		v2.Status.Conditions = []common.Condition{{
+			Type:   "FeastOperatorReady",
+			Status: metav1.ConditionTrue,
+			Reason: "FeatureStoreReady",
+		}}
+		g.Expect(env.Client().Status().Update(ctx, v2)).To(Succeed())
+
+		v3 := &dscv3.DataScienceCluster{}
+		g.Expect(env.Client().Get(ctx, client.ObjectKeyFromObject(v2), v3)).To(Succeed())
+		g.Expect(v3.Status.Conditions).To(ContainElement(HaveField("Type", "DataReady")))
+
+		v3.Status.Conditions = []common.Condition{{
+			Type:   "DataReady",
+			Status: metav1.ConditionTrue,
+			Reason: "DataReady",
+		}}
+		g.Expect(env.Client().Status().Update(ctx, v3)).To(Succeed())
+
+		convertedV2 := &dscv2.DataScienceCluster{}
+		g.Expect(env.Client().Get(ctx, client.ObjectKeyFromObject(v3), convertedV2)).To(Succeed())
+		g.Expect(convertedV2.Status.Conditions).To(ContainElement(HaveField("Type", "FeastOperatorReady")))
 	})
 }

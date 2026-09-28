@@ -30,6 +30,8 @@ import (
 const (
 	aiHubReadyCondition         = "AIHubReady"
 	modelRegistryReadyCondition = "ModelRegistryReady"
+	dataReadyCondition          = "DataReady"
+	feastOperatorReadyCondition = "FeastOperatorReady"
 )
 
 func withConditionTypeMapping(status common.Status, mappings map[string]string) common.Status {
@@ -189,6 +191,7 @@ func (c *DataScienceCluster) ConvertTo(dstRaw conversion.Hub) error {
 	dst.Status = dscv3.DataScienceClusterStatus{
 		Status: withConditionTypeMapping(src.Status.Status, map[string]string{
 			modelRegistryReadyCondition: aiHubReadyCondition,
+			feastOperatorReadyCondition: dataReadyCondition,
 		}),
 		RelatedObjects: src.Status.RelatedObjects,
 		ErrorMessage:   src.Status.ErrorMessage,
@@ -282,6 +285,7 @@ func (c *DataScienceCluster) ConvertFrom(srcRaw conversion.Hub) error {
 	dst.Status = DataScienceClusterStatus{
 		Status: withConditionTypeMapping(src.Status.Status, map[string]string{
 			aiHubReadyCondition: modelRegistryReadyCondition,
+			dataReadyCondition:  feastOperatorReadyCondition,
 		}),
 		RelatedObjects: src.Status.RelatedObjects,
 		ErrorMessage:   src.Status.ErrorMessage,
