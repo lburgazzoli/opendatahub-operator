@@ -161,7 +161,12 @@ func (a *Assertion[T]) Should(matcher types.GomegaMatcher, optionalDescription .
 
 	a.build(wrapper).Should(matcher, optionalDescription...)
 
-	return res.Load().value
+	if result := res.Load(); result != nil {
+		return result.value
+	}
+
+	var zero T
+	return zero
 }
 
 //nolint:dupl
@@ -198,7 +203,12 @@ func (a *Assertion[T]) ShouldNot(matcher types.GomegaMatcher, optionalDescriptio
 
 	a.build(wrapper).ShouldNot(matcher, optionalDescription...)
 
-	return res.Load().value
+	if result := res.Load(); result != nil {
+		return result.value
+	}
+
+	var zero T
+	return zero
 }
 
 type EventuallyErr struct {
