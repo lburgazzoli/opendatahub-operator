@@ -92,7 +92,6 @@ type TestContextConfig struct {
 	operatorResilienceTest           bool
 	webhookTest                      bool
 	conversionWebhookTest            bool
-	conversionWebhookExplicit        bool
 	conversionWebhookDSC             bool
 	conversionWebhookPlatform        bool
 	componentSelectionExplicit       bool
@@ -663,7 +662,7 @@ func TestMain(m *testing.M) {
 	checkEnvVarBindingError(viper.BindEnv("test-operator-v2tov3upgrade", viper.GetEnvPrefix()+"_OPERATOR_V2TOV3UPGRADE"))
 	pflag.Bool("test-webhook", true, "run webhook tests")
 	checkEnvVarBindingError(viper.BindEnv("test-webhook", viper.GetEnvPrefix()+"_WEBHOOK"))
-	pflag.Bool("test-conversion-webhook", true, "run conversion webhook tests in full suites or when explicitly enabled")
+	pflag.Bool("test-conversion-webhook", true, "run conversion webhook tests")
 	checkEnvVarBindingError(viper.BindEnv("test-conversion-webhook", viper.GetEnvPrefix()+"_CONVERSION_WEBHOOK"))
 	pflag.Bool("test-conversion-webhook-dsc", true, "run DSC conversion webhook tests")
 	checkEnvVarBindingError(viper.BindEnv("test-conversion-webhook-dsc", viper.GetEnvPrefix()+"_CONVERSION_WEBHOOK_DSC"))
@@ -754,7 +753,6 @@ func TestMain(m *testing.M) {
 	testOpts.v2tov3upgradeTest = viper.GetBool("test-operator-v2tov3upgrade")
 	testOpts.webhookTest = viper.GetBool("test-webhook")
 	testOpts.conversionWebhookTest = viper.GetBool("test-conversion-webhook")
-	testOpts.conversionWebhookExplicit = pflag.Lookup("test-conversion-webhook").Changed || envIsSet("E2E_TEST_CONVERSION_WEBHOOK")
 	testOpts.conversionWebhookDSC = viper.GetBool("test-conversion-webhook-dsc")
 	testOpts.conversionWebhookPlatform = viper.GetBool("test-conversion-webhook-platform")
 	testOpts.componentSelectionExplicit = pflag.Lookup("test-component").Changed || envIsSet("E2E_TEST_COMPONENT")

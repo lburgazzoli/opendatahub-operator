@@ -23,15 +23,8 @@ import (
 )
 
 func conversionWebhookSuiteSelected() bool {
-	if !testOpts.conversionWebhookTest || (!testOpts.conversionWebhookDSC && !testOpts.conversionWebhookPlatform) {
-		return false
-	}
-	if testOpts.conversionWebhookExplicit {
-		return true
-	}
-	return (TestTag(testOpts.tag) == All || TestTag(testOpts.tag) == Tier3) &&
-		Components.enabled && Services.enabled &&
-		!testOpts.componentSelectionExplicit && !testOpts.serviceSelectionExplicit
+	return testOpts.conversionWebhookTest &&
+		(testOpts.conversionWebhookDSC || testOpts.conversionWebhookPlatform)
 }
 
 func envIsSet(name string) bool {

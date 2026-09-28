@@ -67,12 +67,8 @@ validate_bool E2E_TEST_OPERATOR_V2TOV3UPGRADE
 : "${E2E_TEST_WEBHOOK:=true}"
 validate_bool E2E_TEST_WEBHOOK
 
-# Leave conversion selection unset for automatic full-suite selection.
-conversion_webhook_args=()
-if [ "${E2E_TEST_CONVERSION_WEBHOOK+x}" = x ]; then
-  validate_bool E2E_TEST_CONVERSION_WEBHOOK
-  conversion_webhook_args=(--test-conversion-webhook="$E2E_TEST_CONVERSION_WEBHOOK")
-fi
+: "${E2E_TEST_CONVERSION_WEBHOOK:=true}"
+validate_bool E2E_TEST_CONVERSION_WEBHOOK
 
 : "${E2E_TEST_CONVERSION_WEBHOOK_DSC:=true}"
 validate_bool E2E_TEST_CONVERSION_WEBHOOK_DSC
@@ -171,7 +167,7 @@ if [ "$USE_TEST_RETRY" = "true" ] || [ "$USE_TEST_RETRY" = "1" ]; then
     --test-operator-resilience="$E2E_TEST_OPERATOR_RESILIENCE" \
     --test-operator-v2tov3upgrade="$E2E_TEST_OPERATOR_V2TOV3UPGRADE" \
     --test-webhook="$E2E_TEST_WEBHOOK" \
-    "${conversion_webhook_args[@]}" \
+    --test-conversion-webhook="$E2E_TEST_CONVERSION_WEBHOOK" \
     --test-conversion-webhook-dsc="$E2E_TEST_CONVERSION_WEBHOOK_DSC" \
     --test-conversion-webhook-platform="$E2E_TEST_CONVERSION_WEBHOOK_PLATFORM" \
     --test-components="$E2E_TEST_COMPONENTS" \
@@ -211,7 +207,7 @@ else
     --test-operator-resilience="$E2E_TEST_OPERATOR_RESILIENCE" \
     --test-operator-v2tov3upgrade="$E2E_TEST_OPERATOR_V2TOV3UPGRADE" \
     --test-webhook="$E2E_TEST_WEBHOOK" \
-    "${conversion_webhook_args[@]}" \
+    --test-conversion-webhook="$E2E_TEST_CONVERSION_WEBHOOK" \
     --test-conversion-webhook-dsc="$E2E_TEST_CONVERSION_WEBHOOK_DSC" \
     --test-conversion-webhook-platform="$E2E_TEST_CONVERSION_WEBHOOK_PLATFORM" \
     --test-components="$E2E_TEST_COMPONENTS" \

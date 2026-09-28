@@ -2,7 +2,6 @@ package conversion
 
 import (
 	"testing"
-	"time"
 
 	"github.com/opendatahub-io/opendatahub-operator/v2/pkg/utils/test/testf"
 	"github.com/opendatahub-io/opendatahub-operator/v2/tests/e2e/webhooks/conversion/dsc"
@@ -16,12 +15,7 @@ func Run(t *testing.T, runDSC, runPlatform bool) {
 	t.Helper()
 	g := NewWithT(t)
 
-	testContext, err := testf.NewTestContext(
-		testf.WithTOptions(
-			testf.WithEventuallyTimeout(5*time.Second),
-			testf.WithEventuallyPollingInterval(time.Second),
-		),
-	)
+	testContext, err := testf.NewTestContext()
 	g.Expect(err).NotTo(HaveOccurred())
 
 	if runDSC {
