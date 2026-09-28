@@ -575,7 +575,7 @@ func (t *WithT) Delete(
 			err := t.Client().Delete(ctx, u, option...)
 			switch {
 			case k8serr.IsNotFound(err):
-				return err
+				return nil
 			case err != nil:
 				return StopErr(err, "failed to delete resource: %s, nn: %s", gvk, nn.String())
 			default:

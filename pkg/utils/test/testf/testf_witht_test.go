@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -877,8 +876,8 @@ func TestDelete(t *testing.T) {
 	t.Run("NotFound", func(t *testing.T) {
 		wt := tc.NewWithT(t)
 
-		wt.Delete(gvk.ConfigMap, key).Eventually().Should(
-			MatchError(k8serr.IsNotFound, "IsNotFound"))
+		ok := wt.Delete(gvk.ConfigMap, key).Eventually().Should(Succeed())
+		g.Expect(ok).Should(BeTrue())
 	})
 
 	t.Run("Consistently", func(t *testing.T) {
