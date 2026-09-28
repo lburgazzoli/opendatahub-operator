@@ -104,9 +104,8 @@ func webhookConversionTestSuite(t *testing.T) {
 
 	crdNames := make([]string, 0, 2)
 	if testOpts.conversionWebhookDSC {
-		if !testOpts.backupAndRestoreDSCIandDSC &&
-			(!testOpts.cleanUpPreviousResources || testOpts.deletionPolicy != DeletionPolicyAlways) {
-			t.Fatal("DSC webhook conversion deletes default-dsc; enable DSCI/DSC backup and restore or use cleanup with deletion-policy=always")
+		if !testOpts.backupAndRestoreDSCIandDSC {
+			t.Fatal("DSC webhook conversion deletes default-dsc; enable DSCI/DSC backup and restore")
 		}
 
 		dsci := CreateDSCI(tc.DSCInitializationNamespacedName.Name, tc.AppsNamespace, tc.MonitoringNamespace)
