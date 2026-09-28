@@ -291,6 +291,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `managementState` _[ManagementState](https://pkg.go.dev/github.com/openshift/api@v0.0.0-20260610192510-1b2a074e0bd6/operator/v1#ManagementState)_ | Set to one of the following values:<br />- "Managed" : the operator is actively managing the component and trying to keep it active.<br />              It will only upgrade the component if it is safe to do so<br />- "Removed" : the operator is actively managing the component and will not install it,<br />              or if it is installed, the operator will try to remove it |  | Enum: [Managed Removed] <br /> |
+| `namespace` _string_ | Namespace selects the Kubernetes namespace for the platform Data Registry.<br />If empty or omitted, defaults to "rhoai-data-registry" at the module level.<br />Must be a valid Kubernetes namespace name (lowercase, no uppercase letters).<br />Once set and provisioned, changing this field is rejected by the module. |  |  |
 
 
 #### DSCDataSciencePipelines

@@ -26,6 +26,13 @@ type DSCFeatureStore struct {
 // DSCDataRegistry defines the Data Registry configuration exposed in a DSC.
 type DSCDataRegistry struct {
 	common.ManagementSpec `json:",inline"`
+
+	// Namespace selects the Kubernetes namespace for the platform Data Registry.
+	// If empty or omitted, defaults to "rhoai-data-registry" at the module level.
+	// Must be a valid Kubernetes namespace name (lowercase, no uppercase letters).
+	// Once set and provisioned, changing this field is rejected by the module.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
 }
 
 // DSCData defines the independent data-related component configurations

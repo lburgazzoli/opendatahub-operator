@@ -54,23 +54,35 @@ func (h *handler) PopulatePlatformModule(pm *configv1alpha2.PlatformModules, dsc
 	if pm == nil || dscCtx == nil || dscCtx.DSC == nil {
 		return
 	}
-	ms := dscCtx.DSC.Spec.Components.Data.FeatureStore.ManagementState
-	if ms == "" {
-		ms = operatorv1.Removed
+
+	fsState := dscCtx.DSC.Spec.Components.Data.FeatureStore.ManagementState
+	drState := dscCtx.DSC.Spec.Components.Data.DataRegistry.ManagementState
+
+	if fsState == "" {
+		fsState = operatorv1.Removed
 	}
-	pm.Data.ManagementState = ms
+	if drState == "" {
+		drState = operatorv1.Removed
+	}
+
+	// Module is needed if EITHER capability is Managed
+	if fsState == operatorv1.Managed || drState == operatorv1.Managed {
+		pm.Data.ManagementState = operatorv1.Managed
+	} else {
+		pm.Data.ManagementState = operatorv1.Removed
+	}
 }
 
 func (h *handler) IsEnabled(modules *configv1alpha2.PlatformModules) bool {
 	return modules != nil && modules.Data.ManagementState == operatorv1.Managed
 }
 
-// BuildModuleCR constructs the FeastOperator CR with OIDC settings projected
-// from the platform context when the cluster uses external OIDC.
+// BuildModuleCR constructs the FeastOperator CR with OIDC settings and
+// capability projection from the platform context.
 func (h *handler) BuildModuleCR(
 	ctx context.Context,
 	cli client.Client,
-	_ *modules.DSCContext,
+	dscCtx *modules.DSCContext,
 	_ *modules.ModuleCRConfig,
 ) (*unstructured.Unstructured, error) {
 	if cli == nil {
@@ -79,6 +91,7 @@ func (h *handler) BuildModuleCR(
 
 	spec := map[string]any{}
 
+	// --- OIDC (existing) ---
 	oidcSpec, err := getGatewayOIDCSpec(ctx, cli)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve OIDC for FeastOperator CR: %w", err)
@@ -87,6 +100,36 @@ func (h *handler) BuildModuleCR(
 		spec["oidc"] = map[string]any{
 			"issuerURL": oidcSpec.IssuerURL,
 		}
+	}
+
+	// --- Capabilities (new) ---
+	if dscCtx != nil && dscCtx.DSC != nil {
+		data := dscCtx.DSC.Spec.Components.Data
+
+		fsState := string(data.FeatureStore.ManagementState)
+		if fsState == "" {
+			fsState = string(operatorv1.Removed)
+		}
+		drState := string(data.DataRegistry.ManagementState)
+		if drState == "" {
+			drState = string(operatorv1.Removed)
+		}
+
+		drMap := map[string]any{
+			"managementState": drState,
+		}
+		if data.DataRegistry.Namespace != "" {
+			drMap["namespace"] = data.DataRegistry.Namespace
+		}
+
+		capabilities := map[string]any{
+			"featureStore": map[string]any{
+				"managementState": fsState,
+			},
+			"dataRegistry": drMap,
+		}
+
+		spec["capabilities"] = capabilities
 	}
 
 	u := &unstructured.Unstructured{
