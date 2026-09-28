@@ -30,7 +30,6 @@ type DashboardCommonSpec struct {
 	// Standard controls the core Dashboard.
 	Standard DashboardStandardSpec `json:"standard,omitempty"`
 	// MaaSPortal controls the MaaS Consumer Portal independently of the core Dashboard.
-	// +kubebuilder:default={managementState: "Removed"}
 	MaaSPortal DashboardMaaSPortalSpec `json:"maasPortal,omitempty"`
 }
 
@@ -38,7 +37,6 @@ type DashboardCommonSpec struct {
 type DashboardCommonSpecV2 struct {
 	// MaaSConsumerPortal controls the MaaS Consumer Portal submodule, shipped in
 	// the dashboard-operator. It is managed independently of the core Dashboard.
-	// +kubebuilder:default={managementState: "Removed"}
 	MaaSConsumerPortal MaaSConsumerPortalSpec `json:"maasConsumerPortal,omitempty"`
 }
 

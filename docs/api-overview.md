@@ -221,7 +221,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `standard` _[DashboardStandardSpec](#dashboardstandardspec)_ | Standard controls the core Dashboard. |  |  |
-| `maasPortal` _[DashboardMaaSPortalSpec](#dashboardmaasportalspec)_ | MaaSPortal controls the MaaS Consumer Portal independently of the core Dashboard. | \{ managementState:Removed \} |  |
+| `maasPortal` _[DashboardMaaSPortalSpec](#dashboardmaasportalspec)_ | MaaSPortal controls the MaaS Consumer Portal independently of the core Dashboard. |  |  |
 
 
 #### DSCDashboardStatus
@@ -255,7 +255,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `managementState` _[ManagementState](https://pkg.go.dev/github.com/openshift/api@v0.0.0-20260610192510-1b2a074e0bd6/operator/v1#ManagementState)_ | Set to one of the following values:<br />- "Managed" : the operator is actively managing the component and trying to keep it active.<br />              It will only upgrade the component if it is safe to do so<br />- "Removed" : the operator is actively managing the component and will not install it,<br />              or if it is installed, the operator will try to remove it |  | Enum: [Managed Removed] <br /> |
-| `maasConsumerPortal` _[MaaSConsumerPortalSpec](#maasconsumerportalspec)_ | MaaSConsumerPortal controls the MaaS Consumer Portal submodule, shipped in<br />the dashboard-operator. It is managed independently of the core Dashboard. | \{ managementState:Removed \} |  |
+| `maasConsumerPortal` _[MaaSConsumerPortalSpec](#maasconsumerportalspec)_ | MaaSConsumerPortal controls the MaaS Consumer Portal submodule, shipped in<br />the dashboard-operator. It is managed independently of the core Dashboard. |  |  |
 
 
 #### DSCData
@@ -918,7 +918,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `standard` _[DashboardStandardSpec](#dashboardstandardspec)_ | Standard controls the core Dashboard. |  |  |
-| `maasPortal` _[DashboardMaaSPortalSpec](#dashboardmaasportalspec)_ | MaaSPortal controls the MaaS Consumer Portal independently of the core Dashboard. | \{ managementState:Removed \} |  |
+| `maasPortal` _[DashboardMaaSPortalSpec](#dashboardmaasportalspec)_ | MaaSPortal controls the MaaS Consumer Portal independently of the core Dashboard. |  |  |
 
 
 #### DashboardCommonSpecV2
@@ -934,7 +934,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `maasConsumerPortal` _[MaaSConsumerPortalSpec](#maasconsumerportalspec)_ | MaaSConsumerPortal controls the MaaS Consumer Portal submodule, shipped in<br />the dashboard-operator. It is managed independently of the core Dashboard. | \{ managementState:Removed \} |  |
+| `maasConsumerPortal` _[MaaSConsumerPortalSpec](#maasconsumerportalspec)_ | MaaSConsumerPortal controls the MaaS Consumer Portal submodule, shipped in<br />the dashboard-operator. It is managed independently of the core Dashboard. |  |  |
 
 
 #### DashboardCommonStatus

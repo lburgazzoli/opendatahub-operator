@@ -6,6 +6,8 @@ import (
 	operatorv1 "github.com/openshift/api/operator/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -89,6 +91,49 @@ func TestDashboardVersionedConversion(t *testing.T) {
 		g.Eventually(func() error { return cli.Get(ctx, key, actual) }).Should(Succeed())
 		g.Expect(actual.Spec.Components.Dashboard.ManagementState).To(Equal(operatorv1.Removed))
 		g.Expect(actual.Spec.Components.Dashboard.MaaSConsumerPortal.ManagementState).To(Equal(operatorv1.Managed))
+	})
+
+	t.Run("portal management state is not defaulted", func(t *testing.T) {
+		g := NewWithT(t)
+		dynamicClient := env.DynamicClient()
+		for _, version := range []struct {
+			name         string
+			groupVersion schema.GroupVersion
+			portalField  string
+		}{
+			{name: "v2", groupVersion: dscv2.GroupVersion, portalField: "maasConsumerPortal"},
+			{name: "v3", groupVersion: dscv3.GroupVersion, portalField: "maasPortal"},
+		} {
+			for _, portal := range []struct {
+				name  string
+				value map[string]any
+			}{
+				{name: "omitted"},
+				{name: "empty", value: map[string]any{}},
+			} {
+				deleteDashboardDSC(t, cli, key)
+				name := dashboardIntegrationDSCName
+				dashboard := map[string]any{}
+				if portal.value != nil {
+					dashboard[version.portalField] = portal.value
+				}
+				object := &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": version.groupVersion.String(),
+					"kind":       "DataScienceCluster",
+					"metadata":   map[string]any{"name": name},
+					"spec": map[string]any{"components": map[string]any{
+						"dashboard": dashboard,
+					}},
+				}}
+				resource := dynamicClient.Resource(version.groupVersion.WithResource("datascienceclusters"))
+				created, err := resource.Create(ctx, object, metav1.CreateOptions{})
+				g.Expect(err).NotTo(HaveOccurred(), "%s/%s", version.name, portal.name)
+				_, found, err := unstructured.NestedFieldNoCopy(created.Object, "spec", "components", "dashboard", version.portalField, "managementState")
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(found).To(BeFalse(), "%s/%s managementState must remain unset", version.name, portal.name)
+				g.Expect(resource.Delete(ctx, name, metav1.DeleteOptions{})).To(Succeed())
+			}
+		}
 	})
 }
 
