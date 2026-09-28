@@ -174,6 +174,13 @@ SHELL = /usr/bin/env bash -o pipefail
 # E2E tests additional flags
 # See README.md, default go test timeout 10m
 E2E_TEST_FLAGS = -timeout 110m
+# Set USE_TEST_RETRY=false to run tests once without whole-test retries.
+USE_TEST_RETRY ?= true
+# Maximum retries after the initial E2E run; USE_TEST_RETRY=false forces zero.
+E2E_TESTING_MAX_RETRIES ?= 3
+ifneq ($(filter false 0,$(USE_TEST_RETRY)),)
+E2E_TESTING_MAX_RETRIES := 0
+endif
 
 # Default image-build is to not use local odh-manifests folder
 # set to "true" to use local instead
@@ -841,7 +848,7 @@ e2e-test:
 			echo "SELECTIVE-E2E: could not resolve affected components -- running full suite"; \
 		fi; \
 	fi; \
-	go run -C ./cmd/test-retry main.go e2e --verbose --working-dir=$(CURDIR) $(if $(JUNIT_OUTPUT_PATH),--junit-output=$(JUNIT_OUTPUT_PATH)) -- ${E2E_TEST_FLAGS}
+	go run -C ./cmd/test-retry main.go e2e --verbose --max-retries=$(E2E_TESTING_MAX_RETRIES) --working-dir=$(CURDIR) $(if $(JUNIT_OUTPUT_PATH),--junit-output=$(JUNIT_OUTPUT_PATH)) -- ${E2E_TEST_FLAGS}
 
 .PHONY: e2e-test-single
 e2e-test-single:
