@@ -155,7 +155,7 @@ func (tc *TestContext) NewWithT(t *testing.T, opts ...WithTOpts) *WithT {
 	g.SetDefaultConsistentlyPollingInterval(DefaultPollInterval)
 
 	answer := WithT{
-		ctx:    tc.ctx,
+		ctx:    tc.Context(),
 		client: tc.client,
 		WithT:  g,
 		Log:    t.Log,
