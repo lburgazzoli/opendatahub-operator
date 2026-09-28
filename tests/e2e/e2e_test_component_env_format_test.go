@@ -3,6 +3,7 @@ package e2e_test
 import (
 	"flag"
 	"fmt"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -61,6 +62,33 @@ func TestScopeRulesEnvVarFormatIsSpaceSeparated(t *testing.T) {
 			require.NoError(t, v.BindEnv("test-component", v.GetEnvPrefix()+"_COMPONENT"))
 
 			assert.Equal(t, tt.want, v.GetStringSlice("test-component"))
+		})
+	}
+}
+
+func TestScopeRulesEnvIsSet(t *testing.T) {
+	const name = "E2E_TEST_ENV_IS_SET"
+	tests := []struct {
+		name  string
+		value string
+		unset bool
+		want  bool
+	}{
+		{name: "unset", unset: true, want: false},
+		{name: "empty", value: "", want: false},
+		{name: "non-empty false value", value: "false", want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.unset {
+				t.Setenv(name, "temporary")
+				require.NoError(t, os.Unsetenv(name))
+			} else {
+				t.Setenv(name, tt.value)
+			}
+
+			require.Equal(t, tt.want, envIsSet(name))
 		})
 	}
 }

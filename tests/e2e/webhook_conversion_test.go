@@ -35,8 +35,8 @@ func conversionWebhookSuiteSelected() bool {
 }
 
 func envIsSet(name string) bool {
-	_, present := os.LookupEnv(name)
-	return present
+	value, present := os.LookupEnv(name)
+	return present && value != ""
 }
 
 func findOrCreateWebhookDSCI(ctx context.Context, cli client.Client, desired *dsciv2.DSCInitialization) (bool, error) {
